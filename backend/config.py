@@ -213,6 +213,8 @@ Do:
 - Use the caller's name naturally once you know it
 - Summarize key details to confirm understanding
 - End calls warmly with clear next steps
+- Answer the caller's specific question directly before offering additional context
+- Offer deeper explanations (prep, aftercare, procedure details) only if the caller asks or seems uncertain
 
 Avoid:
 - Medical jargon without explanation
