@@ -310,9 +310,16 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
   - [ ] Medical history screening questions
   - [ ] Allergy/contraindication tracking
 
-### Phase 1C - Admin Dashboard (Next.js + Shadcn)
-- [ ] **Dashboard Pages**
-  - [x] ~~Design architecture~~ → Using Next.js + Shadcn
+### Phase 1B - Admin Dashboard Enhancements (Next)
+- [ ] Build shadcn-powered sidebar navigation for Dashboard, Appointments, Voice, Reports
+- [ ] **Messaging Tab & Omnichannel Comms**
+  - [ ] Add "Messaging" navigation tab and `/messaging` page using shadcn layout components
+  - [ ] Implement chat interface with message history, assistant responses, and channel metadata
+  - [ ] Provide channel toggle (Email vs. Mobile text) to simulate source; store selection with each message
+  - [ ] Create `/api/admin/messaging` route to forward messages to assistant and persist conversations
+  - [ ] Update dashboard KPIs/analytics to surface communication source mix (voice, text, email)
+  - [ ] Refactor call detail view to become a unified communication drawer showing voice, SMS, and email threads
+- [ ] Build end-to-end voice console page in Next.js
   - [ ] Overview/metrics page
   - [x] Call history with filters
   - [x] Call detail view with transcript (Nov 9, 2025)

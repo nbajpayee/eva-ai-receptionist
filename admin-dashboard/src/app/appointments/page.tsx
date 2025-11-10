@@ -135,20 +135,19 @@ export default function AppointmentsPage() {
   const selectedDateAppointments = selectedDate ? getAppointmentsForDate(selectedDate) : [];
 
   return (
-    <div className="min-h-screen bg-zinc-50 p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-zinc-900">Appointments Calendar</h1>
-            <p className="mt-1 text-sm text-zinc-500">View and manage scheduled appointments</p>
-          </div>
-          <Button variant="outline" asChild>
-            <Link href="/">Back to Dashboard</Link>
-          </Button>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-zinc-900">Appointments Calendar</h1>
+          <p className="mt-1 text-sm text-zinc-500">View and manage scheduled appointments</p>
         </div>
+        <Button variant="outline" asChild>
+          <Link href="/">Back to Dashboard</Link>
+        </Button>
+      </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3">
           {/* Calendar View */}
           <Card className="border-zinc-200 lg:col-span-2">
             <CardHeader>
@@ -313,7 +312,6 @@ export default function AppointmentsPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
     </div>
   );
 }

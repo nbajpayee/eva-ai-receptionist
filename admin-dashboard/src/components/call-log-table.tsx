@@ -14,6 +14,8 @@ export type CallRecord = {
   phoneNumber?: string | null;
   satisfactionScore?: number | null;
   escalated?: boolean;
+  customerName?: string | null;
+  channel?: "voice" | "mobile_text" | "email";
 };
 
 const outcomeCopy: Record<CallRecord["outcome"], string> = {
@@ -32,6 +34,12 @@ const outcomeTone: Record<CallRecord["outcome"], string> = {
   rescheduled: "bg-sky-50 text-sky-700 border-sky-100",
 };
 
+const channelCopy: Record<NonNullable<CallRecord["channel"]>, string> = {
+  voice: "Voice",
+  mobile_text: "Text",
+  email: "Email",
+};
+
 function formatDuration(seconds: number) {
   if (!seconds) return "—";
   const minutes = Math.floor(seconds / 60);
@@ -48,7 +56,7 @@ export function CallLogTable({ calls }: CallLogTableProps) {
     <Card className="border-zinc-200">
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <CardTitle>Recent call sessions</CardTitle>
+          <CardTitle>Recent sessions</CardTitle>
           <p className="text-sm text-zinc-500">
             Live feed of Ava-managed conversations. Data refreshes every minute.
           </p>
@@ -63,7 +71,8 @@ export function CallLogTable({ calls }: CallLogTableProps) {
             <thead className="bg-zinc-50">
               <tr className="text-left text-xs uppercase tracking-widest text-zinc-500">
                 <th className="px-6 py-3 font-medium">Start time</th>
-                <th className="px-6 py-3 font-medium">Caller</th>
+                <th className="px-6 py-3 font-medium">Customer</th>
+                <th className="px-6 py-3 font-medium">Type</th>
                 <th className="px-6 py-3 font-medium">Duration</th>
                 <th className="px-6 py-3 font-medium">Outcome</th>
                 <th className="px-6 py-3 font-medium">Satisfaction</th>
@@ -77,7 +86,10 @@ export function CallLogTable({ calls }: CallLogTableProps) {
                     {format(new Date(call.startedAt), "MMM d, yyyy • h:mm a")}
                   </td>
                   <td className="px-6 py-4 text-zinc-600">
-                    {call.phoneNumber ?? "Unknown"}
+                    {call.customerName ?? call.phoneNumber ?? "Unknown"}
+                  </td>
+                  <td className="px-6 py-4 text-zinc-600">
+                    {call.channel ? channelCopy[call.channel] : "Voice"}
                   </td>
                   <td className="px-6 py-4 text-zinc-600">
                     {formatDuration(call.durationSeconds)}
@@ -108,7 +120,7 @@ export function CallLogTable({ calls }: CallLogTableProps) {
           </table>
         </div>
         <div className="border-t border-zinc-100 bg-zinc-50 px-6 py-3 text-xs text-zinc-500">
-          Showing {calls.length} recent call{calls.length !== 1 ? 's' : ''}. Click "View" to see full details and transcript.
+          Showing {calls.length} recent session{calls.length !== 1 ? 's' : ''}. Click "View" to see full details and transcript.
         </div>
       </CardContent>
     </Card>

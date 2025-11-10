@@ -1,9 +1,22 @@
 import { notFound } from "next/navigation";
-import { ArrowLeft, Calendar, Clock, Phone, User, TrendingUp, MessageSquare } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  Clock,
+  Phone,
+  User,
+  TrendingUp,
+  MessageSquare,
+  PhoneIncoming,
+  Mail,
+} from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+
+import { MessageTimeline } from "@/components/communication/message-timeline";
+import type { CommunicationChannel, CommunicationMessage } from "@/types/communication";
 
 type TranscriptEntry = {
   speaker: string;
@@ -76,6 +89,20 @@ async function fetchCallDetails(id: string): Promise<CallDetails | null> {
   }
 }
 
+async function fetchConversation(): Promise<CommunicationMessage[]> {
+  try {
+    const response = await fetch(resolveInternalUrl("/api/admin/messaging"), { cache: "no-store" });
+    if (!response.ok) {
+      return [];
+    }
+    const data = (await response.json()) as { messages: CommunicationMessage[] };
+    return data.messages;
+  } catch (error) {
+    console.error("Error fetching conversation", error);
+    return [];
+  }
+}
+
 function formatDuration(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
@@ -138,7 +165,7 @@ export default async function CallDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await fetchCallDetails(id);
+  const [data, conversation] = await Promise.all([fetchCallDetails(id), fetchConversation()]);
 
   if (!data) {
     notFound();
@@ -146,135 +173,157 @@ export default async function CallDetailPage({
 
   const { call, customer, transcript, events } = data;
 
+  type SupportedChannel = Extract<CommunicationChannel, "voice" | "mobile_text" | "email">;
+  let primaryChannel: SupportedChannel = "voice";
+
+  if (transcript.length === 0) {
+    const firstMessage = conversation.find((message) =>
+      message.channel === "mobile_text" || message.channel === "email"
+    );
+    primaryChannel = (firstMessage?.channel ?? "mobile_text") as SupportedChannel;
+  }
+
+  if (transcript.length > 0) {
+    primaryChannel = "voice";
+  }
+
+  const channelMessages =
+    primaryChannel === "voice"
+      ? []
+      : conversation.filter((message) => message.channel === primaryChannel);
+
+  const channelTitles: Record<SupportedChannel, string> = {
+    voice: "Voice call",
+    mobile_text: "Mobile text",
+    email: "Email",
+  };
+
+  const channelIcons: Record<SupportedChannel, typeof MessageSquare> = {
+    voice: PhoneIncoming,
+    mobile_text: MessageSquare,
+    email: Mail,
+  };
+
   return (
-    <div className="min-h-screen bg-zinc-50 p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <Button variant="ghost" asChild>
-            <Link href="/" className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
-            </Link>
-          </Button>
-        </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" asChild>
+          <Link href="/" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Link>
+        </Button>
+      </div>
 
-        {/* Title */}
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-900">Call Details</h1>
-          <p className="mt-1 text-sm text-zinc-500">Session ID: {call.session_id}</p>
-        </div>
+      <header className="space-y-1">
+        <h1 className="text-3xl font-bold text-zinc-900">Communication detail</h1>
+        <p className="text-sm text-zinc-500">Session ID: {call.session_id}</p>
+      </header>
 
-        {/* Main Grid */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Left Column - Metadata */}
-          <div className="space-y-6">
-            {/* Call Info Card */}
-            <Card className="border-zinc-200">
-              <CardHeader>
-                <CardTitle className="text-lg">Call Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+      <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
+        <div className="space-y-6">
+          <Card className="border-zinc-200">
+            <CardHeader>
+              <CardTitle className="text-lg">Interaction overview</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start gap-3">
+                <Calendar className="mt-0.5 h-5 w-5 text-zinc-400" />
+                <div>
+                  <p className="text-sm font-medium text-zinc-700">Started</p>
+                  <p className="text-sm text-zinc-600">{formatTimestamp(call.started_at)}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Clock className="mt-0.5 h-5 w-5 text-zinc-400" />
+                <div>
+                  <p className="text-sm font-medium text-zinc-700">Duration</p>
+                  <p className="text-sm text-zinc-600">{formatDuration(call.duration_seconds)}</p>
+                </div>
+              </div>
+              {call.phone_number && (
                 <div className="flex items-start gap-3">
-                  <Calendar className="mt-0.5 h-5 w-5 text-zinc-400" />
+                  <Phone className="mt-0.5 h-5 w-5 text-zinc-400" />
                   <div>
-                    <p className="text-sm font-medium text-zinc-700">Started</p>
-                    <p className="text-sm text-zinc-600">{formatTimestamp(call.started_at)}</p>
+                    <p className="text-sm font-medium text-zinc-700">Phone</p>
+                    <p className="text-sm text-zinc-600">{call.phone_number}</p>
                   </div>
                 </div>
+              )}
+              {call.satisfaction_score !== null && (
                 <div className="flex items-start gap-3">
-                  <Clock className="mt-0.5 h-5 w-5 text-zinc-400" />
+                  <TrendingUp className="mt-0.5 h-5 w-5 text-zinc-400" />
                   <div>
-                    <p className="text-sm font-medium text-zinc-700">Duration</p>
-                    <p className="text-sm text-zinc-600">{formatDuration(call.duration_seconds)}</p>
+                    <p className="text-sm font-medium text-zinc-700">Satisfaction</p>
+                    <p className="text-sm text-zinc-600">{call.satisfaction_score}/10</p>
                   </div>
                 </div>
-                {call.phone_number && (
-                  <div className="flex items-start gap-3">
-                    <Phone className="mt-0.5 h-5 w-5 text-zinc-400" />
-                    <div>
-                      <p className="text-sm font-medium text-zinc-700">Phone</p>
-                      <p className="text-sm text-zinc-600">{call.phone_number}</p>
-                    </div>
-                  </div>
-                )}
-                {call.satisfaction_score !== null && (
-                  <div className="flex items-start gap-3">
-                    <TrendingUp className="mt-0.5 h-5 w-5 text-zinc-400" />
-                    <div>
-                      <p className="text-sm font-medium text-zinc-700">Satisfaction</p>
-                      <p className="text-sm text-zinc-600">{call.satisfaction_score}/10</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="border-zinc-200">
+            <CardHeader>
+              <CardTitle className="text-lg">Status</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {call.sentiment && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Sentiment</p>
+                  <Badge variant="outline" className={getSentimentColor(call.sentiment)}>
+                    {call.sentiment}
+                  </Badge>
+                </div>
+              )}
+              {call.outcome && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Outcome</p>
+                  <Badge variant="outline" className={getOutcomeColor(call.outcome)}>
+                    {call.outcome}
+                  </Badge>
+                </div>
+              )}
+              {call.escalated && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Escalation</p>
+                  <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                    Escalated
+                  </Badge>
+                  {call.escalation_reason && (
+                    <p className="mt-1 text-xs text-zinc-600">{call.escalation_reason}</p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-            {/* Status Card */}
+          {/* Customer Card */}
+          {customer && (
             <Card className="border-zinc-200">
               <CardHeader>
-                <CardTitle className="text-lg">Status</CardTitle>
+                <CardTitle className="text-lg">Customer</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {call.sentiment && (
+              <CardContent>
+                <div className="flex items-start gap-3">
+                  <User className="mt-0.5 h-5 w-5 text-zinc-400" />
                   <div>
-                    <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Sentiment</p>
-                    <Badge variant="outline" className={getSentimentColor(call.sentiment)}>
-                      {call.sentiment}
-                    </Badge>
-                  </div>
-                )}
-                {call.outcome && (
-                  <div>
-                    <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Outcome</p>
-                    <Badge variant="outline" className={getOutcomeColor(call.outcome)}>
-                      {call.outcome}
-                    </Badge>
-                  </div>
-                )}
-                {call.escalated && (
-                  <div>
-                    <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Escalation</p>
-                    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                      Escalated
-                    </Badge>
-                    {call.escalation_reason && (
-                      <p className="mt-1 text-xs text-zinc-600">{call.escalation_reason}</p>
+                    <p className="text-sm font-medium text-zinc-900">{customer.name}</p>
+                    <p className="text-sm text-zinc-600">{customer.phone}</p>
+                    {customer.email && (
+                      <p className="text-sm text-zinc-600">{customer.email}</p>
                     )}
                   </div>
-                )}
+                </div>
               </CardContent>
             </Card>
-
-            {/* Customer Card */}
-            {customer && (
-              <Card className="border-zinc-200">
-                <CardHeader>
-                  <CardTitle className="text-lg">Customer</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-start gap-3">
-                    <User className="mt-0.5 h-5 w-5 text-zinc-400" />
-                    <div>
-                      <p className="text-sm font-medium text-zinc-900">{customer.name}</p>
-                      <p className="text-sm text-zinc-600">{customer.phone}</p>
-                      {customer.email && (
-                        <p className="text-sm text-zinc-600">{customer.email}</p>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {/* Right Column - Transcript */}
-          <div className="lg:col-span-2">
+          )}
+        </div>
+        <section className="space-y-6">
+          {primaryChannel === "voice" ? (
             <Card className="border-zinc-200">
               <CardHeader>
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-zinc-400" />
-                  <CardTitle className="text-lg">Transcript</CardTitle>
+                  <PhoneIncoming className="h-5 w-5 text-zinc-400" />
+                  <CardTitle className="text-lg">{channelTitles[primaryChannel]}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
@@ -285,10 +334,10 @@ export default async function CallDetailPage({
                     {transcript.map((entry, index) => (
                       <div
                         key={index}
-                        className={`rounded-lg p-4 border ${
+                        className={`rounded-lg border p-4 ${
                           entry.speaker === "customer"
-                            ? "bg-blue-50/50 border-blue-100"
-                            : "bg-zinc-50 border-zinc-100"
+                            ? "border-sky-200 bg-sky-50/60"
+                            : "border-zinc-200 bg-white"
                         }`}
                       >
                         <div className="mb-2 flex items-center justify-between">
@@ -296,15 +345,13 @@ export default async function CallDetailPage({
                             variant="outline"
                             className={`text-xs font-semibold uppercase tracking-wide ${
                               entry.speaker === "customer"
-                                ? "bg-blue-100 text-blue-700 border-blue-200"
+                                ? "bg-sky-100 text-sky-700 border-sky-200"
                                 : "bg-zinc-100 text-zinc-700 border-zinc-200"
                             }`}
                           >
                             {entry.speaker}
                           </Badge>
-                          <span className="text-xs text-zinc-500">
-                            {formatTime(entry.timestamp)}
-                          </span>
+                          <span className="text-xs text-zinc-500">{formatTime(entry.timestamp)}</span>
                         </div>
                         <p className="text-sm leading-relaxed text-zinc-900">{entry.text}</p>
                       </div>
@@ -313,30 +360,48 @@ export default async function CallDetailPage({
                 )}
               </CardContent>
             </Card>
+          ) : (
+            <Card className="border-zinc-200">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const Icon = channelIcons[primaryChannel];
+                    return <Icon className="h-5 w-5 text-zinc-400" />;
+                  })()}
+                  <CardTitle className="text-lg">{channelTitles[primaryChannel]}</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {channelMessages.length === 0 ? (
+                  <p className="text-center text-sm text-zinc-500">No messages recorded for this session yet.</p>
+                ) : (
+                  <MessageTimeline messages={channelMessages} />
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-            {/* Events Timeline */}
-            {events.length > 0 && (
-              <Card className="mt-6 border-zinc-200">
-                <CardHeader>
-                  <CardTitle className="text-lg">Timeline</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {events.map((event) => (
-                    <div key={event.id} className="flex items-start gap-3 text-sm">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-100">
-                        <div className="h-2 w-2 rounded-full bg-zinc-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-zinc-700">{event.event_type}</p>
-                        <p className="text-xs text-zinc-500">{formatTime(event.timestamp)}</p>
-                      </div>
+          {events.length > 0 && (
+            <Card className="border-zinc-200">
+              <CardHeader>
+                <CardTitle className="text-lg">Operational timeline</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {events.map((event) => (
+                  <div key={event.id} className="flex items-start gap-3 text-sm">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-100">
+                      <div className="h-2 w-2 rounded-full bg-zinc-400" />
                     </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-zinc-700">{event.event_type}</p>
+                      <p className="text-xs text-zinc-500">{formatTime(event.timestamp)}</p>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </section>
       </div>
     </div>
   );

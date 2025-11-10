@@ -423,6 +423,8 @@ Consider these factors:
                 "ended_at": call.ended_at.isoformat() if call.ended_at else None,
                 "duration_seconds": call.duration_seconds or 0,
                 "phone_number": call.phone_number,
+                "customer_name": call.customer.name if call.customer else None,
+                "channel": "voice",
                 "customer_id": call.customer_id,
                 "satisfaction_score": call.satisfaction_score,
                 "sentiment": call.sentiment,

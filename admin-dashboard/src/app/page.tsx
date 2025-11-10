@@ -86,6 +86,8 @@ async function fetchCallHistory(): Promise<CallRecord[]> {
         phone_number?: string | null;
         satisfaction_score?: number | null;
         escalated?: boolean | null;
+        customer_name?: string | null;
+        channel?: string | null;
       }>;
     };
 
@@ -115,6 +117,8 @@ async function fetchCallHistory(): Promise<CallRecord[]> {
         phoneNumber: call.phone_number,
         satisfactionScore: call.satisfaction_score ?? undefined,
         escalated: Boolean(call.escalated),
+        customerName: call.customer_name ?? undefined,
+        channel: (call.channel as CallRecord["channel"]) ?? undefined,
       } satisfies CallRecord;
     });
   } catch (error) {
@@ -182,9 +186,7 @@ export default async function Home() {
       <section className="space-y-4">
         <div className="flex flex-col gap-2">
           <h2 className="text-lg font-semibold text-zinc-900">Operational feed</h2>
-          <p className="text-sm text-zinc-500">
-            Monitoring today’s voice traffic. Real call data will stream in once Supabase replaces the current SQLite store.
-          </p>
+          <p className="text-sm text-zinc-500">Monitoring today’s customer traffic.</p>
         </div>
         <CallLogTable calls={calls} />
       </section>
