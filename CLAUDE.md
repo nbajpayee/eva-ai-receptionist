@@ -6,13 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is **Ava**, a voice AI receptionist for medical spas built with FastAPI (backend), Next.js 14 (admin dashboard), and OpenAI's Realtime API. The system handles appointment scheduling via Google Calendar, tracks call analytics with AI-powered satisfaction scoring, and provides a comprehensive admin dashboard for monitoring conversations and metrics.
 
-**Current Status (Nov 9, 2025)**: Phase 1A is production-ready. The vanilla frontend (`frontend/index.html`) has complete voice functionality with smart commits and interruption handling. The Next.js frontend needs the interruption logic updated to match the vanilla implementation.
+**Current Status (Nov 10, 2025)**: Phase 1A is production-ready. Voice interface complete with smart commits and interruption handling. **Phase 2 (Omnichannel Migration) is now in progress** - expanding backend to support SMS and email communications with multi-message threading. See `OMNICHANNEL_MIGRATION.md` for full architecture.
 
 **Key Architecture**:
 - **Backend**: FastAPI + Supabase PostgreSQL (fully migrated from SQLite)
 - **Frontend**: Next.js 14 admin dashboard + vanilla HTML voice interface (being consolidated)
 - **Voice**: Hybrid client-side + server-side VAD with dual-speed commits (300ms/120ms)
 - **Interruption**: Client-side audio source tracking with immediate cutoff
+- **Omnichannel (Phase 2)**: Conversations schema supporting voice, SMS, and email with unified customer timelines
 
 ## Development Commands
 
@@ -123,6 +124,44 @@ Open `frontend/index.html` in a browser to test the legacy voice interface proto
 - `CallSession` 1:N `CallEvent`
 
 All models use SQLAlchemy ORM defined in `backend/database.py`.
+
+### Omnichannel Communications Migration (Phase 2 - In Progress)
+
+**Status**: Design complete, implementation starting Nov 10, 2025
+
+**Goal**: Expand backend to support SMS and email communications with multi-message threading, unified customer timelines, and cross-channel AI satisfaction scoring.
+
+**New Schema** (see `OMNICHANNEL_MIGRATION.md` for full details):
+- `conversations`: Top-level container for communication threads (replaces call_sessions)
+  - Fields: customer_id, channel (voice/sms/email), status, satisfaction_score, sentiment, outcome, ai_summary
+- `communication_messages`: Individual messages within conversations
+  - Voice: 1 message per call (entire transcript)
+  - SMS/Email: N messages per thread (multi-message support)
+- `voice_call_details`: Voice-specific metadata (1:1 with message)
+  - recording_url, duration_seconds, transcript_segments, function_calls, interruption_count
+- `email_details`: Email-specific metadata (1:1 with message)
+  - subject, body_html, from/to addresses, attachments, delivery tracking
+- `sms_details`: SMS-specific metadata (1:1 with message)
+  - from/to numbers, Twilio SID, delivery_status, segments, media_urls
+- `communication_events`: Generalized event tracking (replaces call_events)
+  - Supports all channels: intent_detected, function_called, escalation_requested, etc.
+
+**Migration Strategy**:
+1. Create new schema alongside existing tables (backward compatible)
+2. Backfill call_sessions → conversations + voice_call_details
+3. Dual-write period (write to both schemas)
+4. Update analytics.py for multi-channel satisfaction scoring
+5. Update dashboard APIs to use conversations
+6. Cutover (switch all reads to new schema)
+7. Cleanup (archive/drop old tables after validation)
+
+**Key Changes**:
+- `analytics.py`: New methods for create_conversation, add_message, score_conversation_satisfaction
+- `main.py`: New webhook handlers for Twilio SMS and SendGrid email
+- Dashboard APIs: `/api/admin/communications` (replaces `/api/admin/calls`)
+- Unified customer timeline: See all voice/SMS/email in one view
+
+**Timeline**: 5 weeks (Nov 10 - Dec 15, 2025)
 
 ### Key Modules
 

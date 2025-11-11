@@ -1,7 +1,7 @@
 # Med Spa Voice AI - Project Tracker
 
-**Last Updated:** November 9, 2025
-**Current Phase:** Phase 1A - Core Development (Voice Interface Complete)
+**Last Updated:** November 10, 2025
+**Current Phase:** Phase 1B - Omnichannel Communications Migration
 
 ---
 
@@ -236,6 +236,52 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 ---
 
 ## 🚧 IN PROGRESS
+
+### Phase 1B - Omnichannel Communications Migration (Nov 10, 2025)
+**See OMNICHANNEL_MIGRATION.md for detailed architecture and migration plan**
+
+- [ ] **Week 1: Schema & Models**
+  - [x] Create OMNICHANNEL_MIGRATION.md with full design
+  - [ ] Add SQLAlchemy models to backend/database.py (Conversation, CommunicationMessage, VoiceCallDetails, EmailDetails, SMSDetails, CommunicationEvent)
+  - [ ] Create backend/scripts/create_omnichannel_schema.py
+  - [ ] Test schema creation on Supabase staging
+  - [ ] Verify indexes and constraints
+
+- [ ] **Week 1-2: Data Migration**
+  - [ ] Create backend/scripts/migrate_call_sessions_to_conversations.py
+  - [ ] Test migration on subset of data
+  - [ ] Run full migration on staging
+  - [ ] Validate data integrity (counts, relationships)
+
+- [ ] **Week 2: Analytics Update**
+  - [ ] Update backend/analytics.py with conversation methods (create_conversation, add_message, score_conversation_satisfaction)
+  - [ ] Implement dual-write for voice calls (write to both call_sessions and conversations)
+  - [ ] Test satisfaction scoring on conversations
+  - [ ] Update daily metrics aggregation for multi-channel
+
+- [ ] **Week 2-3: Voice Integration**
+  - [ ] Update WebSocket handler in backend/main.py to use conversations schema
+  - [ ] Test voice calls create conversations correctly
+  - [ ] Verify transcript storage and voice details
+  - [ ] Test event tracking
+
+- [ ] **Week 3: Dashboard API**
+  - [ ] Create /api/admin/communications endpoints (GET list, GET detail)
+  - [ ] Update Next.js proxy routes in admin-dashboard/src/app/api/
+  - [ ] Test filtering and pagination
+  - [ ] Update frontend components to use new API
+
+- [ ] **Week 4: SMS/Email Foundations**
+  - [ ] Implement Twilio webhook handler (/api/webhooks/twilio/sms)
+  - [ ] Implement SendGrid webhook handler (/api/webhooks/sendgrid/email)
+  - [ ] Create SMS/email response generation logic (AI-powered)
+  - [ ] Test end-to-end SMS/email flow
+
+- [ ] **Week 5: Cutover & Cleanup**
+  - [ ] Switch all reads to conversations schema
+  - [ ] Stop dual-writes
+  - [ ] Monitor for issues (1 week)
+  - [ ] Archive/drop call_sessions table (after 30 days)
 
 ### Phase 1A - Voice Interface Finalization
 - [x] **Applied vanilla frontend logic to Next.js** (Nov 9, 2025)
@@ -514,6 +560,29 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 - This is the optimal balance between simplicity and performance
 - Future improvements can focus on VAD threshold tuning per environment
 
+### November 10, 2025 - Omnichannel Communications Architecture
+**Decision:** Hybrid schema - conversations parent table + channel-specific detail tables
+
+**Rationale:**
+- Expanding to support SMS and email communications with multi-message threading
+- Need unified customer timeline across all channels (voice, SMS, email)
+- Want to apply AI satisfaction scoring to all channels, not just voice
+- GPT-5 recommended conversations abstraction for threading support
+
+**Implementation:**
+- `conversations`: Top-level container (customer, channel, status, satisfaction, outcome)
+- `communication_messages`: Individual messages within conversations (1 for voice, N for SMS/email)
+- `voice_call_details`, `email_details`, `sms_details`: Channel-specific payloads
+- `communication_events`: Generalized event tracking (replaces call_events)
+- Migration strategy: Create new schema → backfill → dual-write → cutover → cleanup
+
+**Impact:**
+- Clean separation of concerns (shared metadata vs channel-specific data)
+- Easy to add new channels (WhatsApp, chat, etc.)
+- Dashboard can show unified timeline per customer
+- Analytics can aggregate across all channels
+- 5-week migration timeline with backward compatibility
+
 ### Next Steps Roadmap (Nov 7)
 **Voice polish:**
 - [x] ~~Evaluate alternative Realtime voices~~ (Using 'alloy' - works well)
@@ -533,18 +602,42 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 
 ## 🎯 CURRENT SPRINT GOALS
 
-### Sprint 1 (Nov 7-14)
+### Sprint 1 (Nov 7-14) - COMPLETED
 - [x] Set up Next.js 14 project with Shadcn/Tailwind
 - [x] Create Supabase project and migrate schema to managed Postgres
 - [x] Build dashboard overview with live metrics & call log data
 - [x] Seed Supabase with representative analytics sample data
-- [ ] Implement voice interface in Next.js (proxy to FastAPI)
-- [ ] Connect Next.js/Supabase stack to FastAPI for remaining services
+- [x] Implement voice interface in Next.js (proxy to FastAPI)
+- [x] Connect Next.js/Supabase stack to FastAPI for remaining services
 
-### Sprint 2 (Nov 14-21)
+### Sprint 2 (Nov 10-17) - Omnichannel Migration Phase 1
+**Goal:** Design and implement omnichannel schema for voice/SMS/email
+
+- [x] Create OMNICHANNEL_MIGRATION.md with full architecture
+- [ ] Add SQLAlchemy models for conversations schema
+- [ ] Create Supabase schema creation script
+- [ ] Test schema on staging environment
+- [ ] Create migration script for call_sessions backfill
+- [ ] Update analytics.py with conversation methods
+
+### Sprint 3 (Nov 17-24) - Omnichannel Migration Phase 2
+**Goal:** Integrate voice with new schema and build SMS/email foundations
+
+- [ ] Update voice WebSocket to use conversations
+- [ ] Test voice calls end-to-end with new schema
+- [ ] Create /api/admin/communications endpoints
+- [ ] Implement Twilio SMS webhook
+- [ ] Implement SendGrid email webhook
+- [ ] Test SMS threading
+
+### Sprint 4 (Nov 24-Dec 1) - Dashboard & Cutover
+**Goal:** Update dashboard and switch to new schema
+
+- [ ] Update dashboard to show conversations (all channels)
+- [ ] Build unified customer timeline view
+- [ ] Switch all reads to conversations schema
+- [ ] Monitor for issues and performance
 - [ ] Complete admin dashboard pages
-- [ ] Add SMS confirmations
-- [ ] Implement customer management
 - [ ] Add analytics visualizations
 
 ---

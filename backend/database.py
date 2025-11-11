@@ -3,10 +3,12 @@ Database models and session management for the Med Spa Voice AI application.
 """
 from datetime import datetime
 from typing import Optional
+import uuid
 from sqlalchemy import (
     create_engine, Column, Integer, String, Float, DateTime,
-    Text, ForeignKey, Boolean, JSON
+    Text, ForeignKey, Boolean, JSON, CheckConstraint, ARRAY
 )
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker, Session
 from config import get_settings
@@ -65,6 +67,7 @@ class Customer(Base):
     # Relationships
     appointments = relationship("Appointment", back_populates="customer")
     call_sessions = relationship("CallSession", back_populates="customer")
+    conversations = relationship("Conversation", back_populates="customer")
 
 
 class Appointment(Base):
@@ -190,6 +193,199 @@ class DailyMetric(Base):
 
     # Updated timestamp
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ==================== Omnichannel Communications Models (Phase 2) ====================
+
+class Conversation(Base):
+    """
+    Omnichannel conversation model supporting voice, SMS, and email.
+    Top-level container for any communication thread.
+    """
+    __tablename__ = "conversations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)  # Nullable - some calls may not identify customer
+
+    channel = Column(String(20), nullable=False, index=True)
+    status = Column(String(20), nullable=False, index=True)
+
+    # Timestamps
+    initiated_at = Column(DateTime, nullable=False, index=True)
+    last_activity_at = Column(DateTime, nullable=False, index=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    # AI-generated insights (computed after completion)
+    satisfaction_score = Column(Integer, nullable=True)
+    sentiment = Column(String(20), nullable=True)
+    outcome = Column(String(50), nullable=True)
+
+    # Human-readable summary
+    subject = Column(String(255), nullable=True)
+    ai_summary = Column(Text, nullable=True)
+
+    # Flexible metadata (use custom_metadata to avoid SQLAlchemy reserved name)
+    custom_metadata = Column('metadata', JSONB, nullable=True, default={})
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    customer = relationship("Customer", back_populates="conversations")
+    messages = relationship("CommunicationMessage", back_populates="conversation", cascade="all, delete-orphan")
+    events = relationship("CommunicationEvent", back_populates="conversation", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        CheckConstraint("channel IN ('voice', 'sms', 'email')", name='check_channel'),
+        CheckConstraint("status IN ('active', 'completed', 'failed')", name='check_status'),
+        CheckConstraint("satisfaction_score IS NULL OR (satisfaction_score >= 1 AND satisfaction_score <= 10)", name='check_satisfaction_score'),
+        CheckConstraint("sentiment IS NULL OR sentiment IN ('positive', 'neutral', 'negative', 'mixed')", name='check_sentiment'),
+    )
+
+
+class CommunicationMessage(Base):
+    """
+    Individual messages within a conversation.
+    Voice calls have 1 message (entire call), SMS/email have N messages (threading).
+    """
+    __tablename__ = "communication_messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    direction = Column(String(20), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    sent_at = Column(DateTime, nullable=False, index=True)
+
+    # Processing status
+    processed = Column(Boolean, default=False)
+    processing_error = Column(Text, nullable=True)
+
+    custom_metadata = Column('metadata', JSONB, nullable=True, default={})
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    conversation = relationship("Conversation", back_populates="messages")
+    voice_details = relationship("VoiceCallDetails", uselist=False, back_populates="message", cascade="all, delete-orphan")
+    email_details = relationship("EmailDetails", uselist=False, back_populates="message", cascade="all, delete-orphan")
+    sms_details = relationship("SMSDetails", uselist=False, back_populates="message", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        CheckConstraint("direction IN ('inbound', 'outbound')", name='check_direction'),
+    )
+
+
+class VoiceCallDetails(Base):
+    """Voice-specific metadata for call messages."""
+    __tablename__ = "voice_call_details"
+
+    message_id = Column(UUID(as_uuid=True), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
+
+    recording_url = Column(String(500), nullable=True)
+    duration_seconds = Column(Integer, nullable=False)
+
+    # Structured transcript with timestamps
+    transcript_segments = Column(JSONB, nullable=True)
+    # Example: [{"speaker": "customer", "text": "Hello", "timestamp": 1.2}, ...]
+
+    # Function calls made during call
+    function_calls = Column(JSONB, nullable=True)
+    # Example: [{"name": "book_appointment", "args": {...}, "result": {...}}]
+
+    # Audio quality metrics
+    audio_quality_score = Column(Float, nullable=True)
+    interruption_count = Column(Integer, default=0)
+
+    # Relationship
+    message = relationship("CommunicationMessage", back_populates="voice_details")
+
+
+class EmailDetails(Base):
+    """Email-specific metadata for email messages."""
+    __tablename__ = "email_details"
+
+    message_id = Column(UUID(as_uuid=True), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
+
+    subject = Column(String(500), nullable=False)
+    body_html = Column(Text, nullable=True)
+    body_text = Column(Text, nullable=False)
+
+    from_address = Column(String(255), nullable=False)
+    to_address = Column(String(255), nullable=False)
+    cc_addresses = Column(ARRAY(Text), nullable=True)
+    bcc_addresses = Column(ARRAY(Text), nullable=True)
+
+    # Email threading
+    in_reply_to = Column(String(500), nullable=True)
+    references = Column(ARRAY(Text), nullable=True)
+
+    # Attachments
+    attachments = Column(JSONB, nullable=True)
+    # Example: [{"filename": "invoice.pdf", "size": 12345, "url": "..."}]
+
+    # Provider metadata (SendGrid, Mailgun, etc.)
+    provider_message_id = Column(String(255), nullable=True)
+    delivery_status = Column(String(50), nullable=True)
+    opened_at = Column(DateTime, nullable=True)
+    clicked_at = Column(DateTime, nullable=True)
+
+    # Relationship
+    message = relationship("CommunicationMessage", back_populates="email_details")
+
+
+class SMSDetails(Base):
+    """SMS-specific metadata for text messages."""
+    __tablename__ = "sms_details"
+
+    message_id = Column(UUID(as_uuid=True), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
+
+    from_number = Column(String(20), nullable=False)
+    to_number = Column(String(20), nullable=False)
+
+    # Twilio metadata
+    provider_message_id = Column(String(255), nullable=False, index=True)
+    delivery_status = Column(String(20), nullable=True, index=True)
+    error_code = Column(String(10), nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    # SMS properties
+    segments = Column(Integer, default=1)
+    media_urls = Column(ARRAY(Text), nullable=True)
+
+    delivered_at = Column(DateTime, nullable=True)
+    failed_at = Column(DateTime, nullable=True)
+
+    # Relationship
+    message = relationship("CommunicationMessage", back_populates="sms_details")
+
+    __table_args__ = (
+        CheckConstraint("delivery_status IS NULL OR delivery_status IN ('queued', 'sent', 'delivered', 'failed', 'undelivered')", name='check_delivery_status'),
+    )
+
+
+class CommunicationEvent(Base):
+    """
+    Generalized event tracking for all communication channels.
+    Replaces CallEvent with support for voice, SMS, and email.
+    """
+    __tablename__ = "communication_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id = Column(UUID(as_uuid=True), ForeignKey("communication_messages.id", ondelete="CASCADE"), nullable=True, index=True)
+
+    event_type = Column(String(50), nullable=False, index=True)
+    timestamp = Column(DateTime, nullable=False, index=True)
+
+    details = Column(JSONB, nullable=True, default={})
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationship
+    conversation = relationship("Conversation", back_populates="events")
+
+    # Note: We don't use a check constraint on event_type to allow flexibility for legacy and future event types
+    # Common types: intent_detected, function_called, escalation_requested, error, customer_sentiment_shift,
+    # appointment_action, appointment_booked, appointment_rescheduled, appointment_cancelled
 
 
 # Database initialization

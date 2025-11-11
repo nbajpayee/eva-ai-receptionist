@@ -18,8 +18,17 @@ An intelligent voice AI application that serves as a virtual receptionist for me
 - ✅ Role-specific greeting and persona enforcement for Ava receptionist
 - ✅ End-to-end appointment booking tested and verified
 
-### Phase 2 (Coming Soon)
-- SMS confirmations via Twilio
+### Phase 2 (In Progress - Nov 2025)
+- **Omnichannel Communications**: SMS and email support with multi-message threading
+- **Unified Customer Timeline**: See all interactions (voice, SMS, email) in one view
+- **Cross-Channel AI Scoring**: Satisfaction analysis for all communication types
+- SMS confirmations and two-way texting via Twilio
+- Email support via SendGrid
+- Advanced dashboard with channel filtering
+
+See `OMNICHANNEL_MIGRATION.md` for detailed architecture and migration plan.
+
+### Phase 3 (Coming Soon)
 - Boulevard scheduling integration
 - Advanced customer insights
 - Multi-language support
@@ -212,12 +221,27 @@ Update your med spa information in `.env`:
 
 ## Database Schema
 
-### Core Tables
+### Current Schema (Phase 1)
 - **customers**: Customer information
 - **appointments**: Appointment bookings
-- **call_sessions**: Voice call tracking
-- **call_events**: Events within calls
+- **call_sessions**: Voice call tracking (being migrated to conversations schema)
+- **call_events**: Events within calls (being migrated to communication_events)
 - **daily_metrics**: Aggregated analytics
+
+### New Omnichannel Schema (Phase 2 - In Progress)
+**See OMNICHANNEL_MIGRATION.md for full details**
+
+- **conversations**: Top-level container for any communication (voice/SMS/email)
+  - Includes satisfaction score, sentiment, outcome, AI summary
+- **communication_messages**: Individual messages within conversations
+  - 1 message for voice calls (entire call)
+  - N messages for SMS/email threads
+- **voice_call_details**: Voice-specific metadata (recording URL, transcript segments, function calls)
+- **email_details**: Email-specific metadata (subject, attachments, delivery tracking)
+- **sms_details**: SMS-specific metadata (Twilio SID, delivery status, segments)
+- **communication_events**: Generalized event tracking across all channels
+
+**Migration Status**: Schema designed, implementation in progress. Backward compatibility maintained during transition.
 
 ## Testing
 
@@ -268,30 +292,39 @@ curl http://localhost:8000/api/admin/calls
 
 ## Development Roadmap
 
-### Phase 1 ✅ (Completed)
-- Core voice functionality
-- Appointment scheduling
-- Call analytics
-- API endpoints
+### Phase 1 ✅ (Completed - Nov 2025)
+- Core voice functionality with smart commit strategy
+- Real-time interruption handling
+- Appointment scheduling with Google Calendar
+- Call analytics with AI satisfaction scoring
+- Next.js admin dashboard with Supabase integration
+- API endpoints and proxy routes
 
-### Phase 2 (Next)
-- SMS confirmations (Twilio)
-- Boulevard integration
-- Enhanced analytics visualizations
+### Phase 2 🚧 (In Progress - Nov-Dec 2025)
+**Omnichannel Communications Migration**
+- Implement new conversations schema (voice/SMS/email)
+- Multi-message threading support for SMS and email
+- Migrate call_sessions data to conversations
+- Cross-channel AI satisfaction scoring
+- Unified customer timeline in dashboard
+- Twilio SMS integration with two-way messaging
+- SendGrid email integration
+- Enhanced dashboard with channel filtering
 
-### Near-Term Priorities (Nov 2025)
-- Finalize Supabase deployment (auth policies, real-time subscriptions)
-- Wire remaining FastAPI services (voice interface, auth) through Next.js proxy routes
-- Experiment with additional OpenAI Realtime voices (Aria, Verse, Melody) and add UI control for restarting sessions
-- Reduce log noise by filtering routine `ClientDisconnected` WebSocket errors and centralize persona config in `.env`
-- Design Phase 1B enhancements: Twilio SMS flow, dashboard filters, detailed call views
+See `OMNICHANNEL_MIGRATION.md` and `TODO.md` for detailed timeline.
 
-### Phase 3 (Future)
+### Phase 3 (Coming Q1 2026)
+- Boulevard scheduling integration
+- Advanced analytics visualizations and BI
+- Enhanced customer insights
 - Multi-language support
-- Voice biometrics
-- Proactive reminders
+
+### Phase 4 (Future)
+- Voice biometrics for customer identification
+- Proactive appointment reminders
 - Package recommendations
 - Video consultation support
+- WhatsApp integration
 
 ## Troubleshooting
 

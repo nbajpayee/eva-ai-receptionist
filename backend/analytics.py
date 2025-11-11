@@ -7,7 +7,11 @@ from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from openai import OpenAI
-from database import CallSession, CallEvent, Customer, Appointment, DailyMetric
+from database import (
+    CallSession, CallEvent, Customer, Appointment, DailyMetric,
+    Conversation, CommunicationMessage, VoiceCallDetails, EmailDetails, SMSDetails,
+    CommunicationEvent
+)
 from config import get_settings
 
 settings = get_settings()
@@ -440,3 +444,376 @@ Consider these factors:
             "total_pages": (total + page_size - 1) // page_size,
             "calls": serialized_calls
         }
+
+    # ==================== Omnichannel Communications Methods (Phase 2) ====================
+
+    @staticmethod
+    def create_conversation(
+        db: Session,
+        customer_id: int,
+        channel: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Conversation:
+        """
+        Create a new omnichannel conversation.
+
+        Args:
+            db: Database session
+            customer_id: Customer ID
+            channel: Communication channel (voice, sms, email)
+            metadata: Optional metadata dictionary
+
+        Returns:
+            Created Conversation object
+        """
+        import uuid
+
+        conversation = Conversation(
+            id=uuid.uuid4(),
+            customer_id=customer_id,
+            channel=channel,
+            status='active',
+            initiated_at=_utcnow(),
+            last_activity_at=_utcnow(),
+            custom_metadata=metadata or {}
+        )
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+        return conversation
+
+    @staticmethod
+    def add_message(
+        db: Session,
+        conversation_id: Any,  # UUID
+        direction: str,
+        content: str,
+        sent_at: Optional[datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> CommunicationMessage:
+        """
+        Add a message to a conversation.
+
+        Args:
+            db: Database session
+            conversation_id: Conversation UUID
+            direction: Message direction (inbound, outbound)
+            content: Message content/text
+            sent_at: Message timestamp (defaults to now)
+            metadata: Optional metadata
+
+        Returns:
+            Created CommunicationMessage object
+        """
+        import uuid
+
+        message = CommunicationMessage(
+            id=uuid.uuid4(),
+            conversation_id=conversation_id,
+            direction=direction,
+            content=content,
+            sent_at=sent_at or _utcnow(),
+            processed=False,
+            custom_metadata=metadata or {}
+        )
+        db.add(message)
+
+        # Update conversation last_activity_at
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if conversation:
+            conversation.last_activity_at = _utcnow()
+
+        db.commit()
+        db.refresh(message)
+        return message
+
+    @staticmethod
+    def add_voice_details(
+        db: Session,
+        message_id: Any,  # UUID
+        duration_seconds: int,
+        recording_url: Optional[str] = None,
+        transcript_segments: Optional[List[Dict]] = None,
+        function_calls: Optional[List[Dict]] = None,
+        interruption_count: int = 0
+    ) -> VoiceCallDetails:
+        """
+        Add voice call details to a message.
+
+        Args:
+            db: Database session
+            message_id: Message UUID
+            duration_seconds: Call duration
+            recording_url: Optional recording URL
+            transcript_segments: Structured transcript with timestamps
+            function_calls: List of function calls made
+            interruption_count: Number of interruptions
+
+        Returns:
+            Created VoiceCallDetails object
+        """
+        voice_details = VoiceCallDetails(
+            message_id=message_id,
+            duration_seconds=duration_seconds,
+            recording_url=recording_url,
+            transcript_segments=transcript_segments or [],
+            function_calls=function_calls or [],
+            audio_quality_score=None,
+            interruption_count=interruption_count
+        )
+        db.add(voice_details)
+        db.commit()
+        db.refresh(voice_details)
+        return voice_details
+
+    @staticmethod
+    def add_sms_details(
+        db: Session,
+        message_id: Any,  # UUID
+        from_number: str,
+        to_number: str,
+        provider_message_id: str,
+        delivery_status: Optional[str] = None,
+        segments: int = 1,
+        **kwargs
+    ) -> SMSDetails:
+        """
+        Add SMS details to a message.
+
+        Args:
+            db: Database session
+            message_id: Message UUID
+            from_number: Sender phone number
+            to_number: Recipient phone number
+            provider_message_id: Twilio message SID
+            delivery_status: Delivery status
+            segments: Number of SMS segments
+            **kwargs: Additional fields (error_code, error_message, media_urls, etc.)
+
+        Returns:
+            Created SMSDetails object
+        """
+        sms_details = SMSDetails(
+            message_id=message_id,
+            from_number=from_number,
+            to_number=to_number,
+            provider_message_id=provider_message_id,
+            delivery_status=delivery_status,
+            segments=segments,
+            **kwargs
+        )
+        db.add(sms_details)
+        db.commit()
+        db.refresh(sms_details)
+        return sms_details
+
+    @staticmethod
+    def add_email_details(
+        db: Session,
+        message_id: Any,  # UUID
+        subject: str,
+        from_address: str,
+        to_address: str,
+        body_text: str,
+        body_html: Optional[str] = None,
+        **kwargs
+    ) -> EmailDetails:
+        """
+        Add email details to a message.
+
+        Args:
+            db: Database session
+            message_id: Message UUID
+            subject: Email subject
+            from_address: Sender email
+            to_address: Recipient email
+            body_text: Plain text body
+            body_html: HTML body
+            **kwargs: Additional fields (cc_addresses, attachments, etc.)
+
+        Returns:
+            Created EmailDetails object
+        """
+        email_details = EmailDetails(
+            message_id=message_id,
+            subject=subject,
+            from_address=from_address,
+            to_address=to_address,
+            body_text=body_text,
+            body_html=body_html,
+            **kwargs
+        )
+        db.add(email_details)
+        db.commit()
+        db.refresh(email_details)
+        return email_details
+
+    @staticmethod
+    def complete_conversation(
+        db: Session,
+        conversation_id: Any,  # UUID
+        outcome: Optional[str] = None
+    ):
+        """
+        Mark a conversation as completed.
+
+        Args:
+            db: Database session
+            conversation_id: Conversation UUID
+            outcome: Optional outcome (appointment_scheduled, complaint, etc.)
+        """
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if conversation:
+            conversation.status = 'completed'
+            conversation.completed_at = _utcnow()
+            if outcome:
+                conversation.outcome = outcome
+            db.commit()
+
+    @staticmethod
+    def score_conversation_satisfaction(
+        db: Session,
+        conversation_id: Any  # UUID
+    ) -> Dict[str, Any]:
+        """
+        Use GPT-4 to analyze conversation and generate satisfaction metrics.
+        Works for single-message (voice) or multi-message (SMS/email) conversations.
+
+        Args:
+            db: Database session
+            conversation_id: Conversation UUID
+
+        Returns:
+            Dictionary with satisfaction_score, sentiment, outcome, summary
+        """
+        from sqlalchemy.orm import joinedload
+
+        conversation = db.query(Conversation)\
+            .options(joinedload(Conversation.messages))\
+            .filter(Conversation.id == conversation_id)\
+            .first()
+
+        if not conversation:
+            raise ValueError(f"Conversation {conversation_id} not found")
+
+        messages = sorted(conversation.messages, key=lambda m: m.sent_at)
+
+        if not messages:
+            return {
+                'satisfaction_score': 5,
+                'sentiment': 'neutral',
+                'outcome': 'unresolved',
+                'summary': ''
+            }
+
+        # Build context for GPT-4
+        context_lines = [f"Channel: {conversation.channel}"]
+
+        for msg in messages:
+            speaker = "Customer" if msg.direction == 'inbound' else "Ava"
+            content = msg.content or ''
+            context_lines.append(f"{speaker}: {content}")
+
+        context = "\n".join(context_lines)
+
+        # Call GPT-4 for analysis
+        try:
+            response = openai_client.chat.completions.create(
+                model=settings.OPENAI_SENTIMENT_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are an expert at analyzing customer service conversations across voice, SMS, and email.
+Analyze the following conversation between Ava (AI receptionist) and a customer.
+
+Provide your analysis in JSON format with these fields:
+- satisfaction_score: score from 1-10 (1=very dissatisfied, 10=very satisfied)
+- sentiment: overall sentiment (positive, neutral, negative, mixed)
+- outcome: what happened? Options: appointment_scheduled, appointment_rescheduled, appointment_cancelled, info_request, complaint, unresolved
+- summary: brief 1-2 sentence description of the conversation
+
+Consider:
+- Did the customer accomplish their goal?
+- Were there repeated clarifications needed?
+- Did the customer express gratitude or positive feedback?
+- Were there negative words or frustration indicators?
+- Was the conversation efficient or drawn out?
+"""
+                    },
+                    {
+                        "role": "user",
+                        "content": context
+                    }
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3
+            )
+
+            result = json.loads(response.choices[0].message.content)
+
+            score = result.get('satisfaction_score', 5)
+            sentiment = result.get('sentiment', 'neutral')
+            outcome = result.get('outcome', 'unresolved')
+            summary = result.get('summary', '')
+
+            # Update conversation
+            conversation.satisfaction_score = int(score)
+            conversation.sentiment = sentiment
+            conversation.outcome = outcome
+            conversation.ai_summary = summary
+            db.commit()
+
+            return {
+                'satisfaction_score': score,
+                'sentiment': sentiment,
+                'outcome': outcome,
+                'summary': summary
+            }
+
+        except Exception as e:
+            print(f"Error analyzing conversation satisfaction: {e}")
+            # Fallback to neutral values
+            conversation.satisfaction_score = 5
+            conversation.sentiment = 'neutral'
+            conversation.outcome = 'unresolved'
+            db.commit()
+
+            return {
+                'satisfaction_score': 5,
+                'sentiment': 'neutral',
+                'outcome': 'unresolved',
+                'summary': ''
+            }
+
+    @staticmethod
+    def add_communication_event(
+        db: Session,
+        conversation_id: Any,  # UUID
+        event_type: str,
+        details: Dict[str, Any],
+        message_id: Optional[Any] = None,  # UUID
+        timestamp: Optional[datetime] = None
+    ):
+        """
+        Add an event to a conversation.
+
+        Args:
+            db: Database session
+            conversation_id: Conversation UUID
+            event_type: Event type (intent_detected, function_called, etc.)
+            details: Event details dictionary
+            message_id: Optional message UUID
+            timestamp: Event timestamp (defaults to now)
+        """
+        import uuid
+
+        event = CommunicationEvent(
+            id=uuid.uuid4(),
+            conversation_id=conversation_id,
+            message_id=message_id,
+            event_type=event_type,
+            timestamp=timestamp or _utcnow(),
+            details=details
+        )
+        db.add(event)
+        db.commit()
