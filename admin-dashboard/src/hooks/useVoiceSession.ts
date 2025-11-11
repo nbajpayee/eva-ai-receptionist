@@ -23,8 +23,10 @@ export type VoiceDiagnostics = {
   interruptions: number;
 };
 
-const COMMIT_DELAY_MS = 300;
+const COMMIT_DELAY_NORMAL_MS = 300;
+const COMMIT_DELAY_FAST_MS = 120;
 const SAMPLE_RATE = 24000;
+const AUDIO_BUFFER_SIZE = 4096;
 const PING_INTERVAL_MS = 5000;
 const DEFAULT_VAD_THRESHOLD = 0.005;
 
@@ -121,7 +123,7 @@ export function useVoiceSession() {
   );
 
   const scheduleCommit = useCallback(
-    (delayMs: number = COMMIT_DELAY_MS) => {
+    (delayMs: number = COMMIT_DELAY_NORMAL_MS) => {
       clearCommitTimeout();
       commitTimeoutRef.current = window.setTimeout(() => {
         sendCommit();
@@ -339,7 +341,7 @@ export function useVoiceSession() {
     }
 
     const source = audioContext.createMediaStreamSource(mediaStream);
-    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    const processor = audioContext.createScriptProcessor(AUDIO_BUFFER_SIZE, 1, 1);
 
     processor.onaudioprocess = (event) => {
       if (!isRecordingRef.current || !websocket || websocket.readyState !== WebSocket.OPEN) {
@@ -353,7 +355,7 @@ export function useVoiceSession() {
       if (!shouldTransmit) {
         if (isUserSpeakingRef.current) {
           isUserSpeakingRef.current = false;
-          scheduleCommit(120);
+          scheduleCommit(COMMIT_DELAY_FAST_MS);
         }
         return;
       }
@@ -363,7 +365,7 @@ export function useVoiceSession() {
         isUserSpeakingRef.current = true;
 
         // If assistant is currently speaking, interrupt them
-        if (vadEnabled && isAssistantSpeakingRef.current) {
+        if (isAssistantSpeakingRef.current) {
           console.log('✋ Interrupting assistant');
           interruptPlayback();
         }
