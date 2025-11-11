@@ -7,14 +7,15 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPExcept
 from starlette.websockets import WebSocketState
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
-from typing import Optional, Dict
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
+from typing import Optional, Dict, List
 from datetime import datetime
-
 from config import get_settings
 from database import get_db, init_db, Customer, Appointment, CallSession, Conversation
 from realtime_client import RealtimeClient
 from analytics import AnalyticsService
+from api_messaging import messaging_router
 
 settings = get_settings()
 
@@ -24,6 +25,9 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="AI-powered voice receptionist for medical spas"
 )
+
+# Register routers
+app.include_router(messaging_router)
 
 # CORS middleware
 app.add_middleware(
@@ -358,24 +362,14 @@ async def voice_websocket(
                     results.append(task_err)
 
             print(f"✅ Handlers completed with results: {results}")
-        except Exception as e:
-            print(f"❌ Error running handlers: {e}")
+        except Exception as orchestration_error:
+            print(f"❌ Error orchestrating realtime handlers: {orchestration_error}")
             import traceback
             traceback.print_exc()
-
-        await finalize_session("handler loop complete")
-
-    except WebSocketDisconnect:
-        print(f"Client disconnected: {session_id}")
-
-    except Exception as e:
-        print(f"Error in voice_websocket for session {session_id}: {e}")
-        import traceback
-        traceback.print_exc()
-
+            raise
     finally:
-        await finalize_session("websocket scope exit")
-
+        print(f"🧹 Cleaning up session {session_id}")
+        await realtime_client.close()
 
 # ==================== Customer Management Endpoints ====================
 

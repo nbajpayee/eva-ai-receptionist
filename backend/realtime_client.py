@@ -7,7 +7,8 @@ import websockets
 from typing import Dict, Any, Optional, Callable, List
 from datetime import datetime, timedelta
 import pytz
-from config import get_settings, SERVICES, PROVIDERS, OPENING_SCRIPT, SYSTEM_PROMPT
+from config import get_settings, SERVICES, PROVIDERS, OPENING_SCRIPT
+from prompts import get_system_prompt
 from mock_calendar_service import get_mock_calendar_service
 
 settings = get_settings()
@@ -80,13 +81,7 @@ class RealtimeClient:
 
     async def _initialize_session(self):
         """Initialize the session with system instructions and available functions."""
-        system_prompt = SYSTEM_PROMPT.format(
-            assistant_name=settings.AI_ASSISTANT_NAME,
-            med_spa_name=settings.MED_SPA_NAME,
-            address=settings.MED_SPA_ADDRESS,
-            hours=settings.MED_SPA_HOURS,
-            phone=settings.MED_SPA_PHONE
-        )
+        system_prompt = get_system_prompt("voice")
 
         self.identity_instructions = (
             f"You are {settings.AI_ASSISTANT_NAME}, the virtual receptionist for {settings.MED_SPA_NAME}. "

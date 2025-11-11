@@ -149,16 +149,39 @@ async function fetchCallDetails(id: string): Promise<CallDetails | null> {
   }
 }
 
-async function fetchConversation(): Promise<CommunicationMessage[]> {
+async function fetchConversationMessages(conversationId: string): Promise<CommunicationMessage[]> {
   try {
-    const response = await fetch(resolveInternalUrl("/api/admin/messaging"), { cache: "no-store" });
+    const response = await fetch(
+      resolveInternalUrl(`/api/admin/messaging/conversations/${conversationId}`),
+      { cache: "no-store" }
+    );
+
     if (!response.ok) {
       return [];
     }
-    const data = (await response.json()) as { messages: CommunicationMessage[] };
-    return data.messages;
+
+    const data = (await response.json()) as {
+      messages: Array<{
+        id: string;
+        channel: string;
+        direction: "inbound" | "outbound";
+        content: string;
+        sent_at: string | null;
+        metadata?: Record<string, unknown>;
+      }>;
+    };
+
+    return data.messages.map((message) => ({
+      id: message.id,
+      channel: message.channel as CommunicationChannel,
+      author: message.direction === "outbound" ? "assistant" : "customer",
+      direction: message.direction,
+      body: message.content,
+      timestamp: message.sent_at ?? new Date().toISOString(),
+      metadata: message.metadata ?? {},
+    } satisfies CommunicationMessage));
   } catch (error) {
-    console.error("Error fetching conversation", error);
+    console.error("Error fetching conversation messages", error);
     return [];
   }
 }
@@ -225,7 +248,10 @@ export default async function CallDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [data, conversation] = await Promise.all([fetchCallDetails(id), fetchConversation()]);
+  const [data, conversation] = await Promise.all([
+    fetchCallDetails(id),
+    fetchConversationMessages(id),
+  ]);
 
   if (!data) {
     notFound();
@@ -233,18 +259,17 @@ export default async function CallDetailPage({
 
   const { call, customer, transcript, events } = data;
 
-  type SupportedChannel = Extract<CommunicationChannel, "voice" | "mobile_text" | "email">;
+  type SupportedChannel = CommunicationChannel;
   let primaryChannel: SupportedChannel = "voice";
-
-  if (transcript.length === 0) {
-    const firstMessage = conversation.find((message) =>
-      message.channel === "mobile_text" || message.channel === "email"
-    );
-    primaryChannel = (firstMessage?.channel ?? "mobile_text") as SupportedChannel;
-  }
 
   if (transcript.length > 0) {
     primaryChannel = "voice";
+  } else {
+    const firstNonVoiceMessage = conversation.find((message) => message.channel !== "voice");
+    const fallbackChannel = firstNonVoiceMessage?.channel ?? conversation[0]?.channel;
+    if (fallbackChannel) {
+      primaryChannel = fallbackChannel;
+    }
   }
 
   const channelMessages =
@@ -254,13 +279,13 @@ export default async function CallDetailPage({
 
   const channelTitles: Record<SupportedChannel, string> = {
     voice: "Voice call",
-    mobile_text: "Mobile text",
+    sms: "Mobile text",
     email: "Email",
   };
 
   const channelIcons: Record<SupportedChannel, typeof MessageSquare> = {
     voice: PhoneIncoming,
-    mobile_text: MessageSquare,
+    sms: MessageSquare,
     email: Mail,
   };
 

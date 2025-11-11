@@ -15,7 +15,7 @@ export type CallRecord = {
   satisfactionScore?: number | null;
   escalated?: boolean;
   customerName?: string | null;
-  channel?: "voice" | "mobile_text" | "email";
+  channel?: "voice" | "mobile_text" | "sms" | "email";
 };
 
 const outcomeCopy: Record<CallRecord["outcome"], string> = {
@@ -36,9 +36,27 @@ const outcomeTone: Record<CallRecord["outcome"], string> = {
 
 const channelCopy: Record<NonNullable<CallRecord["channel"]>, string> = {
   voice: "Voice",
-  mobile_text: "Text",
+  mobile_text: "SMS",
+  sms: "SMS",
   email: "Email",
 };
+
+const channelTone: Record<NonNullable<CallRecord["channel"]>, string> = {
+  voice: "bg-sky-50 text-sky-700 border-sky-100",
+  mobile_text: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  sms: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  email: "bg-violet-50 text-violet-700 border-violet-100",
+};
+
+function satisfactionTone(score: number): string {
+  if (score >= 8) {
+    return "bg-emerald-50 text-emerald-700 border-emerald-100";
+  }
+  if (score >= 5) {
+    return "bg-amber-50 text-amber-700 border-amber-100";
+  }
+  return "bg-rose-50 text-rose-700 border-rose-100";
+}
 
 function formatDuration(seconds: number) {
   if (!seconds) return "—";
@@ -89,7 +107,12 @@ export function CallLogTable({ calls }: CallLogTableProps) {
                     {call.customerName ?? call.phoneNumber ?? "Unknown"}
                   </td>
                   <td className="px-6 py-4 text-zinc-600">
-                    {call.channel ? channelCopy[call.channel] : "Voice"}
+                    <Badge
+                      variant="outline"
+                      className={`${channelTone[call.channel ?? "voice"]} font-medium`}
+                    >
+                      {call.channel ? channelCopy[call.channel] : channelCopy.voice}
+                    </Badge>
                   </td>
                   <td className="px-6 py-4 text-zinc-600">
                     {formatDuration(call.durationSeconds)}
@@ -103,7 +126,16 @@ export function CallLogTable({ calls }: CallLogTableProps) {
                     </Badge>
                   </td>
                   <td className="px-6 py-4 text-zinc-600">
-                    {call.satisfactionScore != null ? `${call.satisfactionScore.toFixed(1)}/10` : "—"}
+                    {call.satisfactionScore != null ? (
+                      <Badge
+                        variant="outline"
+                        className={`${satisfactionTone(call.satisfactionScore)} font-medium`}
+                      >
+                        {call.satisfactionScore.toFixed(1)}/10
+                      </Badge>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <Link

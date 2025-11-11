@@ -7,13 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import type { CommunicationChannel } from "@/types/communication";
 
 const PLACEHOLDERS: Record<CommunicationChannel, string> = {
-  mobile_text: "Send a quick SMS update",
+  sms: "Send a quick SMS update",
   email: "Compose the email Ava should send",
   voice: "Voice responses are captured automatically after calls.",
 };
 
 const SHORTCUT_HINTS: Record<CommunicationChannel, string> = {
-  mobile_text: "Press Enter to send. Use Shift+Enter for a new line.",
+  sms: "Press Enter to send. Use Shift+Enter for a new line.",
   email: "Press ⌘+Enter (Ctrl+Enter) to send. Enter adds a new line.",
   voice: "Voice responses are captured automatically after calls.",
 };
@@ -48,7 +48,7 @@ export function MessageComposer({ channel, onSend, disabled }: MessageComposerPr
   };
 
   const handleKeyDown = async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (channel === "mobile_text" && event.key === "Enter" && !event.shiftKey) {
+    if (channel === "sms" && event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       await sendMessage();
       return;

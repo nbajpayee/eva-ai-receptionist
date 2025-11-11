@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-realtime-mini-2025-10-06"
     OPENAI_SENTIMENT_MODEL: str = "gpt-4.1-mini"
+    OPENAI_MESSAGING_MODEL: str = "gpt-4.1-mini"
 
     # Google Calendar
     GOOGLE_CALENDAR_ID: str
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
     MED_SPA_PHONE: str = "+1234567890"
     MED_SPA_ADDRESS: str = "123 Beauty Lane, Beverly Hills, CA 90210"
     MED_SPA_HOURS: str = "Monday-Friday: 9am-7pm, Saturday: 10am-5pm, Sunday: Closed"
+    MED_SPA_EMAIL: str = "hello@luxurymedspa.com"
 
     # AI Assistant
     AI_ASSISTANT_NAME: str = "Ava"
