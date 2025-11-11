@@ -74,17 +74,77 @@ function resolveInternalUrl(path: string): string {
 
 async function fetchCallDetails(id: string): Promise<CallDetails | null> {
   try {
-    const url = resolveInternalUrl(`/api/admin/calls/${id}`);
+    const url = resolveInternalUrl(`/api/admin/communications/${id}`);
     const response = await fetch(url, { cache: "no-store" });
 
     if (!response.ok) {
       if (response.status === 404) return null;
-      throw new Error(`Failed to fetch call details: ${response.statusText}`);
+      throw new Error(`Failed to fetch conversation details: ${response.statusText}`);
     }
 
-    return await response.json();
+    const data = await response.json();
+
+    // Map new conversations schema to old CallDetails format
+    const { conversation, messages, events } = data;
+
+    // Extract transcript from voice message content
+    let transcript: TranscriptEntry[] = [];
+    const voiceMessage = messages.find((m: any) => m.voice);
+    if (voiceMessage?.voice?.transcript_segments) {
+      // Parse transcript segments
+      const segments = voiceMessage.voice.transcript_segments;
+      if (Array.isArray(segments) && segments.length > 0) {
+        // If transcript_segments is array of parsed objects
+        if (typeof segments[0] === 'object' && 'speaker' in segments[0]) {
+          transcript = segments.map((seg: any) => ({
+            speaker: seg.speaker || 'unknown',
+            text: seg.text || '',
+            timestamp: seg.timestamp || new Date().toISOString()
+          }));
+        } else {
+          // If it's stored as JSON string, try to parse content
+          try {
+            const parsed = JSON.parse(voiceMessage.content || '[]');
+            if (Array.isArray(parsed)) {
+              transcript = parsed;
+            }
+          } catch (e) {
+            console.warn('Failed to parse transcript:', e);
+          }
+        }
+      }
+    }
+
+    // Calculate duration from timestamps
+    const duration = conversation.completed_at
+      ? Math.floor((new Date(conversation.completed_at).getTime() - new Date(conversation.initiated_at).getTime()) / 1000)
+      : 0;
+
+    return {
+      call: {
+        id: parseInt(conversation.metadata?.legacy_call_session_id || '0'),
+        session_id: conversation.metadata?.session_id || conversation.id,
+        started_at: conversation.initiated_at,
+        ended_at: conversation.completed_at || conversation.initiated_at,
+        duration_seconds: duration,
+        phone_number: conversation.metadata?.phone_number || null,
+        satisfaction_score: conversation.satisfaction_score,
+        sentiment: conversation.sentiment,
+        outcome: conversation.outcome,
+        escalated: conversation.metadata?.escalated || false,
+        escalation_reason: conversation.metadata?.escalation_reason || null,
+      },
+      customer: conversation.customer || null,
+      transcript,
+      events: events.map((event: any) => ({
+        id: 0, // Events now use UUID, but UI expects number
+        event_type: event.event_type,
+        timestamp: event.timestamp,
+        data: event.details,
+      })),
+    };
   } catch (error) {
-    console.error("Error fetching call details:", error);
+    console.error("Error fetching conversation details:", error);
     return null;
   }
 }

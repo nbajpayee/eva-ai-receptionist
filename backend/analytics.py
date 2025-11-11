@@ -106,13 +106,25 @@ class AnalyticsService:
         # Store function calls count
         call_session.function_calls_made = len(function_calls)
 
-        # Link to customer if identified
+        # Link to customer if identified (create if doesn't exist)
         if customer_data.get('phone'):
             customer = db.query(Customer).filter(
                 Customer.phone == customer_data['phone']
             ).first()
-            if customer:
-                call_session.customer_id = customer.id
+
+            if not customer:
+                # Create new customer
+                customer = Customer(
+                    name=customer_data.get('name', 'Unknown'),
+                    phone=customer_data.get('phone'),
+                    email=customer_data.get('email'),
+                    is_new_client=True
+                )
+                db.add(customer)
+                db.flush()  # Get the ID without committing
+                print(f"✨ Created new customer: {customer.name} (ID: {customer.id})")
+
+            call_session.customer_id = customer.id
 
         # Determine outcome
         call_session.outcome = AnalyticsService._determine_outcome(function_calls)

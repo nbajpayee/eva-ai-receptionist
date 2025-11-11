@@ -69,25 +69,25 @@ async function fetchMetrics(period: string = "today"): Promise<MetricsResponse> 
 
 async function fetchCallHistory(): Promise<CallRecord[]> {
   try {
-    const url = resolveInternalUrl("/api/admin/calls?page_size=20");
+    const url = resolveInternalUrl("/api/admin/communications?page_size=20");
 
     const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) {
-      console.warn("Failed to fetch call history", response.statusText);
+      console.warn("Failed to fetch communications", response.statusText);
       return [];
     }
 
-    const { calls } = (await response.json()) as {
-      calls: Array<{
-        id: number;
-        started_at: string | null;
-        duration_seconds: number;
+    const { conversations } = (await response.json()) as {
+      conversations: Array<{
+        id: string;
+        initiated_at: string;
+        completed_at: string | null;
         outcome: string | null;
-        phone_number?: string | null;
+        customer_phone?: string | null;
         satisfaction_score?: number | null;
-        escalated?: boolean | null;
         customer_name?: string | null;
-        channel?: string | null;
+        channel: string;
+        metadata?: { escalated?: boolean; phone_number?: string } | null;
       }>;
     };
 
@@ -99,30 +99,39 @@ async function fetchCallHistory(): Promise<CallRecord[]> {
       "rescheduled",
     ];
 
-    return calls.map((call) => {
-      const normalizedOutcome = (call.outcome ?? "info_only").toLowerCase();
+    return conversations.map((conversation) => {
+      const normalizedOutcome = (conversation.outcome ?? "info_only").toLowerCase();
+      const isEscalated = conversation.metadata?.escalated ?? false;
       const outcome = (
         allowedOutcomes.includes(normalizedOutcome as CallRecord["outcome"])
           ? normalizedOutcome
-          : call.escalated
+          : isEscalated
             ? "escalated"
             : "info_only"
       ) as CallRecord["outcome"];
 
+      // Calculate duration from initiated_at and completed_at
+      let durationSeconds = 0;
+      if (conversation.completed_at) {
+        const start = new Date(conversation.initiated_at).getTime();
+        const end = new Date(conversation.completed_at).getTime();
+        durationSeconds = Math.floor((end - start) / 1000);
+      }
+
       return {
-        id: call.id.toString(),
-        startedAt: call.started_at ?? new Date().toISOString(),
-        durationSeconds: call.duration_seconds ?? 0,
+        id: conversation.id,
+        startedAt: conversation.initiated_at,
+        durationSeconds,
         outcome,
-        phoneNumber: call.phone_number,
-        satisfactionScore: call.satisfaction_score ?? undefined,
-        escalated: Boolean(call.escalated),
-        customerName: call.customer_name ?? undefined,
-        channel: (call.channel as CallRecord["channel"]) ?? undefined,
+        phoneNumber: conversation.customer_phone ?? conversation.metadata?.phone_number,
+        satisfactionScore: conversation.satisfaction_score ?? undefined,
+        escalated: isEscalated,
+        customerName: conversation.customer_name ?? undefined,
+        channel: (conversation.channel as CallRecord["channel"]) ?? undefined,
       } satisfies CallRecord;
     });
   } catch (error) {
-    console.error("Error fetching call history", error);
+    console.error("Error fetching communications", error);
     return [];
   }
 }

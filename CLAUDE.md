@@ -6,14 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is **Ava**, a voice AI receptionist for medical spas built with FastAPI (backend), Next.js 14 (admin dashboard), and OpenAI's Realtime API. The system handles appointment scheduling via Google Calendar, tracks call analytics with AI-powered satisfaction scoring, and provides a comprehensive admin dashboard for monitoring conversations and metrics.
 
-**Current Status (Nov 10, 2025)**: Phase 1A is production-ready. Voice interface complete with smart commits and interruption handling. **Phase 2 (Omnichannel Migration) is now in progress** - expanding backend to support SMS and email communications with multi-message threading. See `OMNICHANNEL_MIGRATION.md` for full architecture.
+**Current Status (Nov 10, 2025)**: Phase 1A is production-ready. Voice interface complete with smart commits and interruption handling. **Phase 2 (Omnichannel Migration) is COMPLETE** ✅ - Backend now supports SMS and email communications with multi-message threading. All 77 historical call sessions migrated successfully. See `OMNICHANNEL_MIGRATION.md`, `IMPLEMENTATION_COMPLETE.md`, and `MIGRATION_SUCCESS.md` for full documentation.
 
 **Key Architecture**:
 - **Backend**: FastAPI + Supabase PostgreSQL (fully migrated from SQLite)
 - **Frontend**: Next.js 14 admin dashboard + vanilla HTML voice interface (being consolidated)
 - **Voice**: Hybrid client-side + server-side VAD with dual-speed commits (300ms/120ms)
 - **Interruption**: Client-side audio source tracking with immediate cutoff
-- **Omnichannel (Phase 2)**: Conversations schema supporting voice, SMS, and email with unified customer timelines
+- **Omnichannel (Phase 2 - COMPLETE)**: Conversations schema supporting voice, SMS, and email with:
+  - Unified customer timeline across all channels
+  - Multi-message threading for SMS/email
+  - Cross-channel AI satisfaction scoring (GPT-4)
+  - Dual-write migration strategy (writes to both legacy + new schemas)
+  - Admin dashboard updated to display conversations
 
 ## Development Commands
 
@@ -31,6 +36,11 @@ python backend/scripts/seed_supabase.py --force
 
 # Migrate legacy SQLite data to Supabase (if needed)
 python backend/scripts/migrate_sqlite_to_supabase.py
+
+# Omnichannel migration scripts (Phase 2 - COMPLETED Nov 10, 2025)
+python backend/scripts/create_omnichannel_schema.py  # Create conversations schema
+python backend/scripts/migrate_call_sessions_to_conversations.py  # Migrate data (already done)
+python backend/scripts/fix_omnichannel_constraints.py  # Fix schema constraints (if needed)
 ```
 
 ### Admin Dashboard (Next.js)

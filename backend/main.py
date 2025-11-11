@@ -128,27 +128,50 @@ async def voice_websocket(
             try:
                 # DUAL-WRITE: Update both legacy and new schemas
 
-                # 1. Update legacy call_session
-                AnalyticsService.end_call_session(
+                # Extract customer data once for reuse
+                customer_data = session_data.get('customer_data', {})
+
+                # 1. Update legacy call_session (this also looks up/links customer)
+                updated_call_session = AnalyticsService.end_call_session(
                     db=db,
                     session_id=session_id,
                     transcript=session_data.get('transcript', []),
                     function_calls=session_data.get('function_calls', []),
-                    customer_data=session_data.get('customer_data', {})
+                    customer_data=customer_data
                 )
 
                 # 2. Update new conversation schema
-                # Add message with transcript
+                # Extract customer ID from the updated call_session
+                # (end_call_session already looked up customer by phone)
+                customer_id = updated_call_session.customer_id if updated_call_session else None
+
+                # Update conversation with customer ID if identified
+                if customer_id:
+                    conversation.customer_id = customer_id
+                    print(f"🔗 Linked conversation {conversation.id} to customer {customer_id}")
+                    db.commit()
+                else:
+                    print(f"⚠️  No customer linked for session {session_id}")
+
+                # Add message with human-readable summary (not raw JSON)
+                # The actual transcript goes in voice_details.transcript_segments
                 import json
+                summary_text = f"Voice call - {len(transcript_entries)} transcript segments"
+                if transcript_entries:
+                    # Include first and last message for context
+                    first_msg = transcript_entries[0].get('text', '') if transcript_entries else ''
+                    summary_text = f"Voice call starting with: {first_msg[:100]}..."
+
                 message = AnalyticsService.add_message(
                     db=db,
                     conversation_id=conversation.id,
                     direction='inbound',
-                    content=json.dumps(transcript_entries),
+                    content=summary_text,  # Human-readable summary, not JSON dump
                     sent_at=conversation.initiated_at,
                     metadata={
-                        'customer_interruptions': session_data.get('customer_data', {}).get('interruptions', 0),
-                        'ai_clarifications_needed': 0
+                        'customer_interruptions': customer_data.get('interruptions', 0),
+                        'ai_clarifications_needed': 0,
+                        'transcript_entry_count': len(transcript_entries)
                     }
                 )
 
