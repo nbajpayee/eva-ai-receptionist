@@ -33,7 +33,7 @@ export function MessageBubble({ message }: { message: CommunicationMessage }) {
             : "border-zinc-900 bg-zinc-900 text-white"
         )}
       >
-        <p>{message.body}</p>
+        <div className="whitespace-pre-line">{message.body}</div>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
           <Badge variant="outline" className={cn("border", channelTone)}>
             {getChannelLabel(message.channel)}
