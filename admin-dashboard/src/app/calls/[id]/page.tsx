@@ -14,6 +14,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 import { MessageTimeline } from "@/components/communication/message-timeline";
 import type { CommunicationChannel, CommunicationMessage } from "@/types/communication";
@@ -412,33 +413,35 @@ export default async function CallDetailPage({
               {transcript.length === 0 ? (
                 <p className="text-center text-sm text-zinc-500">No transcript available</p>
               ) : (
-                <div className="space-y-4">
-                  {transcript.map((entry, index) => (
-                    <div
-                      key={index}
-                      className={`rounded-lg border p-4 ${
-                        entry.speaker === "customer"
-                          ? "border-sky-200 bg-sky-50/60"
-                          : "border-zinc-200 bg-white"
-                      }`}
-                    >
-                      <div className="mb-2 flex items-center justify-between">
-                        <Badge
-                          variant="outline"
-                          className={`text-xs font-semibold uppercase tracking-wide ${
-                            entry.speaker === "customer"
-                              ? "bg-sky-100 text-sky-700 border-sky-200"
-                              : "bg-zinc-100 text-zinc-700 border-zinc-200"
-                          }`}
-                        >
-                          {entry.speaker}
-                        </Badge>
-                        <span className="text-xs text-zinc-500">{formatTime(entry.timestamp)}</span>
+                <ScrollArea className="h-[540px]">
+                  <div className="space-y-4 pr-4">
+                    {transcript.map((entry, index) => (
+                      <div
+                        key={index}
+                        className={`rounded-lg border p-4 ${
+                          entry.speaker === "customer"
+                            ? "border-sky-200 bg-sky-50/60"
+                            : "border-zinc-200 bg-white"
+                        }`}
+                      >
+                        <div className="mb-2 flex items-center justify-between">
+                          <Badge
+                            variant="outline"
+                            className={`text-xs font-semibold uppercase tracking-wide ${
+                              entry.speaker === "customer"
+                                ? "bg-sky-100 text-sky-700 border-sky-200"
+                                : "bg-zinc-100 text-zinc-700 border-zinc-200"
+                            }`}
+                          >
+                            {entry.speaker}
+                          </Badge>
+                          <span className="text-xs text-zinc-500">{formatTime(entry.timestamp)}</span>
+                        </div>
+                        <p className="text-sm leading-relaxed text-zinc-900">{entry.text}</p>
                       </div>
-                      <p className="text-sm leading-relaxed text-zinc-900">{entry.text}</p>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                </ScrollArea>
               )}
             </CardContent>
           </Card>

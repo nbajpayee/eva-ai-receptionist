@@ -4,6 +4,7 @@ Analytics service for call tracking, sentiment analysis, and satisfaction scorin
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from openai import OpenAI
@@ -354,7 +355,7 @@ Consider these factors:
         else:
             start_date = datetime.combine(now.date(), datetime.min.time())
 
-        # Get metrics
+        # Get metrics from daily aggregates (lightweight)
         daily_metrics = db.query(DailyMetric).filter(
             DailyMetric.date >= start_date.date()
         ).all()
@@ -371,16 +372,32 @@ Consider these factors:
 
         conversion_rate = (total_booked / total_calls * 100) if total_calls > 0 else 0.0
 
+        # Count unique customers engaged (filtered by period for performance)
+        from database import Conversation
+        customers_engaged = db.query(func.count(func.distinct(Conversation.customer_id))).filter(
+            Conversation.initiated_at >= start_date,
+            Conversation.customer_id.isnot(None)
+        ).scalar() or 0
+
+        # Count total messages sent (filtered by period for performance)
+        from database import CommunicationMessage
+        total_messages = db.query(func.count(CommunicationMessage.id)).filter(
+            CommunicationMessage.sent_at >= start_date
+        ).scalar() or 0
+
         return {
             "period": period,
             "total_calls": total_calls,
             "total_talk_time_hours": round(total_talk_time / 3600, 2),
+            "total_talk_time_minutes": int(total_talk_time / 60),  # For new UI
             "avg_call_duration_minutes": round(total_talk_time / total_calls / 60, 2) if total_calls > 0 else 0,
             "appointments_booked": total_booked,
             "conversion_rate": round(conversion_rate, 2),
             "avg_satisfaction_score": round(avg_satisfaction, 2),
             "calls_escalated": total_escalated,
-            "escalation_rate": round(total_escalated / total_calls * 100, 2) if total_calls > 0 else 0
+            "escalation_rate": round(total_escalated / total_calls * 100, 2) if total_calls > 0 else 0,
+            "customers_engaged": customers_engaged,  # New metric
+            "total_messages_sent": total_messages,  # New metric
         }
 
     @staticmethod

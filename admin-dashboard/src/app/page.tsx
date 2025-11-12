@@ -1,5 +1,6 @@
-import { ArrowUpRight, Clock3, PhoneCall, Smile } from "lucide-react";
+import { ArrowUpRight, Clock3, MessageSquare, Smile, Users } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
+import { SplitStatCard } from "@/components/split-stat-card";
 import {
   CallLogTable,
   type CallRecord,
@@ -9,24 +10,30 @@ type MetricsResponse = {
   period: string;
   total_calls: number;
   total_talk_time_hours: number;
+  total_talk_time_minutes: number;
   avg_call_duration_minutes: number;
   appointments_booked: number;
   conversion_rate: number;
   avg_satisfaction_score: number;
   calls_escalated: number;
   escalation_rate: number;
+  customers_engaged: number;
+  total_messages_sent: number;
 };
 
 const defaultMetrics: MetricsResponse = {
   period: "today",
   total_calls: 0,
   total_talk_time_hours: 0,
+  total_talk_time_minutes: 0,
   avg_call_duration_minutes: 0,
   appointments_booked: 0,
   conversion_rate: 0,
   avg_satisfaction_score: 0,
   calls_escalated: 0,
   escalation_rate: 0,
+  customers_engaged: 0,
+  total_messages_sent: 0,
 };
 
 function getAppOrigin(): string {
@@ -146,50 +153,59 @@ export default async function Home() {
     fetchCallHistory(),
   ]);
 
-  const kpiCards = [
-    {
-      title: "Total Calls",
-      value: metrics.total_calls.toString(),
-      description: `Conversion rate ${numberFormatter.format(metrics.conversion_rate)}%`,
-      icon: <PhoneCall className="h-5 w-5" />,
-      trend: (
-        <span className="flex items-center gap-1 text-emerald-600">
-          <ArrowUpRight className="h-4 w-4" />
-          Tracking daily call momentum
-        </span>
-      ),
-    },
-    {
-      title: "Appointments Booked",
-      value: metrics.appointments_booked.toString(),
-      description: "Bookings directly handled by Ava",
-      icon: <ArrowUpRight className="h-5 w-5" />,
-      trend: (
-        <span className="text-xs uppercase tracking-[0.2em] text-emerald-600">
-          {numberFormatter.format(metrics.conversion_rate)}% conversion
-        </span>
-      ),
-    },
-    {
-      title: "Avg Call Duration",
-      value: `${numberFormatter.format(metrics.avg_call_duration_minutes)} min`,
-      description: `${numberFormatter.format(metrics.total_talk_time_hours)} total hours`,
-      icon: <Clock3 className="h-5 w-5" />,
-    },
-    {
-      title: "Satisfaction Score",
-      value: `${numberFormatter.format(metrics.avg_satisfaction_score)}/10`,
-      description: `${metrics.calls_escalated} escalations (${numberFormatter.format(metrics.escalation_rate)}%)`,
-      icon: <Smile className="h-5 w-5" />,
-    },
-  ];
-
   return (
     <div className="space-y-10">
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        {kpiCards.map((card) => (
-          <StatCard key={card.title} {...card} />
-        ))}
+        {/* Card 1: Appointments Booked */}
+        <StatCard
+          title="Appointments Booked"
+          value={metrics.appointments_booked.toString()}
+          description="Bookings directly handled by Ava"
+          icon={<ArrowUpRight className="h-5 w-5" />}
+          trend={
+            <span className="text-xs uppercase tracking-[0.2em] text-emerald-600">
+              {numberFormatter.format(metrics.conversion_rate)}% conversion
+            </span>
+          }
+        />
+
+        {/* Card 2: Customers Engaged */}
+        <StatCard
+          title="Customers Engaged"
+          value={metrics.customers_engaged.toString()}
+          description="Unique customers Ava has assisted"
+          icon={<Users className="h-5 w-5" />}
+          trend={
+            <span className="flex items-center gap-1 text-sky-600">
+              <ArrowUpRight className="h-4 w-4" />
+              Building relationships
+            </span>
+          }
+        />
+
+        {/* Card 3: Time Spent + Messages Sent (Split) */}
+        <SplitStatCard
+          title="Communication Activity"
+          leftMetric={{
+            label: "Time Spent",
+            value: `${numberFormatter.format(metrics.total_talk_time_minutes)} min`,
+            icon: <Clock3 className="h-4 w-4" />,
+          }}
+          rightMetric={{
+            label: "Messages",
+            value: metrics.total_messages_sent.toString(),
+            icon: <MessageSquare className="h-4 w-4" />,
+          }}
+          description="Voice minutes and text/email messages sent"
+        />
+
+        {/* Card 4: Satisfaction Score */}
+        <StatCard
+          title="Satisfaction Score"
+          value={`${numberFormatter.format(metrics.avg_satisfaction_score)}/10`}
+          description={`${metrics.calls_escalated} escalations (${numberFormatter.format(metrics.escalation_rate)}%)`}
+          icon={<Smile className="h-5 w-5" />}
+        />
       </section>
 
       <section className="space-y-4">
