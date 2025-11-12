@@ -25,7 +25,7 @@ type TranscriptEntry = {
 };
 
 type CallEvent = {
-  id: number;
+  id: string;
   event_type: string;
   timestamp: string;
   data: any;
@@ -136,8 +136,8 @@ async function fetchCallDetails(id: string): Promise<CallDetails | null> {
       },
       customer: conversation.customer || null,
       transcript,
-      events: events.map((event: any) => ({
-        id: 0, // Events now use UUID, but UI expects number
+      events: events.map((event: any, index: number) => ({
+        id: typeof event.id === "string" ? event.id : index.toString(),
         event_type: event.event_type,
         timestamp: event.timestamp,
         data: event.details,
@@ -305,189 +305,185 @@ export default async function CallDetailPage({
         <p className="text-sm text-zinc-500">Session ID: {call.session_id}</p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
-        <div className="space-y-6">
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <Card className="border-zinc-200">
+          <CardHeader>
+            <CardTitle className="text-lg">Interaction overview</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start gap-3">
+              <Calendar className="mt-0.5 h-5 w-5 text-zinc-400" />
+              <div>
+                <p className="text-sm font-medium text-zinc-700">Started</p>
+                <p className="text-sm text-zinc-600">{formatTimestamp(call.started_at)}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Clock className="mt-0.5 h-5 w-5 text-zinc-400" />
+              <div>
+                <p className="text-sm font-medium text-zinc-700">Duration</p>
+                <p className="text-sm text-zinc-600">{formatDuration(call.duration_seconds)}</p>
+              </div>
+            </div>
+            {call.phone_number && (
+              <div className="flex items-start gap-3">
+                <Phone className="mt-0.5 h-5 w-5 text-zinc-400" />
+                <div>
+                  <p className="text-sm font-medium text-zinc-700">Phone</p>
+                  <p className="text-sm text-zinc-600">{call.phone_number}</p>
+                </div>
+              </div>
+            )}
+            {call.satisfaction_score !== null && (
+              <div className="flex items-start gap-3">
+                <TrendingUp className="mt-0.5 h-5 w-5 text-zinc-400" />
+                <div>
+                  <p className="text-sm font-medium text-zinc-700">Satisfaction</p>
+                  <p className="text-sm text-zinc-600">{call.satisfaction_score}/10</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="border-zinc-200">
+          <CardHeader>
+            <CardTitle className="text-lg">Status</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {call.sentiment && (
+              <div>
+                <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Sentiment</p>
+                <Badge variant="outline" className={getSentimentColor(call.sentiment)}>
+                  {call.sentiment}
+                </Badge>
+              </div>
+            )}
+            {call.outcome && (
+              <div>
+                <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Outcome</p>
+                <Badge variant="outline" className={getOutcomeColor(call.outcome)}>
+                  {call.outcome}
+                </Badge>
+              </div>
+            )}
+            {call.escalated && (
+              <div>
+                <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Escalation</p>
+                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                  Escalated
+                </Badge>
+                {call.escalation_reason && (
+                  <p className="mt-1 text-xs text-zinc-600">{call.escalation_reason}</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {customer && (
           <Card className="border-zinc-200">
             <CardHeader>
-              <CardTitle className="text-lg">Interaction overview</CardTitle>
+              <CardTitle className="text-lg">Customer</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
               <div className="flex items-start gap-3">
-                <Calendar className="mt-0.5 h-5 w-5 text-zinc-400" />
+                <User className="mt-0.5 h-5 w-5 text-zinc-400" />
                 <div>
-                  <p className="text-sm font-medium text-zinc-700">Started</p>
-                  <p className="text-sm text-zinc-600">{formatTimestamp(call.started_at)}</p>
+                  <p className="text-sm font-medium text-zinc-900">{customer.name}</p>
+                  <p className="text-sm text-zinc-600">{customer.phone}</p>
+                  {customer.email && <p className="text-sm text-zinc-600">{customer.email}</p>}
                 </div>
               </div>
-              <div className="flex items-start gap-3">
-                <Clock className="mt-0.5 h-5 w-5 text-zinc-400" />
-                <div>
-                  <p className="text-sm font-medium text-zinc-700">Duration</p>
-                  <p className="text-sm text-zinc-600">{formatDuration(call.duration_seconds)}</p>
-                </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      <section className="space-y-6">
+        {primaryChannel === "voice" ? (
+          <Card className="border-zinc-200">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <PhoneIncoming className="h-5 w-5 text-zinc-400" />
+                <CardTitle className="text-lg">{channelTitles[primaryChannel]}</CardTitle>
               </div>
-              {call.phone_number && (
-                <div className="flex items-start gap-3">
-                  <Phone className="mt-0.5 h-5 w-5 text-zinc-400" />
-                  <div>
-                    <p className="text-sm font-medium text-zinc-700">Phone</p>
-                    <p className="text-sm text-zinc-600">{call.phone_number}</p>
-                  </div>
-                </div>
-              )}
-              {call.satisfaction_score !== null && (
-                <div className="flex items-start gap-3">
-                  <TrendingUp className="mt-0.5 h-5 w-5 text-zinc-400" />
-                  <div>
-                    <p className="text-sm font-medium text-zinc-700">Satisfaction</p>
-                    <p className="text-sm text-zinc-600">{call.satisfaction_score}/10</p>
-                  </div>
+            </CardHeader>
+            <CardContent>
+              {transcript.length === 0 ? (
+                <p className="text-center text-sm text-zinc-500">No transcript available</p>
+              ) : (
+                <div className="space-y-4">
+                  {transcript.map((entry, index) => (
+                    <div
+                      key={index}
+                      className={`rounded-lg border p-4 ${
+                        entry.speaker === "customer"
+                          ? "border-sky-200 bg-sky-50/60"
+                          : "border-zinc-200 bg-white"
+                      }`}
+                    >
+                      <div className="mb-2 flex items-center justify-between">
+                        <Badge
+                          variant="outline"
+                          className={`text-xs font-semibold uppercase tracking-wide ${
+                            entry.speaker === "customer"
+                              ? "bg-sky-100 text-sky-700 border-sky-200"
+                              : "bg-zinc-100 text-zinc-700 border-zinc-200"
+                          }`}
+                        >
+                          {entry.speaker}
+                        </Badge>
+                        <span className="text-xs text-zinc-500">{formatTime(entry.timestamp)}</span>
+                      </div>
+                      <p className="text-sm leading-relaxed text-zinc-900">{entry.text}</p>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
           </Card>
+        ) : (
           <Card className="border-zinc-200">
             <CardHeader>
-              <CardTitle className="text-lg">Status</CardTitle>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const Icon = channelIcons[primaryChannel];
+                  return <Icon className="h-5 w-5 text-zinc-400" />;
+                })()}
+                <CardTitle className="text-lg">{channelTitles[primaryChannel]}</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {channelMessages.length === 0 ? (
+                <p className="text-center text-sm text-zinc-500">No messages recorded for this session yet.</p>
+              ) : (
+                <MessageTimeline messages={channelMessages} />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {events.length > 0 && (
+          <Card className="border-zinc-200">
+            <CardHeader>
+              <CardTitle className="text-lg">Operational timeline</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {call.sentiment && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Sentiment</p>
-                  <Badge variant="outline" className={getSentimentColor(call.sentiment)}>
-                    {call.sentiment}
-                  </Badge>
+              {events.map((event) => (
+                <div key={event.id} className="flex items-start gap-3 text-sm">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-100">
+                    <div className="h-2 w-2 rounded-full bg-zinc-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-zinc-700">{event.event_type}</p>
+                    <p className="text-xs text-zinc-500">{formatTime(event.timestamp)}</p>
+                  </div>
                 </div>
-              )}
-              {call.outcome && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Outcome</p>
-                  <Badge variant="outline" className={getOutcomeColor(call.outcome)}>
-                    {call.outcome}
-                  </Badge>
-                </div>
-              )}
-              {call.escalated && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-zinc-500 uppercase tracking-wide">Escalation</p>
-                  <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                    Escalated
-                  </Badge>
-                  {call.escalation_reason && (
-                    <p className="mt-1 text-xs text-zinc-600">{call.escalation_reason}</p>
-                  )}
-                </div>
-              )}
+              ))}
             </CardContent>
           </Card>
-
-          {/* Customer Card */}
-          {customer && (
-            <Card className="border-zinc-200">
-              <CardHeader>
-                <CardTitle className="text-lg">Customer</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-start gap-3">
-                  <User className="mt-0.5 h-5 w-5 text-zinc-400" />
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900">{customer.name}</p>
-                    <p className="text-sm text-zinc-600">{customer.phone}</p>
-                    {customer.email && (
-                      <p className="text-sm text-zinc-600">{customer.email}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-        <section className="space-y-6">
-          {primaryChannel === "voice" ? (
-            <Card className="border-zinc-200">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <PhoneIncoming className="h-5 w-5 text-zinc-400" />
-                  <CardTitle className="text-lg">{channelTitles[primaryChannel]}</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {transcript.length === 0 ? (
-                  <p className="text-center text-sm text-zinc-500">No transcript available</p>
-                ) : (
-                  <div className="space-y-4">
-                    {transcript.map((entry, index) => (
-                      <div
-                        key={index}
-                        className={`rounded-lg border p-4 ${
-                          entry.speaker === "customer"
-                            ? "border-sky-200 bg-sky-50/60"
-                            : "border-zinc-200 bg-white"
-                        }`}
-                      >
-                        <div className="mb-2 flex items-center justify-between">
-                          <Badge
-                            variant="outline"
-                            className={`text-xs font-semibold uppercase tracking-wide ${
-                              entry.speaker === "customer"
-                                ? "bg-sky-100 text-sky-700 border-sky-200"
-                                : "bg-zinc-100 text-zinc-700 border-zinc-200"
-                            }`}
-                          >
-                            {entry.speaker}
-                          </Badge>
-                          <span className="text-xs text-zinc-500">{formatTime(entry.timestamp)}</span>
-                        </div>
-                        <p className="text-sm leading-relaxed text-zinc-900">{entry.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="border-zinc-200">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  {(() => {
-                    const Icon = channelIcons[primaryChannel];
-                    return <Icon className="h-5 w-5 text-zinc-400" />;
-                  })()}
-                  <CardTitle className="text-lg">{channelTitles[primaryChannel]}</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {channelMessages.length === 0 ? (
-                  <p className="text-center text-sm text-zinc-500">No messages recorded for this session yet.</p>
-                ) : (
-                  <MessageTimeline messages={channelMessages} />
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {events.length > 0 && (
-            <Card className="border-zinc-200">
-              <CardHeader>
-                <CardTitle className="text-lg">Operational timeline</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {events.map((event) => (
-                  <div key={event.id} className="flex items-start gap-3 text-sm">
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-100">
-                      <div className="h-2 w-2 rounded-full bg-zinc-400" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-zinc-700">{event.event_type}</p>
-                      <p className="text-xs text-zinc-500">{formatTime(event.timestamp)}</p>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-        </section>
-      </div>
+        )}
+      </section>
     </div>
   );
 }

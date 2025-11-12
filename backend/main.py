@@ -367,9 +367,19 @@ async def voice_websocket(
             import traceback
             traceback.print_exc()
             raise
+    except Exception as orchestration_error:
+        print(f"❌ Unhandled error in voice_websocket: {orchestration_error}")
+        import traceback
+        traceback.print_exc()
+        await finalize_session("exception")
+        raise
     finally:
+        await finalize_session("closed")
         print(f"🧹 Cleaning up session {session_id}")
-        await realtime_client.close()
+        try:
+            await realtime_client.disconnect()
+        except Exception as cleanup_err:
+            print(f"⚠️  Error during realtime client cleanup: {cleanup_err}")
 
 # ==================== Customer Management Endpoints ====================
 

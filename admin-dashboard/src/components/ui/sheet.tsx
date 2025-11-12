@@ -27,19 +27,22 @@ const SheetOverlay = React.forwardRef<
 ));
 SheetOverlay.displayName = SheetPrimitive.Overlay.displayName;
 
-const sheetVariants: Record<
-  NonNullable<React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>["side"]>,
-  string
-> = {
+type SheetSide = "top" | "bottom" | "left" | "right";
+
+const sheetVariants: Record<SheetSide, string> = {
   top: "inset-x-0 top-0 border-b",
   bottom: "inset-x-0 bottom-0 border-t",
   left: "inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm",
   right: "inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm",
 };
 
+type SheetContentProps = Omit<React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>, "side"> & {
+  side?: SheetSide;
+};
+
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>
+  SheetContentProps
 >(({ side = "right", className, children, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
