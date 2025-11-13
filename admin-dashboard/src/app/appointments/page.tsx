@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,37 +47,76 @@ export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshStatus, setRefreshStatus] = useState<"idle" | "success" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const currentMonth = currentDate.getMonth();
   const currentYear = currentDate.getFullYear();
 
-  useEffect(() => {
-    fetchAppointments();
-  }, [currentMonth, currentYear]);
-
-  const fetchAppointments = async () => {
-    setLoading(true);
-    try {
-      // Fetch appointments for the current month
-      const startDate = new Date(currentYear, currentMonth, 1);
-      const endDate = new Date(currentYear, currentMonth + 1, 0);
-
-      const response = await fetch(
-        `/api/admin/appointments?start_date=${startDate.toISOString()}&end_date=${endDate.toISOString()}`
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch appointments");
+  const fetchAppointments = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false;
+      if (!silent) {
+        setLoading(true);
       }
 
-      const data: AppointmentsResponse = await response.json();
-      setAppointments(data.appointments);
-    } catch (error) {
-      console.error("Error fetching appointments:", error);
-    } finally {
-      setLoading(false);
+      try {
+        // Fetch appointments for the current month
+        const startDate = new Date(currentYear, currentMonth, 1);
+        const endDate = new Date(currentYear, currentMonth + 1, 0);
+
+        const response = await fetch(
+          `/api/admin/appointments?start_date=${startDate.toISOString()}&end_date=${endDate.toISOString()}`
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch appointments");
+        }
+
+        const data: AppointmentsResponse = await response.json();
+        setAppointments(data.appointments);
+        setLastUpdated(new Date());
+        setRefreshStatus("success");
+        setErrorMessage(null);
+      } catch (error) {
+        console.error("Error fetching appointments:", error);
+        setRefreshStatus("error");
+        setErrorMessage(error instanceof Error ? error.message : "Unknown error");
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+      }
+    },
+    [currentMonth, currentYear]
+  );
+
+  useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchAppointments({ silent: true }).catch(() => {
+        /* errors handled in fetch */
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [fetchAppointments]);
+
+  useEffect(() => {
+    if (refreshStatus === "idle") {
+      return;
     }
-  };
+
+    const timeout = setTimeout(() => {
+      setRefreshStatus("idle");
+    }, refreshStatus === "error" ? 6000 : 3000);
+
+    return () => clearTimeout(timeout);
+  }, [refreshStatus]);
 
   const getDaysInMonth = () => {
     const firstDay = new Date(currentYear, currentMonth, 1);
@@ -142,9 +181,38 @@ export default function AppointmentsPage() {
           <h1 className="text-3xl font-bold text-zinc-900">Appointments Calendar</h1>
           <p className="mt-1 text-sm text-zinc-500">View and manage scheduled appointments</p>
         </div>
-        <Button variant="outline" asChild>
-          <Link href="/">Back to Dashboard</Link>
-        </Button>
+        <div className="flex flex-col gap-2 text-right sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex items-center justify-end gap-2 text-xs text-zinc-500 sm:text-sm">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                refreshStatus === "error"
+                  ? "bg-rose-500"
+                  : refreshStatus === "success"
+                    ? "bg-emerald-500"
+                    : "bg-zinc-300"
+              }`}
+            />
+            {refreshStatus === "error" && errorMessage ? (
+              <span className="max-w-[220px] truncate text-rose-600" title={errorMessage}>
+                Sync failed: {errorMessage}
+              </span>
+            ) : lastUpdated ? (
+              <span>
+                Updated at {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            ) : (
+              <span>Waiting for first sync…</span>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => fetchAppointments()} disabled={loading}>
+              Refresh now
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/">Back to Dashboard</Link>
+            </Button>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

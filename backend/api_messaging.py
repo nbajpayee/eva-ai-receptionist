@@ -164,10 +164,13 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
 
     ai_response = MessagingService.generate_ai_response(db, conversation.id, channel)
 
+    calendar_action, cleaned_response = MessagingService._extract_calendar_action(ai_response)
+    response_content = cleaned_response if calendar_action else ai_response
+
     outbound_message = MessagingService.add_assistant_message(
         db=db,
         conversation=conversation,
-        content=ai_response,
+        content=response_content,
         metadata={
             "source": "messaging_console",
             "generated_by": "assistant",
@@ -185,7 +188,7 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
         email_meta_outgoing = MessagingService.email_metadata_for_assistant(
             customer_email=customer.email,
             subject=request.subject or conversation.subject,
-            body_text=ai_response,
+            body_text=response_content,
         )
         AnalyticsService.add_email_details(
             db=db,
@@ -196,6 +199,26 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
             body_text=email_meta_outgoing["body_text"],
             body_html=None,
         )
+
+    calendar_result: Dict[str, Any] | None = None
+    if calendar_action:
+        try:
+            calendar_result = MessagingService.execute_calendar_action(
+                db=db,
+                conversation=conversation,
+                customer=customer,
+                action=calendar_action,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface failure in metadata but keep conversation going
+            calendar_result = {"success": False, "error": str(exc), "type": calendar_action.get("type")}
+
+        outbound_message.custom_metadata = outbound_message.custom_metadata or {}
+        outbound_message.custom_metadata["calendar_action"] = {
+            "request": calendar_action,
+            "result": calendar_result,
+        }
+        db.commit()
+        db.refresh(outbound_message)
 
     if channel in {"sms", "email"}:
         try:
@@ -209,6 +232,7 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
         "conversation": _serialize_conversation(conversation),
         "customer_message": _serialize_message(inbound_message, channel),
         "assistant_message": _serialize_message(outbound_message, channel),
+        "calendar_action": calendar_result,
     }
 
 

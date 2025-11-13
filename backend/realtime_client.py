@@ -26,7 +26,8 @@ class RealtimeClient:
             'transcript': [],
             'function_calls': [],
             'customer_data': {},
-            'sentiment_markers': []
+            'sentiment_markers': [],
+            'last_appointment': None,
         }
         self.identity_instructions = ""
         self._current_customer_text = ""
@@ -223,6 +224,68 @@ class RealtimeClient:
                     },
                     "required": ["phone"]
                 }
+            },
+            {
+                "type": "function",
+                "name": "get_appointment_details",
+                "description": "Look up an existing appointment by calendar event ID",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "appointment_id": {
+                            "type": "string",
+                            "description": "Google Calendar event ID for the appointment"
+                        }
+                    },
+                    "required": ["appointment_id"]
+                }
+            },
+            {
+                "type": "function",
+                "name": "reschedule_appointment",
+                "description": "Move an appointment to a new start time",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "appointment_id": {
+                            "type": "string",
+                            "description": "Google Calendar event ID for the appointment"
+                        },
+                        "new_start_time": {
+                            "type": "string",
+                            "description": "New start time in ISO 8601 format"
+                        },
+                        "service_type": {
+                            "type": "string",
+                            "enum": list(SERVICES.keys()),
+                            "description": "Service type for duration lookup (optional if previously stored)"
+                        },
+                        "provider": {
+                            "type": "string",
+                            "description": "Preferred provider name (optional)"
+                        }
+                    },
+                    "required": ["appointment_id", "new_start_time"]
+                }
+            },
+            {
+                "type": "function",
+                "name": "cancel_appointment",
+                "description": "Cancel an existing appointment",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "appointment_id": {
+                            "type": "string",
+                            "description": "Google Calendar event ID for the appointment"
+                        },
+                        "cancellation_reason": {
+                            "type": "string",
+                            "description": "Optional reason provided by customer"
+                        }
+                    },
+                    "required": ["appointment_id"]
+                }
             }
         ]
 
@@ -294,6 +357,16 @@ class RealtimeClient:
                         'email': customer_email
                     }
 
+                    self.session_data['last_appointment'] = {
+                        'event_id': event_id,
+                        'service_type': service_type,
+                        'provider': provider,
+                        'start_time': start_time.isoformat(),
+                        'customer_name': customer_name,
+                        'customer_phone': customer_phone,
+                        'customer_email': customer_email,
+                    }
+
                     return {
                         "success": True,
                         "event_id": event_id,
@@ -351,6 +424,111 @@ class RealtimeClient:
                     "success": True,
                     "found": False,
                     "message": "No existing customer found with this phone number"
+                }
+
+            elif function_name == "get_appointment_details":
+                appointment_id = arguments.get("appointment_id")
+                details = self.calendar_service.get_appointment_details(appointment_id)
+
+                if not details:
+                    return {
+                        "success": False,
+                        "error": "Appointment not found"
+                    }
+
+                self.session_data['last_appointment'] = {
+                    'event_id': appointment_id,
+                    'service_type': self.session_data.get('last_appointment', {}).get('service_type'),
+                    'provider': details.get('provider'),
+                    'start_time': details['start'].isoformat() if 'start' in details else None,
+                    'customer_name': self.session_data.get('customer_data', {}).get('name'),
+                    'customer_phone': self.session_data.get('customer_data', {}).get('phone'),
+                    'customer_email': self.session_data.get('customer_data', {}).get('email'),
+                }
+
+                return {
+                    "success": True,
+                    "appointment": {
+                        "id": details['id'],
+                        "summary": details.get('summary'),
+                        "description": details.get('description'),
+                        "start": details.get('start').isoformat() if details.get('start') else None,
+                        "end": details.get('end').isoformat() if details.get('end') else None,
+                        "status": details.get('status'),
+                    }
+                }
+
+            elif function_name == "reschedule_appointment":
+                appointment_id = arguments.get("appointment_id")
+                new_start_time_str = arguments.get("new_start_time")
+                service_type = arguments.get("service_type")
+                provider = arguments.get("provider")
+
+                if not service_type and self.session_data.get('last_appointment'):
+                    service_type = self.session_data['last_appointment'].get('service_type')
+
+                if not service_type:
+                    return {
+                        "success": False,
+                        "error": "Missing service type to determine appointment duration"
+                    }
+
+                start_time = datetime.fromisoformat(new_start_time_str.replace('Z', '+00:00'))
+                duration = SERVICES[service_type]["duration_minutes"]
+                end_time = start_time + timedelta(minutes=duration)
+
+                success = self.calendar_service.reschedule_appointment(
+                    event_id=appointment_id,
+                    new_start_time=start_time,
+                    new_end_time=end_time
+                )
+
+                if success:
+                    self.session_data['last_appointment'] = {
+                        'event_id': appointment_id,
+                        'service_type': service_type,
+                        'provider': provider or self.session_data.get('last_appointment', {}).get('provider'),
+                        'start_time': start_time.isoformat(),
+                        'customer_name': self.session_data.get('customer_data', {}).get('name'),
+                        'customer_phone': self.session_data.get('customer_data', {}).get('phone'),
+                        'customer_email': self.session_data.get('customer_data', {}).get('email'),
+                    }
+
+                    return {
+                        "success": True,
+                        "appointment_id": appointment_id,
+                        "new_time": start_time.strftime("%B %d, %Y at %I:%M %p"),
+                        "service": SERVICES[service_type]["name"],
+                    }
+
+                return {
+                    "success": False,
+                    "error": "Failed to reschedule appointment. Please try again or contact staff."
+                }
+
+            elif function_name == "cancel_appointment":
+                appointment_id = arguments.get("appointment_id")
+                cancellation_reason = arguments.get("cancellation_reason")
+
+                success = self.calendar_service.cancel_appointment(appointment_id)
+
+                if success:
+                    self.session_data['last_appointment'] = None
+
+                    response = {
+                        "success": True,
+                        "appointment_id": appointment_id,
+                        "status": "cancelled"
+                    }
+
+                    if cancellation_reason:
+                        response["cancellation_reason"] = cancellation_reason
+
+                    return response
+
+                return {
+                    "success": False,
+                    "error": "Failed to cancel appointment. Please try again or contact staff."
                 }
 
             else:

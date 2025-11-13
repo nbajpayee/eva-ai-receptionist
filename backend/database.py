@@ -11,7 +11,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker, Session
-from config import get_settings
+try:  # Prefer package-style import when available
+    from backend.config import get_settings
+except ModuleNotFoundError:  # Fallback for direct execution contexts
+    from config import get_settings
 
 settings = get_settings()
 
