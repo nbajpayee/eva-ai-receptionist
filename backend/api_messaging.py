@@ -1,6 +1,8 @@
 """FastAPI router for messaging console operations."""
 from __future__ import annotations
 
+import json
+import logging
 from typing import Optional, List, Literal, Dict, Any
 from uuid import UUID
 
@@ -162,19 +164,91 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
             body_html=None,
         )
 
-    ai_response = MessagingService.generate_ai_response(db, conversation.id, channel)
+    initial_content, assistant_message = MessagingService.generate_ai_response(
+        db, conversation.id, channel
+    )
 
-    calendar_action, cleaned_response = MessagingService._extract_calendar_action(ai_response)
-    response_content = cleaned_response if calendar_action else ai_response
+    logger = logging.getLogger(__name__)
+
+    tool_calls = list(getattr(assistant_message, "tool_calls", []) or []) if assistant_message else []
+    tool_results: List[Dict[str, Any]] = []
+    booking_action_success = False
+
+    if tool_calls:
+        calendar_service = MessagingService._get_calendar_service()
+        for call in tool_calls:
+            try:
+                result = MessagingService._execute_tool_call(
+                    db=db,
+                    conversation=conversation,
+                    customer=customer,
+                    calendar_service=calendar_service,
+                    call=call,
+                )
+            except Exception as exc:  # noqa: BLE001 - continue capturing failure details
+                result = {
+                    "tool_call_id": getattr(call, "id", None),
+                    "name": getattr(getattr(call, "function", None), "name", None),
+                    "arguments": {},
+                    "output": {"success": False, "error": str(exc)},
+                }
+                logger.warning("Tool call execution raised %s", exc)
+            tool_results.append(result)
+            if result.get("name") in {"book_appointment", "reschedule_appointment", "cancel_appointment"}:
+                if (result.get("output") or {}).get("success"):
+                    booking_action_success = True
+
+        followup_content, followup_message = MessagingService.generate_followup_response(
+            db=db,
+            conversation_id=conversation.id,
+            channel=channel,
+            assistant_message=assistant_message,
+            tool_results=tool_results,
+        )
+        response_content = followup_content
+        assistant_message = followup_message or assistant_message
+    else:
+        response_content = initial_content
+
+    if channel == "sms" and not booking_action_success:
+        logger.warning(
+            "SMS conversation %s completed without a successful booking tool execution.",
+            conversation.id,
+        )
+
+    outbound_metadata = {
+        "source": "messaging_console",
+        "generated_by": "assistant",
+    }
+
+    if tool_calls:
+        tool_requests: List[Dict[str, Any]] = []
+        for call in tool_calls:
+            function_obj = getattr(call, "function", None)
+            arguments_raw = getattr(function_obj, "arguments", "") if function_obj else ""
+            try:
+                parsed_args = json.loads(arguments_raw) if arguments_raw else {}
+            except json.JSONDecodeError:
+                parsed_args = arguments_raw
+            tool_requests.append(
+                {
+                    "id": getattr(call, "id", None),
+                    "type": getattr(call, "type", None),
+                    "name": getattr(function_obj, "name", None),
+                    "arguments": parsed_args,
+                }
+            )
+
+        outbound_metadata["tool_invocations"] = {
+            "requests": tool_requests,
+            "results": tool_results,
+        }
 
     outbound_message = MessagingService.add_assistant_message(
         db=db,
         conversation=conversation,
         content=response_content,
-        metadata={
-            "source": "messaging_console",
-            "generated_by": "assistant",
-        },
+        metadata=outbound_metadata,
     )
 
     if channel == "sms":
@@ -200,25 +274,8 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
             body_html=None,
         )
 
+    # Tool metadata already persisted via outbound_metadata; calendar_result retained for compatibility
     calendar_result: Dict[str, Any] | None = None
-    if calendar_action:
-        try:
-            calendar_result = MessagingService.execute_calendar_action(
-                db=db,
-                conversation=conversation,
-                customer=customer,
-                action=calendar_action,
-            )
-        except Exception as exc:  # noqa: BLE001 - surface failure in metadata but keep conversation going
-            calendar_result = {"success": False, "error": str(exc), "type": calendar_action.get("type")}
-
-        outbound_message.custom_metadata = outbound_message.custom_metadata or {}
-        outbound_message.custom_metadata["calendar_action"] = {
-            "request": calendar_action,
-            "result": calendar_result,
-        }
-        db.commit()
-        db.refresh(outbound_message)
 
     if channel in {"sms", "email"}:
         try:

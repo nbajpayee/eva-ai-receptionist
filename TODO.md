@@ -381,6 +381,26 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 
 ## 📅 UP NEXT
 
+### Messaging Function-Calling Alignment (In Progress)
+- [ ] **Phase 0 – Preconditions & Instrumentation**
+  - [x] Confirm Google Calendar credentials and token are valid in all environments; update onboarding docs if gaps are found.
+  - [x] Add explicit logging/alerting whenever `_get_calendar_service()` or `RealtimeClient` falls back to the mock implementation.
+- [ ] **Phase 1 – Shared Booking Tooling**
+  - [x] Extract shared OpenAI tool schemas into `backend/booking_tools.py` so voice and messaging reference the same definitions.
+- [x] **Phase 3 – Prompt & Safety-Net Cleanup**
+  - [x] Revise SMS/email prompt copy to reference tools instead of `<calendar_action>` tags.
+  - [x] Remove `_extract_calendar_action` and disclaimer append once tool-calling responses are stable (and backfill tests accordingly).
+- [x] **Phase 3a – Calendar & Booking Hardening (New)**
+  - [x] Guard `_get_calendar_service()` so mock fallback only occurs in explicit dev/test environments and raise in production.
+  - [x] Verify Google Calendar credentials (`credentials.json`, `token.json`, `.env`) and add logging/monitoring when mock fallback is hit.
+  - [x] Document customer-record side effects during tool execution and improve tool-result serialization warnings.
+  - [x] Remove or deprecate the legacy `execute_calendar_action` path once external consumers are confirmed absent.
+  - [x] Validate requested start times against live availability before `handle_book_appointment` proceeds (suggest alternates).
+- [x] **Phase 4 – Testing & Monitoring**
+  - [x] Add integration tests covering happy-path booking, missing slot, reschedule, and cancel flows via messaging.
+  - [x] Add metrics for tool usage and calendar errors; ensure dashboard surfaces failures (mock usage, API exceptions).
+  - [x] Confirm sustained tool-call success in SMS/email over staged rollout; re-enable safety-net only if regression detected.
+
 ### Phase 1B - Core Features Completion
 - [ ] **SMS Confirmations (Twilio)**
   - [ ] Integrate Twilio SDK

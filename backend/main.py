@@ -3,6 +3,7 @@ Main FastAPI application for Med Spa Voice AI.
 """
 import uuid
 import asyncio
+import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query, Request
 from starlette.websockets import WebSocketState
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,8 +17,10 @@ from database import get_db, init_db, Customer, Appointment, CallSession, Conver
 from realtime_client import RealtimeClient
 from analytics import AnalyticsService
 from api_messaging import messaging_router
+from calendar_service import check_calendar_credentials
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -46,6 +49,14 @@ active_connections: Dict[str, WebSocket] = {}
 async def startup_event():
     """Initialize database on startup."""
     init_db()
+    credential_status = check_calendar_credentials()
+    app.state.calendar_credentials = credential_status
+    if credential_status.get("ok"):
+        logger.info("Google Calendar credentials validated at startup")
+    else:
+        logger.warning(
+            "Google Calendar credentials require attention: %s", credential_status
+        )
     print(f"{settings.APP_NAME} started successfully!")
 
 

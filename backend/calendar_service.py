@@ -1,18 +1,37 @@
 """
 Google Calendar integration service for managing appointments.
 """
+import logging
 import os
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+
+try:  # pragma: no cover - import guard for optional dependency environments
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError  # type: ignore
+    GOOGLE_API_IMPORT_ERROR: Optional[Exception] = None
+except Exception as exc:  # noqa: BLE001 - capture environment issues early
+    Request = None  # type: ignore[assignment]
+    Credentials = None  # type: ignore[assignment]
+    InstalledAppFlow = None  # type: ignore[assignment]
+    build = None  # type: ignore[assignment]
+
+    class HttpError(Exception):  # type: ignore[no-redef]
+        """Fallback HttpError placeholder when Google API client is unavailable."""
+
+        pass
+
+    GOOGLE_API_IMPORT_ERROR = exc
+
 import pytz
+
 from config import get_settings, SERVICES
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 # If modifying these scopes, delete the token.json file.
 SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -23,6 +42,14 @@ class GoogleCalendarService:
 
     def __init__(self):
         """Initialize the Google Calendar service."""
+        if GOOGLE_API_IMPORT_ERROR is not None:
+            message = (
+                "Google Calendar dependencies could not be imported. "
+                "See nested exception for details."
+            )
+            logger.error(message, exc_info=GOOGLE_API_IMPORT_ERROR)
+            raise RuntimeError(message) from GOOGLE_API_IMPORT_ERROR
+
         self.creds = None
         self.service = None
         self._authenticate()
@@ -38,12 +65,16 @@ class GoogleCalendarService:
         # If there are no (valid) credentials available, let the user log in
         if not self.creds or not self.creds.valid:
             if self.creds and self.creds.expired and self.creds.refresh_token:
+                logger.info("Refreshing expired Google Calendar credentials")
                 self.creds.refresh(Request())
             else:
                 if not os.path.exists(settings.GOOGLE_CREDENTIALS_FILE):
-                    raise FileNotFoundError(
-                        f"Google credentials file not found: {settings.GOOGLE_CREDENTIALS_FILE}"
+                    message = (
+                        "Google credentials file not found: "
+                        f"{settings.GOOGLE_CREDENTIALS_FILE}"
                     )
+                    logger.error(message)
+                    raise FileNotFoundError(message)
                 flow = InstalledAppFlow.from_client_secrets_file(
                     settings.GOOGLE_CREDENTIALS_FILE, SCOPES
                 )
@@ -52,8 +83,10 @@ class GoogleCalendarService:
             # Save the credentials for the next run
             with open(settings.GOOGLE_TOKEN_FILE, 'w') as token:
                 token.write(self.creds.to_json())
+                logger.info("Saved new Google Calendar OAuth token to %s", settings.GOOGLE_TOKEN_FILE)
 
         self.service = build('calendar', 'v3', credentials=self.creds)
+        logger.info("Initialized Google Calendar service client")
 
     def get_available_slots(
         self,
@@ -141,7 +174,7 @@ class GoogleCalendarService:
             return available_slots
 
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            logger.exception("Google Calendar API error while fetching slots: %s", error)
             return []
 
     def book_appointment(
@@ -218,19 +251,11 @@ Notes: {notes or 'None'}
             return event.get('id')
 
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            logger.exception("Google Calendar API booking error: %s", error)
             return None
 
     def cancel_appointment(self, event_id: str) -> bool:
-        """
-        Cancel an appointment in Google Calendar.
-
-        Args:
-            event_id: Google Calendar event ID
-
-        Returns:
-            True if successful, False otherwise
-        """
+        """Cancel an appointment in Google Calendar."""
         try:
             self.service.events().delete(
                 calendarId=settings.GOOGLE_CALENDAR_ID,
@@ -239,7 +264,7 @@ Notes: {notes or 'None'}
             return True
 
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            logger.exception("Google Calendar API cancellation error: %s", error)
             return False
 
     def reschedule_appointment(
@@ -248,25 +273,13 @@ Notes: {notes or 'None'}
         new_start_time: datetime,
         new_end_time: datetime
     ) -> bool:
-        """
-        Reschedule an existing appointment.
-
-        Args:
-            event_id: Google Calendar event ID
-            new_start_time: New start time
-            new_end_time: New end time
-
-        Returns:
-            True if successful, False otherwise
-        """
+        """Reschedule an existing appointment."""
         try:
-            # Get existing event
             event = self.service.events().get(
                 calendarId=settings.GOOGLE_CALENDAR_ID,
                 eventId=event_id
             ).execute()
 
-            # Update times
             event['start'] = {
                 'dateTime': new_start_time.isoformat(),
                 'timeZone': 'America/Los_Angeles',
@@ -276,7 +289,6 @@ Notes: {notes or 'None'}
                 'timeZone': 'America/Los_Angeles',
             }
 
-            # Update event
             self.service.events().update(
                 calendarId=settings.GOOGLE_CALENDAR_ID,
                 eventId=event_id,
@@ -286,19 +298,11 @@ Notes: {notes or 'None'}
             return True
 
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            logger.exception("Google Calendar API reschedule error: %s", error)
             return False
 
     def get_appointment_details(self, event_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get details of an appointment.
-
-        Args:
-            event_id: Google Calendar event ID
-
-        Returns:
-            Appointment details dictionary or None
-        """
+        """Get details of an appointment."""
         try:
             event = self.service.events().get(
                 calendarId=settings.GOOGLE_CALENDAR_ID,
@@ -318,7 +322,7 @@ Notes: {notes or 'None'}
             }
 
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            logger.exception("Google Calendar API details fetch error: %s", error)
             return None
 
 
@@ -332,3 +336,74 @@ def get_calendar_service() -> GoogleCalendarService:
     if _calendar_service is None:
         _calendar_service = GoogleCalendarService()
     return _calendar_service
+
+
+def check_calendar_credentials() -> Dict[str, Any]:
+    """Validate Google Calendar credential and token availability."""
+    status: Dict[str, Any] = {
+        "dependencies_ok": GOOGLE_API_IMPORT_ERROR is None,
+        "credentials_file": {
+            "path": settings.GOOGLE_CREDENTIALS_FILE,
+            "exists": os.path.exists(settings.GOOGLE_CREDENTIALS_FILE),
+        },
+        "token_file": {
+            "path": settings.GOOGLE_TOKEN_FILE,
+            "exists": os.path.exists(settings.GOOGLE_TOKEN_FILE),
+            "valid": False,
+            "needs_refresh": False,
+        },
+        "ok": False,
+    }
+
+    if GOOGLE_API_IMPORT_ERROR is not None:
+        status["error"] = str(GOOGLE_API_IMPORT_ERROR)
+        logger.error(
+            "Google Calendar dependencies missing or incompatible: %s",
+            GOOGLE_API_IMPORT_ERROR,
+        )
+        return status
+
+    credential_path = status["credentials_file"]["path"]
+    token_path = status["token_file"]["path"]
+
+    if not status["credentials_file"]["exists"]:
+        logger.error("Google Calendar credentials file missing at %s", credential_path)
+    else:
+        logger.debug("Google Calendar credentials file located at %s", credential_path)
+
+    if status["token_file"]["exists"]:
+        try:
+            creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+            if creds.valid:
+                status["token_file"]["valid"] = True
+                logger.debug("Google Calendar OAuth token is valid")
+            elif creds.expired and creds.refresh_token:
+                status["token_file"]["needs_refresh"] = True
+                logger.warning("Google Calendar OAuth token expired; refresh required")
+            else:
+                logger.error(
+                    "Google Calendar OAuth token invalid and cannot be refreshed"
+                )
+        except Exception as exc:  # noqa: BLE001
+            status["token_file"]["error"] = str(exc)
+            logger.exception(
+                "Failed to load Google Calendar token from %s: %s", token_path, exc
+            )
+    else:
+        logger.warning("Google Calendar token file missing at %s", token_path)
+
+    status["ok"] = (
+        status["dependencies_ok"]
+        and status["credentials_file"]["exists"]
+        and (
+            status["token_file"]["valid"]
+            or status["token_file"]["needs_refresh"]
+        )
+    )
+
+    if status["ok"]:
+        logger.info("Google Calendar credentials validated successfully")
+    else:
+        logger.warning("Google Calendar credentials require attention: %s", status)
+
+    return status

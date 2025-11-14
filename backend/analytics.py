@@ -543,14 +543,13 @@ Consider these factors:
             content=content,
             sent_at=sent_at or _utcnow(),
             processed=False,
-            custom_metadata=metadata or {}
+            custom_metadata=metadata or {},
         )
         db.add(message)
 
-        # Update conversation last_activity_at
         conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
         if conversation:
-            conversation.last_activity_at = _utcnow()
+            conversation.last_activity_at = message.sent_at or _utcnow()
 
         db.commit()
         db.refresh(message)
@@ -798,9 +797,8 @@ Consider:
                 'outcome': outcome,
                 'summary': summary
             }
-
-        except Exception as e:
-            print(f"Error analyzing conversation satisfaction: {e}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"Error analyzing conversation satisfaction: {exc}")
             # Fallback to neutral values
             conversation.satisfaction_score = 5
             conversation.sentiment = 'neutral'
@@ -815,16 +813,102 @@ Consider:
             }
 
     @staticmethod
-    def add_communication_event(
+    def log_tool_metric(
         db: Session,
-        conversation_id: Any,  # UUID
+        *,
+        conversation_id: Any,
+        tool_name: str,
+        success: bool,
+        message_id: Optional[Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> CommunicationEvent:
+        """Persist an analytics event capturing tool usage."""
+        details: Dict[str, Any] = {"tool": tool_name, "success": success}
+        if metadata:
+            details.update(metadata)
+
+        event = CommunicationEvent(
+            conversation_id=conversation_id,
+            message_id=message_id,
+            event_type="tool_invocation",
+            timestamp=_utcnow(),
+            details=details,
+        )
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+        return event
+
+    @staticmethod
+    def log_calendar_error(
+        db: Session,
+        *,
+        conversation_id: Any,
+        tool_name: str,
+        error: str,
+        message_id: Optional[Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> CommunicationEvent:
+        """Record calendar-specific failures for monitoring and alerting."""
+        details: Dict[str, Any] = {"tool": tool_name, "error": error}
+        if metadata:
+            details.update(metadata)
+
+        event = CommunicationEvent(
+            conversation_id=conversation_id,
+            message_id=message_id,
+            event_type="calendar_error",
+            timestamp=_utcnow(),
+            details=details,
+        )
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+        return event
+
+    @staticmethod
+    def tool_success_summary(db: Session, *, days: int = 7) -> Dict[str, Any]:
+        """Aggregate tool invocation success metrics over a rolling window."""
+        cutoff = _utcnow() - timedelta(days=days)
+
+        events = (
+            db.query(CommunicationEvent)
+            .filter(CommunicationEvent.event_type == "tool_invocation")
+            .filter(CommunicationEvent.timestamp >= cutoff)
+            .all()
+        )
+
+        summary: Dict[str, Dict[str, Any]] = {}
+        for event in events:
+            details = event.details or {}
+            tool = details.get("tool") or "unknown"
+            entry = summary.setdefault(tool, {"total": 0, "success": 0})
+            entry["total"] += 1
+            if details.get("success"):
+                entry["success"] += 1
+
+        for entry in summary.values():
+            total = entry["total"]
+            entry["success_rate"] = entry["success"] / total if total else 0.0
+
+        return {
+            "window_days": days,
+            "generated_at": _utcnow().isoformat(),
+            "tools": summary,
+        }
+
+    @staticmethod
+    def log_event(
+        db: Session,
+        *,
+        conversation_id: Any,
         event_type: str,
         details: Dict[str, Any],
-        message_id: Optional[Any] = None,  # UUID
-        timestamp: Optional[datetime] = None
-    ):
+        message_id: Optional[Any] = None,
+        timestamp: Optional[datetime] = None,
+    ) -> CommunicationEvent:
         """
-        Add an event to a conversation.
+        Add an analytics event to a conversation.
 
         Args:
             db: Database session
@@ -834,15 +918,15 @@ Consider:
             message_id: Optional message UUID
             timestamp: Event timestamp (defaults to now)
         """
-        import uuid
 
         event = CommunicationEvent(
-            id=uuid.uuid4(),
             conversation_id=conversation_id,
             message_id=message_id,
             event_type=event_type,
             timestamp=timestamp or _utcnow(),
-            details=details
+            details=details,
         )
         db.add(event)
         db.commit()
+        db.refresh(event)
+        return event

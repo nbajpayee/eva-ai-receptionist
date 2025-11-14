@@ -2,21 +2,36 @@
 from __future__ import annotations
 
 import hashlib
-import re
+import json
+import logging
+import os
 
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from analytics import AnalyticsService, openai_client
-from calendar_service import get_calendar_service, SERVICES
+from booking_handlers import (
+    handle_book_appointment,
+    handle_cancel_appointment,
+    handle_check_availability,
+    handle_get_appointment_details,
+    handle_get_provider_info,
+    handle_get_service_info,
+    handle_reschedule_appointment,
+    handle_search_customer,
+)
+from booking_tools import get_booking_tools
+from calendar_service import get_calendar_service
 from config import get_settings
 from database import Conversation, Customer, CommunicationMessage, Appointment
 from mock_calendar_service import get_mock_calendar_service
 from prompts import get_system_prompt
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -25,6 +40,7 @@ class MessagingService:
     """Domain helpers for messaging console interactions."""
 
     _calendar_service_instance = None
+    _calendar_credentials_logged = False
 
     @staticmethod
     def _coerce_phone(channel: str, customer_phone: Optional[str], customer_email: Optional[str]) -> Optional[str]:
@@ -94,11 +110,51 @@ class MessagingService:
         if MessagingService._calendar_service_instance is not None:
             return MessagingService._calendar_service_instance
 
+        if not MessagingService._calendar_credentials_logged:
+            credentials_exists = os.path.exists(settings.GOOGLE_CREDENTIALS_FILE)
+            token_exists = os.path.exists(settings.GOOGLE_TOKEN_FILE)
+            logger.info(
+                "Google Calendar credential status (env=%s): credentials=%s, token=%s",
+                settings.ENV,
+                credentials_exists,
+                token_exists,
+            )
+            if not credentials_exists or not token_exists:
+                logger.warning(
+                    "Google Calendar credential files missing (credentials=%s, token=%s)",
+                    credentials_exists,
+                    token_exists,
+                )
+            MessagingService._calendar_credentials_logged = True
+
+        credentials_exists = os.path.exists(settings.GOOGLE_CREDENTIALS_FILE)
+        token_exists = os.path.exists(settings.GOOGLE_TOKEN_FILE)
+
         try:
-            MessagingService._calendar_service_instance = get_calendar_service()
-        except Exception as exc:  # noqa: BLE001 - fall back to mock for local dev
-            print(f"Warning: Falling back to mock calendar service due to error: {exc}")
-            MessagingService._calendar_service_instance = get_mock_calendar_service()
+            service = get_calendar_service()
+            logger.info("Using Google Calendar service (env=%s)", settings.ENV)
+        except Exception as exc:  # noqa: BLE001 - fall back to mock for non-prod
+            env = (settings.ENV or "").lower()
+            if env in {"production", "prod", "staging"}:
+                logger.critical(
+                    "Google Calendar initialization failed in %s (credentials=%s, token=%s): %s",
+                    settings.ENV,
+                    credentials_exists,
+                    token_exists,
+                    exc,
+                )
+                raise RuntimeError("Calendar service unavailable") from exc
+
+            logger.warning(
+                "Using MOCK calendar service for env=%s (credentials=%s, token=%s): %s",
+                settings.ENV,
+                credentials_exists,
+                token_exists,
+                exc,
+            )
+            service = get_mock_calendar_service()
+
+        MessagingService._calendar_service_instance = service
         return MessagingService._calendar_service_instance
 
     @staticmethod
@@ -109,90 +165,268 @@ class MessagingService:
         return datetime.fromisoformat(normalized)
 
     @staticmethod
-    def _extract_calendar_action(content: str) -> tuple[Optional[Dict[str, str]], str]:
-        pattern = re.compile(r"<calendar_action\b([^>]*)/?>", re.IGNORECASE)
-        match = pattern.search(content)
-        if not match:
-            return None, content
+    def _build_history(conversation: Conversation, channel: str) -> List[Dict[str, Any]]:
+        prompt = get_system_prompt(channel)
 
-        attr_pattern = re.compile(r"([\w-]+)=\"([^\"]*)\"")
-        attributes = {key: value for key, value in attr_pattern.findall(match.group(1))}
-        action_type = attributes.get("type", "").strip().lower()
-        if not action_type:
-            cleaned = (content[:match.start()] + content[match.end():]).strip()
-            return None, cleaned if cleaned else content
+        history: List[Dict[str, Any]] = [
+            {"role": "system", "content": prompt},
+        ]
 
-        attributes["type"] = action_type
-        cleaned_content = (content[:match.start()] + content[match.end():]).strip()
-        return attributes, cleaned_content or content[:match.start()].strip()
+        def _message_sort_key(message: CommunicationMessage) -> datetime:
+            return (
+                message.sent_at
+                or conversation.last_activity_at
+                or conversation.initiated_at
+                or datetime.utcnow()
+            )
+
+        ordered_messages = sorted(conversation.messages, key=_message_sort_key)
+        for message in ordered_messages:
+            role = "user" if message.direction == "inbound" else "assistant"
+            content = message.content or ""
+            history.append({"role": role, "content": content})
+
+        return history
+
+    @staticmethod
+    def _fallback_response(channel: str) -> str:
+        if channel == "sms":
+            return "Ava (AI assistant) is currently unavailable. We'll follow up shortly."
+        return "Hello! Ava here — I'm offline at the moment, but we'll reply with more details soon."
+
+    @staticmethod
+    def _tool_context_messages(assistant_message: Any, tool_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if assistant_message is None:
+            return []
+
+        context: List[Dict[str, Any]] = []
+        content_text = (getattr(assistant_message, "content", "") or "").strip()
+        assistant_entry: Dict[str, Any] = {"role": "assistant", "content": content_text}
+
+        tool_calls_payload: List[Dict[str, Any]] = []
+        for call in getattr(assistant_message, "tool_calls", []) or []:
+            function_payload = {}
+            function_obj = getattr(call, "function", None)
+            if function_obj is not None:
+                function_payload = {
+                    "name": getattr(function_obj, "name", None),
+                    "arguments": getattr(function_obj, "arguments", ""),
+                }
+            tool_calls_payload.append(
+                {
+                    "id": getattr(call, "id", None),
+                    "type": getattr(call, "type", None),
+                    "function": function_payload,
+                }
+            )
+
+        if tool_calls_payload:
+            assistant_entry["tool_calls"] = tool_calls_payload
+
+        context.append(assistant_entry)
+
+        for result in tool_results:
+            output_payload = result.get("output")
+            try:
+                content_json = json.dumps(output_payload, default=str)
+            except (TypeError, ValueError) as exc:
+                logger.warning("Failed to serialize tool output for %s: %s", result.get("name"), exc)
+                content_json = json.dumps(
+                    {
+                        "repr": repr(output_payload),
+                        "type": type(output_payload).__name__,
+                        "error": "serialization_failed",
+                    }
+                )
+
+            context.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": result.get("tool_call_id"),
+                    "name": result.get("name"),
+                    "content": content_json,
+                }
+            )
+
+        return context
+
+    @staticmethod
+    def _update_customer_from_arguments(db: Session, customer: Customer, arguments: Dict[str, Any]) -> None:
+        updated = False
+
+        name_arg = arguments.get("customer_name")
+        if name_arg and name_arg != customer.name:
+            customer.name = name_arg
+            updated = True
+
+        phone_arg = arguments.get("customer_phone")
+        if phone_arg and phone_arg != customer.phone:
+            customer.phone = phone_arg
+            updated = True
+
+        email_arg = arguments.get("customer_email")
+        if email_arg and email_arg != customer.email:
+            customer.email = email_arg
+            updated = True
+
+        if updated:
+            db.commit()
+            db.refresh(customer)
+
+    # ------------------------------------------------------------------
+    # Conversation metadata helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _conversation_metadata(conversation: Conversation) -> Dict[str, Any]:
-        existing = conversation.custom_metadata or {}
-        # Ensure we operate on a copy so SQLAlchemy sees assignment
-        return dict(existing)
+        metadata = conversation.custom_metadata or {}
+        if not isinstance(metadata, dict):
+            try:
+                metadata = json.loads(metadata)
+            except Exception:  # noqa: BLE001 - fallback to empty dict
+                metadata = {}
+        return metadata
+
+    # ------------------------------------------------------------------
+    # Tool execution helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
-    def execute_calendar_action(
-        db: Session,
+    def _execute_tool_call(
         *,
+        db: Session,
         conversation: Conversation,
         customer: Customer,
-        action: Dict[str, str],
+        calendar_service,
+        call: Any,
     ) -> Dict[str, Any]:
-        """Execute calendar automation based on assistant output."""
-        calendar_service = MessagingService._get_calendar_service()
+        name = getattr(call.function, "name", None) if getattr(call, "function", None) else None
+        arguments_raw = getattr(call.function, "arguments", "{}") if getattr(call, "function", None) else "{}"
+        try:
+            arguments = json.loads(arguments_raw) if arguments_raw else {}
+        except json.JSONDecodeError as exc:
+            logger.warning("Failed to parse tool arguments for %s: %s", name, exc)
+            arguments = {}
+
         result: Dict[str, Any] = {
-            "type": action.get("type"),
-            "request": action,
-            "success": False,
+            "tool_call_id": getattr(call, "id", None),
+            "name": name,
+            "arguments": arguments,
+            "output": None,
         }
 
+        if not name:
+            result["output"] = {"success": False, "error": "Missing tool name"}
+            return result
+
+        try:
+            if name == "check_availability":
+                output = handle_check_availability(
+                    calendar_service,
+                    date=arguments.get("date", datetime.utcnow().strftime("%Y-%m-%d")),
+                    service_type=arguments.get("service_type", ""),
+                )
+            elif name == "book_appointment":
+                # AI may collect updated customer details mid-conversation; persist them before booking.
+                MessagingService._update_customer_from_arguments(db, customer, arguments)
+                output = handle_book_appointment(
+                    calendar_service,
+                    customer_name=arguments.get("customer_name", customer.name),
+                    customer_phone=arguments.get("customer_phone", customer.phone or ""),
+                    customer_email=arguments.get("customer_email", customer.email),
+                    start_time=arguments.get("start_time", arguments.get("start")),
+                    service_type=arguments.get("service_type"),
+                    provider=arguments.get("provider"),
+                    notes=arguments.get("notes"),
+                )
+            elif name == "reschedule_appointment":
+                output = handle_reschedule_appointment(
+                    calendar_service,
+                    appointment_id=arguments.get("appointment_id"),
+                    new_start_time=arguments.get("new_start_time") or arguments.get("start_time") or arguments.get("start"),
+                    service_type=arguments.get("service_type"),
+                    provider=arguments.get("provider"),
+                )
+            elif name == "cancel_appointment":
+                output = handle_cancel_appointment(
+                    calendar_service,
+                    appointment_id=arguments.get("appointment_id"),
+                    cancellation_reason=arguments.get("cancellation_reason"),
+                )
+            elif name == "get_appointment_details":
+                output = handle_get_appointment_details(
+                    calendar_service,
+                    appointment_id=arguments.get("appointment_id"),
+                )
+            elif name == "get_service_info":
+                output = handle_get_service_info(
+                    service_type=arguments.get("service_type"),
+                )
+            elif name == "get_provider_info":
+                output = handle_get_provider_info(
+                    provider_name=arguments.get("provider_name"),
+                )
+            elif name == "search_customer":
+                output = handle_search_customer(
+                    phone=arguments.get("phone", ""),
+                )
+            else:
+                output = {"success": False, "error": f"Unsupported tool: {name}"}
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Tool %s execution failed: %s", name, exc)
+            output = {"success": False, "error": str(exc)}
+
+        result["output"] = output
+
+        if result.get("name") in {"book_appointment", "reschedule_appointment", "cancel_appointment"}:
+            if (result.get("output") or {}).get("success"):
+                booking_action_success = True
+            MessagingService._apply_booking_tool_side_effects(
+                db=db,
+                conversation=conversation,
+                customer=customer,
+                tool_name=name,
+                arguments=arguments,
+                output=output,
+            )
+        return result
+
+    @staticmethod
+    def _apply_booking_tool_side_effects(
+        *,
+        db: Session,
+        conversation: Conversation,
+        customer: Customer,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        output: Dict[str, Any],
+    ) -> None:
+        if not output or not output.get("success"):
+            return
+
         metadata = MessagingService._conversation_metadata(conversation)
-        last_appt_meta = metadata.get("last_appointment", {})
+        commit_required = False
 
-        def _resolve_service_type() -> Optional[str]:
-            return action.get("service") or action.get("service_type") or last_appt_meta.get("service_type")
-
-        def _resolve_provider() -> Optional[str]:
-            return action.get("provider") or last_appt_meta.get("provider")
-
-        action_type = action.get("type")
-
-        if action_type == "book":
-            start_str = action.get("start") or action.get("start_time")
-            service_type = _resolve_service_type()
-            if not start_str or not service_type:
-                result["error"] = "Missing start or service for booking"
-                return result
+        if tool_name == "book_appointment":
+            event_id = output.get("event_id")
+            start_iso = output.get("start_time") or arguments.get("start_time") or arguments.get("start")
+            service_type = output.get("service_type") or arguments.get("service_type")
+            if not event_id or not start_iso or not service_type:
+                return
 
             try:
-                start_time = MessagingService._parse_iso_datetime(start_str)
+                start_time = MessagingService._parse_iso_datetime(start_iso)
             except ValueError as exc:  # noqa: BLE001
-                result["error"] = f"Invalid start time format: {exc}"
-                return result
+                logger.warning("Failed to parse start_time for booking side effects: %s", exc)
+                return
 
             service_config = SERVICES.get(service_type)
-            duration = service_config.get("duration_minutes", 60) if service_config else 60
-            end_time = start_time + timedelta(minutes=duration)
-            provider = _resolve_provider()
-            notes = action.get("notes")
+            duration = output.get("duration_minutes")
+            if duration is None:
+                duration = service_config.get("duration_minutes", 60) if service_config else 60
 
-            customer_email = customer.email or f"{customer.phone or 'unknown'}@placeholder.com"
-            event_id = calendar_service.book_appointment(
-                start_time=start_time,
-                end_time=end_time,
-                customer_name=customer.name,
-                customer_email=customer_email,
-                customer_phone=customer.phone or "",
-                service_type=service_type,
-                provider=provider,
-                notes=notes,
-            )
-
-            if not event_id:
-                result["error"] = "Calendar booking failed"
-                return result
+            provider = output.get("provider") or arguments.get("provider")
+            notes = arguments.get("notes")
 
             appointment = (
                 db.query(Appointment)
@@ -230,49 +464,27 @@ class MessagingService:
                 "start_time": start_time.isoformat(),
                 "status": "scheduled",
             }
+            commit_required = True
 
-            conversation.custom_metadata = metadata
-            db.commit()
-
-            result.update(
-                {
-                    "success": True,
-                    "event_id": event_id,
-                    "start": start_time.isoformat(),
-                    "service": service_type,
-                    "provider": provider,
-                }
-            )
-            return result
-
-        if action_type == "reschedule":
-            appointment_id = action.get("appointment_id") or last_appt_meta.get("calendar_event_id")
-            new_start_str = action.get("new_start") or action.get("start") or action.get("start_time")
-            service_type = _resolve_service_type()
-            if not appointment_id or not new_start_str or not service_type:
-                result["error"] = "Missing appointment_id, time, or service for reschedule"
-                return result
+        elif tool_name == "reschedule_appointment":
+            appointment_id = output.get("appointment_id") or arguments.get("appointment_id")
+            new_start_iso = output.get("start_time") or arguments.get("new_start_time") or arguments.get("start_time") or arguments.get("start")
+            service_type = output.get("service_type") or arguments.get("service_type")
+            if not appointment_id or not new_start_iso or not service_type:
+                return
 
             try:
-                new_start = MessagingService._parse_iso_datetime(new_start_str)
+                new_start = MessagingService._parse_iso_datetime(new_start_iso)
             except ValueError as exc:  # noqa: BLE001
-                result["error"] = f"Invalid new_start time format: {exc}"
-                return result
+                logger.warning("Failed to parse new_start for reschedule side effects: %s", exc)
+                return
 
             service_config = SERVICES.get(service_type)
-            duration = service_config.get("duration_minutes", 60) if service_config else 60
-            new_end = new_start + timedelta(minutes=duration)
-            provider = _resolve_provider()
+            duration = output.get("duration_minutes")
+            if duration is None:
+                duration = service_config.get("duration_minutes", 60) if service_config else 60
 
-            success = calendar_service.reschedule_appointment(
-                event_id=appointment_id,
-                new_start_time=new_start,
-                new_end_time=new_end,
-            )
-
-            if not success:
-                result["error"] = "Calendar reschedule failed"
-                return result
+            provider = output.get("provider") or arguments.get("provider")
 
             appointment = (
                 db.query(Appointment)
@@ -308,38 +520,20 @@ class MessagingService:
                 "start_time": new_start.isoformat(),
                 "status": "scheduled",
             }
-            conversation.custom_metadata = metadata
-            db.commit()
+            commit_required = True
 
-            result.update(
-                {
-                    "success": True,
-                    "appointment_id": appointment_id,
-                    "new_start": new_start.isoformat(),
-                    "service": service_type,
-                    "provider": provider,
-                }
-            )
-            return result
-
-        if action_type == "cancel":
-            appointment_id = action.get("appointment_id") or last_appt_meta.get("calendar_event_id")
+        elif tool_name == "cancel_appointment":
+            appointment_id = output.get("appointment_id") or arguments.get("appointment_id")
             if not appointment_id:
-                result["error"] = "Missing appointment_id for cancellation"
-                return result
-
-            cancellation_reason = action.get("reason") or action.get("cancellation_reason")
-            success = calendar_service.cancel_appointment(appointment_id)
-
-            if not success:
-                result["error"] = "Calendar cancellation failed"
-                return result
+                return
 
             appointment = (
                 db.query(Appointment)
                 .filter(Appointment.calendar_event_id == appointment_id)
                 .first()
             )
+
+            cancellation_reason = output.get("reason") or output.get("cancellation_reason") or arguments.get("cancellation_reason")
 
             if appointment:
                 appointment.status = "cancelled"
@@ -351,20 +545,13 @@ class MessagingService:
                 "status": "cancelled",
                 "cancellation_reason": cancellation_reason,
             }
+            commit_required = True
+
+        if commit_required:
             conversation.custom_metadata = metadata
             db.commit()
+            db.refresh(conversation)
 
-            result.update(
-                {
-                    "success": True,
-                    "appointment_id": appointment_id,
-                    "cancellation_reason": cancellation_reason,
-                }
-            )
-            return result
-
-        result["error"] = f"Unsupported calendar action type: {action_type}"
-        return result
 
     @staticmethod
     def find_active_conversation(db: Session, *, customer_id: int, channel: str) -> Optional[Conversation]:
@@ -437,7 +624,11 @@ class MessagingService:
         return message
 
     @staticmethod
-    def generate_ai_response(db: Session, conversation_id: UUID, channel: str) -> str:
+    def generate_ai_response(
+        db: Session,
+        conversation_id: UUID,
+        channel: str,
+    ) -> tuple[str, Any | None]:
         conversation = (
             db.query(Conversation)
             .options(joinedload(Conversation.messages))
@@ -447,25 +638,7 @@ class MessagingService:
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        prompt = get_system_prompt(channel)
-
-        history = [
-            {"role": "system", "content": prompt},
-        ]
-        def _message_sort_key(message: CommunicationMessage) -> datetime:
-            return (
-                message.sent_at
-                or conversation.last_activity_at
-                or conversation.initiated_at
-                or datetime.utcnow()
-            )
-
-        ordered_messages = sorted(conversation.messages, key=_message_sort_key)
-        for message in ordered_messages:
-            role = "user" if message.direction == "inbound" else "assistant"
-            content = message.content or ""
-            history.append({"role": role, "content": content})
-
+        history = MessagingService._build_history(conversation, channel)
         max_tokens = 500 if channel == "sms" else 1000
 
         try:
@@ -475,18 +648,54 @@ class MessagingService:
             response = openai_client.chat.completions.create(
                 model=settings.OPENAI_MESSAGING_MODEL,
                 messages=history,
-                temperature=0.7,
+                temperature=0.3,
                 max_tokens=max_tokens,
+                tools=get_booking_tools(),
+                tool_choice="auto",
             )
-            return response.choices[0].message.content.strip()
+            message = response.choices[0].message
+            text_content = (message.content or "").strip()
+            return text_content, message
         except Exception as exc:  # noqa: BLE001 - fall back gracefully for local dev
-            print(f"Warning: Failed to generate AI response via OpenAI: {exc}")
-            return (
-                "Ava (AI assistant) is currently unavailable. We'll follow up shortly." if channel == "sms"
-                else (
-                    "Hello! Ava here — I'm offline at the moment, but we'll reply with more details soon."
-                )
+            logger.warning("Failed to generate AI response via OpenAI: %s", exc)
+            return MessagingService._fallback_response(channel), None
+
+    @staticmethod
+    def generate_followup_response(
+        db: Session,
+        conversation_id: UUID,
+        channel: str,
+        assistant_message: Any,
+        tool_results: List[Dict[str, Any]],
+    ) -> tuple[str, Any | None]:
+        conversation = (
+            db.query(Conversation)
+            .options(joinedload(Conversation.messages))
+            .filter(Conversation.id == conversation_id)
+            .first()
+        )
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        history = MessagingService._build_history(conversation, channel)
+        history.extend(MessagingService._tool_context_messages(assistant_message, tool_results))
+        max_tokens = 500 if channel == "sms" else 1000
+
+        try:
+            response = openai_client.chat.completions.create(
+                model=settings.OPENAI_MESSAGING_MODEL,
+                messages=history,
+                temperature=0.3,
+                max_tokens=max_tokens,
+                tools=get_booking_tools(),
+                tool_choice="none",
             )
+            message = response.choices[0].message
+            text_content = (message.content or "").strip()
+            return text_content, message
+        except Exception as exc:  # noqa: BLE001 - fall back gracefully for local dev
+            logger.warning("Failed to generate follow-up AI response: %s", exc)
+            return MessagingService._fallback_response(channel), None
 
     @staticmethod
     def sms_metadata_for_customer(customer_phone: str) -> Dict[str, Any]:

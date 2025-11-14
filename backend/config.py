@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "Med Spa Voice AI"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
+    ENV: str = "development"
 
     # Database
     DATABASE_URL: str = "postgresql://ava_user:ava_password@localhost:5432/ava_db"
