@@ -141,6 +141,9 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
         metadata={"source": "messaging_console"},
     )
 
+    # Refresh conversation to get any metadata updates from slot selection capture
+    db.refresh(conversation)
+
     if channel == "sms":
         sms_meta = MessagingService.sms_metadata_for_customer(customer.phone)
         AnalyticsService.add_sms_details(
@@ -176,8 +179,22 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
 
     if tool_calls:
         calendar_service = MessagingService._get_calendar_service()
+        booking_confirmation_message: Optional[str] = None
         for call in tool_calls:
             try:
+                function_obj = getattr(call, "function", None)
+                tool_name = getattr(function_obj, "name", None) if function_obj else None
+                raw_arguments = getattr(function_obj, "arguments", "") if function_obj else ""
+                try:
+                    parsed_arguments = json.loads(raw_arguments) if raw_arguments else {}
+                except json.JSONDecodeError:
+                    parsed_arguments = {}
+
+                normalized_arguments, adjustments = MessagingService._normalize_tool_arguments(tool_name, parsed_arguments)
+
+                if function_obj is not None and normalized_arguments != parsed_arguments:
+                    function_obj.arguments = json.dumps(normalized_arguments)
+
                 result = MessagingService._execute_tool_call(
                     db=db,
                     conversation=conversation,
@@ -197,16 +214,34 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
             if result.get("name") in {"book_appointment", "reschedule_appointment", "cancel_appointment"}:
                 if (result.get("output") or {}).get("success"):
                     booking_action_success = True
+                    if result.get("name") == "book_appointment" and not booking_confirmation_message:
+                        booking_confirmation_message = MessagingService.build_booking_confirmation_message(
+                            channel=channel,
+                            tool_output=result.get("output") or {},
+                        )
 
-        followup_content, followup_message = MessagingService.generate_followup_response(
-            db=db,
-            conversation_id=conversation.id,
-            channel=channel,
-            assistant_message=assistant_message,
-            tool_results=tool_results,
-        )
-        response_content = followup_content
-        assistant_message = followup_message or assistant_message
+            tool_results[-1]["normalized_arguments"] = normalized_arguments
+            selection_adjustments = result.get("argument_adjustments") or {}
+            merged_adjustments: Dict[str, Dict[str, Optional[str]]] = {}
+            if adjustments:
+                merged_adjustments.update(adjustments)
+            if selection_adjustments:
+                merged_adjustments.update(selection_adjustments)
+            tool_results[-1]["argument_adjustments"] = merged_adjustments
+
+        if booking_confirmation_message:
+            response_content = booking_confirmation_message
+            assistant_message = None
+        else:
+            followup_content, followup_message = MessagingService.generate_followup_response(
+                db=db,
+                conversation_id=conversation.id,
+                channel=channel,
+                assistant_message=assistant_message,
+                tool_results=tool_results,
+            )
+            response_content = followup_content
+            assistant_message = followup_message or assistant_message
     else:
         response_content = initial_content
 

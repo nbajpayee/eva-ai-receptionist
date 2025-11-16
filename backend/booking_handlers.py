@@ -1,11 +1,39 @@
 """Shared booking handler utilities for conversational agents."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from datetime import datetime, timedelta, time
+from typing import Any, Dict, Optional, Tuple
 
-from calendar_service import SERVICES
-from config import PROVIDERS
+import pytz
+
+from config import PROVIDERS, SERVICES
+
+EASTERN_TZ = pytz.timezone("America/New_York")
+
+
+def _to_eastern(dt: datetime) -> datetime:
+    """Convert datetimes to Eastern timezone, assuming naive values are local."""
+    if dt.tzinfo is None:
+        return EASTERN_TZ.localize(dt)
+    return dt.astimezone(EASTERN_TZ)
+
+
+def _ensure_future_datetime(start_dt: datetime, reference: Optional[datetime] = None) -> Tuple[datetime, bool]:
+    """Ensure the requested start datetime is not in the past.
+
+    Returns the adjusted datetime (always Eastern) and whether an adjustment occurred.
+    """
+    reference_dt = _to_eastern(reference) if reference else datetime.now(EASTERN_TZ)
+    candidate = _to_eastern(start_dt)
+    adjusted = False
+
+    # Cap iterations to avoid infinite loops on pathological inputs (≈3 years).
+    for _ in range(366 * 3):
+        if candidate >= reference_dt:
+            break
+        candidate += timedelta(days=1)
+        adjusted = True
+    return candidate, adjusted
 
 
 def _normalize_iso_datetime(value: str) -> datetime:
@@ -14,6 +42,31 @@ def _normalize_iso_datetime(value: str) -> datetime:
     if normalized.endswith("Z"):
         normalized = normalized[:-1] + "+00:00"
     return datetime.fromisoformat(normalized)
+
+
+def normalize_datetime_to_future(value: str, *, reference: Optional[datetime] = None) -> str:
+    """Return ISO string ensured to represent a future datetime in Eastern time."""
+    start_dt = _normalize_iso_datetime(value)
+    adjusted_dt, _ = _ensure_future_datetime(start_dt, reference)
+    return adjusted_dt.isoformat()
+
+
+def normalize_date_to_future(value: str, *, reference: Optional[datetime] = None) -> str:
+    """Return YYYY-MM-DD string ensured to represent a present/future date (Eastern)."""
+    try:
+        parsed_date = datetime.strptime(value.strip(), "%Y-%m-%d").date()
+    except ValueError as exc:  # noqa: BLE001
+        raise ValueError(f"Invalid date format: {exc}") from exc
+
+    reference_dt = _to_eastern(reference) if reference else datetime.now(EASTERN_TZ)
+    candidate_date = parsed_date
+
+    for _ in range(366 * 3):  # safety guard (~3 years)
+        if candidate_date >= reference_dt.date():
+            break
+        candidate_date += timedelta(days=1)
+
+    return candidate_date.strftime("%Y-%m-%d")
 
 
 def handle_check_availability(calendar_service, *, date: str, service_type: str, limit: int = 10) -> Dict[str, Any]:
@@ -28,10 +81,26 @@ def handle_check_availability(calendar_service, *, date: str, service_type: str,
     except Exception as exc:  # noqa: BLE001
         return {"success": False, "error": f"Failed to fetch availability: {exc}"}
 
+    # Filter out past slots (only show future times)
+    now = datetime.now(EASTERN_TZ)
+    future_slots = []
+    for slot in slots:
+        slot_start = slot.get("start")
+        if slot_start:
+            try:
+                slot_dt = _normalize_iso_datetime(slot_start)
+                slot_dt_eastern = _to_eastern(slot_dt)
+                # Only include slots that are in the future
+                if slot_dt_eastern > now:
+                    future_slots.append(slot)
+            except (ValueError, AttributeError):
+                # If we can't parse the slot time, skip it
+                continue
+
     service_config = SERVICES.get(service_type, {})
     return {
         "success": True,
-        "available_slots": slots[:limit],
+        "available_slots": future_slots[:limit],
         "date": date,
         "service": service_config.get("name", service_type),
     }
@@ -50,9 +119,11 @@ def handle_book_appointment(
 ) -> Dict[str, Any]:
     """Book an appointment and return booking metadata."""
     try:
-        start_dt = _normalize_iso_datetime(start_time)
+        start_dt_original = _normalize_iso_datetime(start_time)
     except ValueError as exc:  # noqa: BLE001
         return {"success": False, "error": f"Invalid start time: {exc}"}
+
+    start_dt, was_adjusted = _ensure_future_datetime(start_dt_original)
 
     service_config = SERVICES.get(service_type)
     if not service_config:
@@ -78,7 +149,22 @@ def handle_book_appointment(
 
     available_slots = availability.get("available_slots") or []
     requested_start_iso = start_dt.isoformat()
-    if not any(slot.get("start") == requested_start_iso for slot in available_slots):
+
+    def _slot_matches_request(slot_start: str, requested: datetime) -> bool:
+        if not slot_start:
+            return False
+        try:
+            slot_dt = _normalize_iso_datetime(slot_start)
+        except ValueError:
+            return False
+
+        # Compare in naive form to avoid timezone-string mismatches when AI-provided
+        # ISO strings omit offsets but calendar slots include them.
+        return slot_dt.replace(tzinfo=None) == requested.replace(tzinfo=None)
+
+    if not any(
+        _slot_matches_request(slot.get("start"), start_dt) for slot in available_slots
+    ):
         return {
             "success": False,
             "error": f"Requested start time {requested_start_iso} is not available",
@@ -107,6 +193,8 @@ def handle_book_appointment(
         "success": True,
         "event_id": event_id,
         "start_time": start_dt.isoformat(),
+        "original_start_time": start_dt_original.isoformat(),
+        "was_auto_adjusted": was_adjusted,
         "service": service_config.get("name", service_type),
         "service_type": service_type,
         "provider": provider,

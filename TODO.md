@@ -382,10 +382,10 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 ## 📅 UP NEXT
 
 ### Messaging Function-Calling Alignment (In Progress)
-- [ ] **Phase 0 – Preconditions & Instrumentation**
+- [x] **Phase 0 – Preconditions & Instrumentation**
   - [x] Confirm Google Calendar credentials and token are valid in all environments; update onboarding docs if gaps are found.
   - [x] Add explicit logging/alerting whenever `_get_calendar_service()` or `RealtimeClient` falls back to the mock implementation.
-- [ ] **Phase 1 – Shared Booking Tooling**
+- [x] **Phase 1 – Shared Booking Tooling**
   - [x] Extract shared OpenAI tool schemas into `backend/booking_tools.py` so voice and messaging reference the same definitions.
 - [x] **Phase 3 – Prompt & Safety-Net Cleanup**
   - [x] Revise SMS/email prompt copy to reference tools instead of `<calendar_action>` tags.
@@ -447,11 +447,12 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
     - [x] Added metadata cards (call info, status, customer)
     - [x] Implemented timeline component
     - [x] Refactored with shadcn Card, Badge, Button components
+    - [x] Implement slot selection guardrails in messaging service
+- [x] Require Google Calendar credentials in all environments (mock calendar removed)
   - [ ] Customer list and profiles
   - [x] Appointment calendar view (Nov 9, 2025)
     - [x] Created API proxy route for appointments
     - [x] Built custom month-view calendar using shadcn components
-    - [x] Implemented date selection and appointment filtering
     - [x] Added appointment detail sidebar
     - [x] Color-coded status badges
     - [x] Navigation integration

@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(curl:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(PYTHONPATH=/Users/neerajbajpayee/Coding/Eva/backend python3:*)",
+      "Bash(PYTHONPATH=/Users/neerajbajpayee/Coding/Eva/backend pytest:*)"
     ],
     "deny": [],
     "ask": []

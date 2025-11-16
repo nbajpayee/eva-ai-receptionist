@@ -5,13 +5,17 @@ import hashlib
 import json
 import logging
 import os
+import re
 
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm.attributes import flag_modified
+
+import pytz
 
 from analytics import AnalyticsService, openai_client
 from booking_handlers import (
@@ -23,17 +27,23 @@ from booking_handlers import (
     handle_get_service_info,
     handle_reschedule_appointment,
     handle_search_customer,
+    normalize_date_to_future,
+    normalize_datetime_to_future,
 )
 from booking_tools import get_booking_tools
 from calendar_service import get_calendar_service
-from config import get_settings
+from config import get_settings, SERVICES
 from database import Conversation, Customer, CommunicationMessage, Appointment
-from mock_calendar_service import get_mock_calendar_service
 from prompts import get_system_prompt
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+EASTERN_TZ = pytz.timezone("America/New_York")
+
+
+class SlotSelectionError(Exception):
+    """Raised when booking requests do not align with offered slots."""
 
 
 class MessagingService:
@@ -133,26 +143,15 @@ class MessagingService:
         try:
             service = get_calendar_service()
             logger.info("Using Google Calendar service (env=%s)", settings.ENV)
-        except Exception as exc:  # noqa: BLE001 - fall back to mock for non-prod
-            env = (settings.ENV or "").lower()
-            if env in {"production", "prod", "staging"}:
-                logger.critical(
-                    "Google Calendar initialization failed in %s (credentials=%s, token=%s): %s",
-                    settings.ENV,
-                    credentials_exists,
-                    token_exists,
-                    exc,
-                )
-                raise RuntimeError("Calendar service unavailable") from exc
-
-            logger.warning(
-                "Using MOCK calendar service for env=%s (credentials=%s, token=%s): %s",
+        except Exception as exc:  # noqa: BLE001
+            logger.critical(
+                "Google Calendar initialization failed (env=%s, credentials=%s, token=%s): %s",
                 settings.ENV,
                 credentials_exists,
                 token_exists,
                 exc,
             )
-            service = get_mock_calendar_service()
+            raise RuntimeError("Calendar service unavailable") from exc
 
         MessagingService._calendar_service_instance = service
         return MessagingService._calendar_service_instance
@@ -163,6 +162,121 @@ class MessagingService:
         if normalized.endswith("Z"):
             normalized = normalized[:-1] + "+00:00"
         return datetime.fromisoformat(normalized)
+
+    @staticmethod
+    def _to_eastern(dt: datetime) -> datetime:
+        if dt.tzinfo is None:
+            return EASTERN_TZ.localize(dt)
+        return dt.astimezone(EASTERN_TZ)
+
+    @staticmethod
+    def _format_start_for_channel(dt: datetime, channel: str) -> str:
+        localized = MessagingService._to_eastern(dt)
+        date_part = localized.strftime("%B %d, %Y").replace(" 0", " ")
+        time_part = localized.strftime("%I:%M %p").lstrip("0")
+        return f"{date_part} at {time_part}"
+
+    @staticmethod
+    def build_booking_confirmation_message(*, channel: str, tool_output: Dict[str, Any]) -> Optional[str]:
+        start_iso = tool_output.get("start_time")
+        service_label = tool_output.get("service") or tool_output.get("service_type")
+        if not start_iso:
+            return None
+
+        try:
+            start_dt = MessagingService._parse_iso_datetime(start_iso)
+        except ValueError:
+            return None
+
+        formatted_datetime = MessagingService._format_start_for_channel(start_dt, channel)
+        provider = tool_output.get("provider") or None
+        auto_adjusted = tool_output.get("was_auto_adjusted")
+
+        if not service_label:
+            service_label = "Your appointment"
+
+        if provider:
+            service_phrase = f"{service_label} with {provider}"
+        else:
+            service_phrase = service_label
+
+        message = f"✓ Booked! {service_phrase} on {formatted_datetime}."
+
+        if auto_adjusted:
+            message += " The requested time was unavailable, so I reserved the next available opening for you."
+
+        message += " You'll get a confirmation text soon. Just a reminder, we require 24 hours notice for cancellations or reschedules. Anything else I can help with?"
+        return message
+
+    @staticmethod
+    def _normalize_tool_arguments(tool_name: Optional[str], arguments: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Optional[str]]]]:
+        if not arguments:
+            return {}, {}
+
+        normalized = {k: v for k, v in arguments.items()}
+        adjustments: Dict[str, Dict[str, Optional[str]]] = {}
+        reference = datetime.now(EASTERN_TZ)
+
+        def _set(field: str, new_value: str) -> None:
+            original_value = normalized.get(field)
+            if original_value == new_value:
+                return
+            adjustments[field] = {
+                "original": str(original_value) if original_value is not None else None,
+                "normalized": str(new_value),
+            }
+            normalized[field] = new_value
+
+        if not tool_name:
+            return normalized, adjustments
+
+        try:
+            if tool_name == "check_availability":
+                date_value = normalized.get("date")
+                if date_value:
+                    try:
+                        new_date = normalize_date_to_future(str(date_value), reference=reference)
+                    except ValueError:
+                        new_date = reference.strftime("%Y-%m-%d")
+                    _set("date", new_date)
+
+            elif tool_name == "book_appointment":
+                for key in ("start_time", "start"):
+                    if normalized.get(key):
+                        try:
+                            new_dt = normalize_datetime_to_future(str(normalized[key]), reference=reference)
+                        except ValueError:
+                            new_dt = normalize_datetime_to_future(reference.isoformat(), reference=reference)
+                        _set(key, new_dt)
+                        normalized["start_time"] = new_dt
+                if normalized.get("date"):
+                    try:
+                        new_date = normalize_date_to_future(str(normalized["date"]), reference=reference)
+                    except ValueError:
+                        new_date = reference.strftime("%Y-%m-%d")
+                    _set("date", new_date)
+
+            elif tool_name == "reschedule_appointment":
+                for key in ("new_start_time", "start_time", "start"):
+                    if normalized.get(key):
+                        try:
+                            new_dt = normalize_datetime_to_future(str(normalized[key]), reference=reference)
+                        except ValueError:
+                            new_dt = normalize_datetime_to_future(reference.isoformat(), reference=reference)
+                        _set(key, new_dt)
+                        if key != "new_start_time":
+                            normalized["new_start_time"] = new_dt
+                if normalized.get("date"):
+                    try:
+                        new_date = normalize_date_to_future(str(normalized["date"]), reference=reference)
+                    except ValueError:
+                        new_date = reference.strftime("%Y-%m-%d")
+                    _set("date", new_date)
+
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to normalize arguments for tool %s: %s", tool_name, exc)
+
+        return normalized, adjustments
 
     @staticmethod
     def _build_history(conversation: Conversation, channel: str) -> List[Dict[str, Any]]:
@@ -227,14 +341,44 @@ class MessagingService:
 
         for result in tool_results:
             output_payload = result.get("output")
+
+            if isinstance(output_payload, dict):
+                sanitized_output = dict(output_payload)
+                original_start = sanitized_output.pop("original_start_time", None)
+                if original_start and sanitized_output.get("start_time") and sanitized_output["start_time"] != original_start:
+                    sanitized_output.setdefault(
+                        "note",
+                        "Start time automatically adjusted to the next available future slot.",
+                    )
+            else:
+                sanitized_output = output_payload
+
+            adjustments = result.get("argument_adjustments") or {}
+            if adjustments:
+                sanitized_output = (
+                    dict(sanitized_output)
+                    if isinstance(sanitized_output, dict)
+                    else {"value": sanitized_output}
+                )
+                sanitized_output.setdefault("argument_adjustments", adjustments)
+
+            slot_offers = result.get("slot_offers")
+            if slot_offers:
+                sanitized_output = (
+                    dict(sanitized_output)
+                    if isinstance(sanitized_output, dict)
+                    else {"value": sanitized_output}
+                )
+                sanitized_output.setdefault("slot_offers", slot_offers)
+
             try:
-                content_json = json.dumps(output_payload, default=str)
+                content_json = json.dumps(sanitized_output, default=str)
             except (TypeError, ValueError) as exc:
                 logger.warning("Failed to serialize tool output for %s: %s", result.get("name"), exc)
                 content_json = json.dumps(
                     {
-                        "repr": repr(output_payload),
-                        "type": type(output_payload).__name__,
+                        "repr": repr(sanitized_output),
+                        "type": type(sanitized_output).__name__,
                         "error": "serialization_failed",
                     }
                 )
@@ -261,8 +405,20 @@ class MessagingService:
 
         phone_arg = arguments.get("customer_phone")
         if phone_arg and phone_arg != customer.phone:
-            customer.phone = phone_arg
-            updated = True
+            canonical_phone = phone_arg.strip()
+
+            # If this number already belongs to another customer, keep the existing
+            # value to avoid unique constraint violations (front-end should merge
+            # records instead of overwriting mid-conversation).
+            existing_owner = (
+                db.query(Customer)
+                .filter(Customer.phone == canonical_phone, Customer.id != customer.id)
+                .first()
+            )
+
+            if existing_owner is None:
+                customer.phone = canonical_phone
+                updated = True
 
         email_arg = arguments.get("customer_email")
         if email_arg and email_arg != customer.email:
@@ -286,6 +442,302 @@ class MessagingService:
             except Exception:  # noqa: BLE001 - fallback to empty dict
                 metadata = {}
         return metadata
+
+    @staticmethod
+    def _persist_conversation_metadata(db: Session, conversation: Conversation, metadata: Dict[str, Any]) -> None:
+        conversation.custom_metadata = metadata
+        # CRITICAL: SQLAlchemy doesn't auto-detect JSONB mutations - must flag manually
+        flag_modified(conversation, "custom_metadata")
+        db.commit()
+        db.refresh(conversation)
+
+    @staticmethod
+    def _record_slot_offers(
+        *,
+        db: Session,
+        conversation: Conversation,
+        tool_call_id: Optional[str],
+        arguments: Dict[str, Any],
+        output: Dict[str, Any],
+    ) -> None:
+        slots = output.get("available_slots") or []
+        metadata = MessagingService._conversation_metadata(conversation)
+
+        if not slots:
+            if metadata.pop("pending_slot_offers", None) is not None:
+                MessagingService._persist_conversation_metadata(db, conversation, metadata)
+            return
+
+        offer_timestamp = datetime.utcnow().replace(tzinfo=pytz.utc)
+        offer_payload = {
+            "source_tool_call_id": tool_call_id,
+            "service_type": output.get("service_type") or arguments.get("service_type"),
+            "date": output.get("date") or arguments.get("date"),
+            "offered_at": offer_timestamp.isoformat(),
+            "expires_at": (offer_timestamp + timedelta(hours=4)).isoformat(),
+            "slots": [
+                {
+                    "index": idx + 1,
+                    "start": slot.get("start"),
+                    "start_time": slot.get("start_time"),
+                    "end": slot.get("end"),
+                    "end_time": slot.get("end_time"),
+                }
+                for idx, slot in enumerate(slots)
+            ],
+        }
+
+        # PRESERVE existing selection if user already chose before AI re-checked availability
+        existing_pending = metadata.get("pending_slot_offers", {})
+        preserved_selection = False
+        if isinstance(existing_pending, dict):
+            # Keep selection fields if they exist
+            for key in ["selected_option_index", "selected_slot", "selected_by_message_id", "selected_content_preview", "selected_at"]:
+                if key in existing_pending:
+                    offer_payload[key] = existing_pending[key]
+                    preserved_selection = True
+
+        metadata["pending_slot_offers"] = offer_payload
+        MessagingService._persist_conversation_metadata(db, conversation, metadata)
+
+        # LOG: Track availability check and slot storage
+        slot_times = [s.get("start_time", s.get("start")) for s in slots[:3]]
+        if preserved_selection:
+            logger.info(
+                "Re-checked availability and preserved user selection: conversation_id=%s, selected_option=%s, new_slots=%s",
+                conversation.id,
+                offer_payload.get("selected_option_index"),
+                slot_times,
+            )
+        else:
+            logger.info(
+                "Stored %d slot offers for conversation_id=%s, date=%s, slots=%s",
+                len(slots),
+                conversation.id,
+                offer_payload.get("date"),
+                slot_times,
+            )
+
+    @staticmethod
+    def _clear_slot_offers(db: Session, conversation: Conversation) -> None:
+        metadata = MessagingService._conversation_metadata(conversation)
+        if metadata.pop("pending_slot_offers", None) is not None:
+            MessagingService._persist_conversation_metadata(db, conversation, metadata)
+
+    @staticmethod
+    def _get_pending_slot_offers(
+        *, db: Session, conversation: Conversation, enforce_expiry: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        metadata = MessagingService._conversation_metadata(conversation)
+        pending = metadata.get("pending_slot_offers")
+        if not pending:
+            return None
+
+        if enforce_expiry and pending.get("expires_at"):
+            try:
+                expires_at = MessagingService._parse_iso_datetime(pending["expires_at"])
+            except ValueError:
+                expires_at = None
+            if expires_at and expires_at < datetime.utcnow().replace(tzinfo=pytz.utc):
+                metadata.pop("pending_slot_offers", None)
+                MessagingService._persist_conversation_metadata(db, conversation, metadata)
+                return None
+        return pending
+
+    @staticmethod
+    def _capture_slot_selection_from_message(
+        *, db: Session, conversation: Conversation, message: CommunicationMessage
+    ) -> None:
+        pending = MessagingService._get_pending_slot_offers(db=db, conversation=conversation)
+        if not pending:
+            return
+
+        slots = pending.get("slots") or []
+        if not slots:
+            return
+
+        content = (message.content or "").strip()
+        if not content:
+            return
+
+        choice_index = MessagingService._extract_slot_choice(content, slots)
+        if choice_index is None or not (1 <= choice_index <= len(slots)):
+            return
+
+        metadata = MessagingService._conversation_metadata(conversation)
+        pending = metadata.get("pending_slot_offers", {})
+        pending["selected_option_index"] = choice_index
+        pending["selected_slot"] = slots[choice_index - 1]
+        pending["selected_by_message_id"] = str(message.id)
+        pending["selected_content_preview"] = content[:120]
+        pending["selected_at"] = datetime.utcnow().replace(tzinfo=pytz.utc).isoformat()
+        metadata["pending_slot_offers"] = pending
+        logger.info(
+            "Captured slot selection: conversation_id=%s, choice=%d, slot=%s",
+            conversation.id,
+            choice_index,
+            slots[choice_index - 1].get("start_time", slots[choice_index - 1].get("start")),
+        )
+        MessagingService._persist_conversation_metadata(db, conversation, metadata)
+
+    @staticmethod
+    def _extract_slot_choice(message_text: str, slots: List[Dict[str, Any]]) -> Optional[int]:
+        normalized = (message_text or "").strip().lower()
+        if not normalized:
+            return None
+
+        # Prefer explicit numeric selections
+        for match in re.finditer(r"\b(\d{1,2})\b", normalized):
+            try:
+                choice_idx = int(match.group(1))
+            except ValueError:  # pragma: no cover - defensive
+                continue
+            if 1 <= choice_idx <= len(slots):
+                return choice_idx
+
+        condensed_text = normalized.replace(" ", "")
+        for idx, slot in enumerate(slots, start=1):
+            label = (slot.get("start_time") or "").strip().lower()
+            if not label:
+                continue
+            label_condensed = label.replace(" ", "")
+            if label in normalized or label_condensed in condensed_text:
+                return idx
+
+        # Fallback: match by ISO timestamp fragment (hour/minute)
+        for idx, slot in enumerate(slots, start=1):
+            start_iso = slot.get("start") or ""
+            if start_iso and start_iso.lower() in normalized:
+                return idx
+
+        return None
+
+    @staticmethod
+    def _slot_matches_request(slot: Dict[str, Any], requested_iso: str) -> bool:
+        slot_iso = slot.get("start")
+        if not slot_iso or not requested_iso:
+            return False
+        try:
+            slot_dt = MessagingService._parse_iso_datetime(slot_iso)
+            requested_dt = MessagingService._parse_iso_datetime(str(requested_iso))
+        except ValueError:
+            return slot_iso == requested_iso
+        return slot_dt.replace(tzinfo=None) == requested_dt.replace(tzinfo=None)
+
+    @staticmethod
+    def _enforce_slot_selection_for_booking(
+        *,
+        db: Session,
+        conversation: Conversation,
+        arguments: Dict[str, Any],
+    ) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Optional[str]]]]:
+        pending = MessagingService._get_pending_slot_offers(db=db, conversation=conversation)
+
+        # FAIL-FAST: Require fresh availability check before booking
+        requested_start = arguments.get("start_time") or arguments.get("start")
+        if not pending:
+            logger.warning(
+                "Booking attempt without pending slot offers. conversation_id=%s, requested_start=%s. "
+                "AI may have hallucinated availability without calling check_availability.",
+                conversation.id,
+                requested_start,
+            )
+            raise SlotSelectionError(
+                "You must call check_availability first to verify the requested time is available, "
+                "then let the guest choose from the returned slots before booking."
+            )
+
+        slots = pending.get("slots") or []
+        if not slots:
+            raise SlotSelectionError("No stored slot offers to validate against.")
+
+        requested_start = arguments.get("start_time") or arguments.get("start")
+        choice_index = pending.get("selected_option_index")
+        selected_slot: Optional[Dict[str, Any]] = None
+
+        # If user explicitly selected a numbered option, use that
+        if isinstance(choice_index, int) and 1 <= choice_index <= len(slots):
+            selected_slot = slots[choice_index - 1]
+            logger.info(
+                "Slot selection via numbered choice: conversation_id=%s, choice_index=%d, slot=%s",
+                conversation.id,
+                choice_index,
+                selected_slot.get("start_time", selected_slot.get("start")),
+            )
+        # Otherwise, try to match the requested time against offered slots
+        elif requested_start:
+            for idx, slot in enumerate(slots, start=1):
+                if MessagingService._slot_matches_request(slot, requested_start):
+                    selected_slot = slot
+                    pending["selected_option_index"] = idx
+                    pending["selected_slot"] = slot
+                    pending.setdefault("selected_at", datetime.utcnow().replace(tzinfo=pytz.utc).isoformat())
+                    logger.info(
+                        "Slot selection via time match: conversation_id=%s, requested=%s, matched_slot=%s",
+                        conversation.id,
+                        requested_start,
+                        selected_slot.get("start_time", selected_slot.get("start")),
+                    )
+                    break
+
+        # STRICT ENFORCEMENT: If we have pending offers, booking MUST match one of them
+        if not selected_slot:
+            offered_times = [s.get("start_time", s.get("start")) for s in slots[:3]]
+            logger.warning(
+                "Slot selection mismatch: conversation_id=%s, requested=%s, offered_slots=%s",
+                conversation.id,
+                requested_start,
+                offered_times,
+            )
+            raise SlotSelectionError(
+                f"Requested start time is not one of the offered slots ({', '.join(offered_times)}). "
+                "Ask the guest to choose from the options before booking."
+            )
+
+        slot_iso = selected_slot.get("start")
+        if not slot_iso:
+            raise SlotSelectionError("Selected slot is missing a start timestamp.")
+
+        original_value = requested_start
+        arguments["start_time"] = slot_iso
+        arguments["start"] = slot_iso
+
+        if not arguments.get("service_type") and pending.get("service_type"):
+            arguments["service_type"] = pending.get("service_type")
+        if not arguments.get("date") and pending.get("date"):
+            arguments["date"] = pending.get("date")
+
+        adjustments: Dict[str, Dict[str, Optional[str]]] = {}
+        if original_value and original_value != slot_iso:
+            adjustments["start_time"] = {
+                "original": str(original_value),
+                "normalized": str(slot_iso),
+            }
+
+        metadata = MessagingService._conversation_metadata(conversation)
+        metadata["pending_slot_offers"] = pending
+        MessagingService._persist_conversation_metadata(db, conversation, metadata)
+
+        return arguments, adjustments
+
+    @staticmethod
+    def _pending_slot_summary(db: Session, conversation: Conversation) -> List[Dict[str, Any]]:
+        pending = MessagingService._get_pending_slot_offers(db=db, conversation=conversation, enforce_expiry=False)
+        if not pending:
+            return []
+        slots = pending.get("slots") or []
+        summary: List[Dict[str, Any]] = []
+        for entry in slots:
+            summary.append(
+                {
+                    "index": entry.get("index"),
+                    "start": entry.get("start"),
+                    "start_time": entry.get("start_time"),
+                    "end": entry.get("end"),
+                    "end_time": entry.get("end_time"),
+                }
+            )
+        return summary
 
     # ------------------------------------------------------------------
     # Tool execution helpers
@@ -319,6 +771,7 @@ class MessagingService:
             result["output"] = {"success": False, "error": "Missing tool name"}
             return result
 
+        selection_adjustments: Optional[Dict[str, Dict[str, Optional[str]]]] = None
         try:
             if name == "check_availability":
                 output = handle_check_availability(
@@ -326,19 +779,45 @@ class MessagingService:
                     date=arguments.get("date", datetime.utcnow().strftime("%Y-%m-%d")),
                     service_type=arguments.get("service_type", ""),
                 )
+                if output.get("success"):
+                    MessagingService._record_slot_offers(
+                        db=db,
+                        conversation=conversation,
+                        tool_call_id=result.get("tool_call_id"),
+                        arguments=arguments,
+                        output=output,
+                    )
+                else:
+                    MessagingService._clear_slot_offers(db=db, conversation=conversation)
+                result["slot_offers"] = MessagingService._pending_slot_summary(db=db, conversation=conversation)
             elif name == "book_appointment":
                 # AI may collect updated customer details mid-conversation; persist them before booking.
-                MessagingService._update_customer_from_arguments(db, customer, arguments)
-                output = handle_book_appointment(
-                    calendar_service,
-                    customer_name=arguments.get("customer_name", customer.name),
-                    customer_phone=arguments.get("customer_phone", customer.phone or ""),
-                    customer_email=arguments.get("customer_email", customer.email),
-                    start_time=arguments.get("start_time", arguments.get("start")),
-                    service_type=arguments.get("service_type"),
-                    provider=arguments.get("provider"),
-                    notes=arguments.get("notes"),
-                )
+                try:
+                    arguments, selection_adjustments = MessagingService._enforce_slot_selection_for_booking(
+                        db=db,
+                        conversation=conversation,
+                        arguments=arguments,
+                    )
+                except SlotSelectionError as exc:
+                    output = {
+                        "success": False,
+                        "error": str(exc),
+                        "code": "slot_selection_mismatch",
+                        "pending_slot_options": MessagingService._pending_slot_summary(db=db, conversation=conversation),
+                    }
+                else:
+                    MessagingService._update_customer_from_arguments(db, customer, arguments)
+                    output = handle_book_appointment(
+                        calendar_service,
+                        customer_name=arguments.get("customer_name", customer.name),
+                        customer_phone=arguments.get("customer_phone", customer.phone or ""),
+                        customer_email=arguments.get("customer_email", customer.email),
+                        start_time=arguments.get("start_time", arguments.get("start")),
+                        service_type=arguments.get("service_type"),
+                        provider=arguments.get("provider"),
+                        notes=arguments.get("notes"),
+                    )
+                result["slot_offers"] = MessagingService._pending_slot_summary(db=db, conversation=conversation)
             elif name == "reschedule_appointment":
                 output = handle_reschedule_appointment(
                     calendar_service,
@@ -377,6 +856,9 @@ class MessagingService:
             output = {"success": False, "error": str(exc)}
 
         result["output"] = output
+
+        if selection_adjustments:
+            result.setdefault("argument_adjustments", {}).update(selection_adjustments)
 
         if result.get("name") in {"book_appointment", "reschedule_appointment", "cancel_appointment"}:
             if (result.get("output") or {}).get("success"):
@@ -465,6 +947,7 @@ class MessagingService:
                 "status": "scheduled",
             }
             commit_required = True
+            MessagingService._clear_slot_offers(db=db, conversation=conversation)
 
         elif tool_name == "reschedule_appointment":
             appointment_id = output.get("appointment_id") or arguments.get("appointment_id")
@@ -546,6 +1029,7 @@ class MessagingService:
                 "cancellation_reason": cancellation_reason,
             }
             commit_required = True
+            MessagingService._clear_slot_offers(db=db, conversation=conversation)
 
         if commit_required:
             conversation.custom_metadata = metadata
@@ -603,6 +1087,7 @@ class MessagingService:
             sent_at=datetime.utcnow(),
             metadata=metadata or {},
         )
+        MessagingService._capture_slot_selection_from_message(db=db, conversation=conversation, message=message)
         return message
 
     @staticmethod

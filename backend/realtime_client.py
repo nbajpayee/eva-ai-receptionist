@@ -11,7 +11,6 @@ import pytz
 from config import get_settings, SERVICES, PROVIDERS, OPENING_SCRIPT
 from prompts import get_system_prompt
 from calendar_service import get_calendar_service
-from mock_calendar_service import get_mock_calendar_service
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -41,12 +40,9 @@ class RealtimeClient:
     def _init_calendar_service(self):
         try:
             return get_calendar_service()
-        except Exception as exc:  # noqa: BLE001 - fall back to mock for local dev
-            logger.warning(
-                "RealtimeClient falling back to mock calendar service: %s", exc,
-                exc_info=True,
-            )
-            return get_mock_calendar_service()
+        except Exception as exc:  # noqa: BLE001
+            logger.critical("RealtimeClient failed to initialize calendar service: %s", exc, exc_info=True)
+            raise
 
     async def connect(self):
         """Establish WebSocket connection to OpenAI Realtime API."""

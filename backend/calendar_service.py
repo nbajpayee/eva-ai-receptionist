@@ -36,6 +36,8 @@ logger = logging.getLogger(__name__)
 # If modifying these scopes, delete the token.json file.
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
+EASTERN_TZ = pytz.timezone('America/New_York')
+
 
 class GoogleCalendarService:
     """Service for interacting with Google Calendar API."""
@@ -117,10 +119,9 @@ class GoogleCalendarService:
             start_time = datetime.combine(date.date(), datetime.min.time().replace(hour=9))
             end_time = datetime.combine(date.date(), datetime.min.time().replace(hour=19))
 
-            # Make timezone aware (using PST/PDT)
-            pacific = pytz.timezone('America/Los_Angeles')
-            start_time = pacific.localize(start_time)
-            end_time = pacific.localize(end_time)
+            # Make timezone aware (using Eastern time)
+            start_time = EASTERN_TZ.localize(start_time)
+            end_time = EASTERN_TZ.localize(end_time)
 
             # Get existing events for the day
             events_result = self.service.events().list(
@@ -139,8 +140,8 @@ class GoogleCalendarService:
                 start = event['start'].get('dateTime', event['start'].get('date'))
                 end = event['end'].get('dateTime', event['end'].get('date'))
                 busy_periods.append({
-                    'start': datetime.fromisoformat(start.replace('Z', '+00:00')),
-                    'end': datetime.fromisoformat(end.replace('Z', '+00:00'))
+                    'start': datetime.fromisoformat(start.replace('Z', '+00:00')).astimezone(EASTERN_TZ),
+                    'end': datetime.fromisoformat(end.replace('Z', '+00:00')).astimezone(EASTERN_TZ)
                 })
 
             # Generate available slots
@@ -220,12 +221,12 @@ Provider: {provider or 'Not specified'}
 Notes: {notes or 'None'}
 """.strip(),
                 'start': {
-                    'dateTime': start_time.isoformat(),
-                    'timeZone': 'America/Los_Angeles',
+                    'dateTime': start_time.astimezone(EASTERN_TZ).isoformat(),
+                    'timeZone': 'America/New_York',
                 },
                 'end': {
-                    'dateTime': end_time.isoformat(),
-                    'timeZone': 'America/Los_Angeles',
+                    'dateTime': end_time.astimezone(EASTERN_TZ).isoformat(),
+                    'timeZone': 'America/New_York',
                 },
                 'attendees': [
                     {'email': customer_email} if customer_email else None

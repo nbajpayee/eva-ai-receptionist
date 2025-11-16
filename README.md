@@ -8,7 +8,7 @@ An intelligent voice AI application that serves as a virtual receptionist for me
 - ✅ Voice-to-voice conversation using OpenAI Realtime API
 - ✅ Smart commit strategy with client-side VAD (dual-speed: 300ms/120ms)
 - ✅ Real-time interruption handling with immediate audio cutoff
-- ✅ Appointment scheduling with Google Calendar integration
+- ✅ Appointment scheduling with Google Calendar integration (requires Google credentials; mock calendar removed)
 - ✅ FAQ responses (services, pricing, hours, providers)
 - ✅ Full transcript logging (both customer and assistant speech)
 - ✅ AI-powered satisfaction scoring and sentiment analysis
@@ -56,7 +56,7 @@ Admin Dashboard (Next.js) → Next.js API Proxy → FastAPI Backend ↔ OpenAI R
 
 - **Backend**: Python, FastAPI, SQLAlchemy
 - **Voice AI**: OpenAI Realtime API
-- **Calendar**: Google Calendar API
+- **Calendar**: Google Calendar API (production credentials required)
 - **Database**: Supabase Postgres (managed) + SQLite fallback for local tests
 - **Frontend**: Next.js 14 (App Router) + TypeScript + Shadcn/ui + TailwindCSS
 
@@ -118,6 +118,7 @@ Populates Supabase with representative customers, call sessions, and daily metri
 3. Enable Google Calendar API
 4. Create OAuth 2.0 credentials (Desktop app)
 5. Download credentials and save as `backend/credentials.json`
+6. Generate an OAuth token by running any backend flow once; the app no longer falls back to a mock calendar if credentials are missing.
 
 ### 6. Start Backend Server
 
@@ -174,7 +175,7 @@ Ava/
 │   ├── database.py             # Database models
 │   ├── config.py               # Configuration & settings
 │   ├── realtime_client.py      # OpenAI Realtime API client
-│   ├── calendar_service.py     # Google Calendar integration
+│   ├── calendar_service.py     # Google Calendar integration (no mock fallback)
 │   ├── analytics.py            # Call tracking & analytics
 │   ├── requirements.txt        # Python dependencies
 │   └── .env                    # Environment variables (create from .env.example)

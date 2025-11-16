@@ -188,7 +188,7 @@ All models use SQLAlchemy ORM defined in `backend/database.py`.
 - Provides dashboard data via `AnalyticsService` methods
 
 **backend/calendar_service.py**:
-- Google Calendar OAuth2 integration
+- Google Calendar OAuth2 integration (mock fallback removed; production credentials required in all environments)
 - Availability checking, appointment booking, rescheduling, cancellation
 - Uses `credentials.json` and `token.json` for authentication
 
@@ -300,7 +300,7 @@ curl "http://localhost:8000/api/admin/calls?page=1&page_size=10"
 
 1. **SQLite threading**: If using SQLite for local testing, `check_same_thread=False` is set in `database.py` to prevent errors with Uvicorn's async workers.
 
-2. **Token.json refresh**: Google Calendar token expires. Delete `backend/token.json` and re-authenticate if you get auth errors.
+2. **Token.json refresh**: Google Calendar token expires. Delete `backend/token.json` and re-authenticate if you get auth errors. Without valid credentials the app will now raise instead of falling back to a mock calendar.
 
 3. **WebSocket disconnects**: Routine disconnects flood logs. Consider filtering `ClientDisconnected` messages.
 
