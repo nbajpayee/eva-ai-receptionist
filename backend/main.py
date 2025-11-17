@@ -112,7 +112,7 @@ async def voice_websocket(
     )
 
     # Initialize OpenAI Realtime client
-    realtime_client = RealtimeClient()
+    realtime_client = RealtimeClient(db=db, conversation=conversation)
 
     session_finalized = False
     finalize_lock = asyncio.Lock()
@@ -211,21 +211,18 @@ async def voice_websocket(
 
             except Exception as e:
                 print(f"Error ending call session: {e}")
-                import traceback
-                traceback.print_exc()
-
-            if not disconnect_performed:
-                try:
-                    await realtime_client.disconnect()
-                except Exception as disconnect_err:
-                    print(f"Error disconnecting realtime client during finalize: {disconnect_err}")
-                else:
+            finally:
+                if not disconnect_performed:
                     disconnect_performed = True
+                    try:
+                        await realtime_client.disconnect()
+                    except Exception as disconnect_exc:  # noqa: BLE001
+                        logger.warning("Failed to disconnect realtime client: %s", disconnect_exc)
+                realtime_client.close()
 
     try:
         # Connect to OpenAI Realtime API
         await realtime_client.connect()
-
         # Send greeting to kick off conversation
         await realtime_client.send_greeting()
 

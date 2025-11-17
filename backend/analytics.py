@@ -479,7 +479,7 @@ Consider these factors:
     @staticmethod
     def create_conversation(
         db: Session,
-        customer_id: int,
+        customer_id: Optional[int],
         channel: str,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Conversation:

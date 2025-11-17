@@ -52,6 +52,14 @@ Admin Dashboard (Next.js) → Next.js API Proxy → FastAPI Backend ↔ OpenAI R
                                             Supabase Postgres
 ```
 
+### Booking Workflow (Nov 2025 Refactor)
+
+- All channels (voice, SMS, email) now use the shared `backend/booking/` package.
+- `SlotSelectionManager` coordinates offer persistence, transcript-driven selections, and guarded bookings.
+- Time normalization centralizes in `booking.time_utils`, standardizing on Eastern Time.
+- Voice realtime client uses the same slot enforcement via metadata-backed conversations.
+- Regression coverage spans `backend/tests/test_voice_booking.py`, `backend/tests/booking/test_slot_selection.py`, and `backend/tests/test_cross_channel_booking.py`.
+
 ## Tech Stack
 
 - **Backend**: Python, FastAPI, SQLAlchemy

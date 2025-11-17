@@ -20,6 +20,13 @@ This is **Ava**, a voice AI receptionist for medical spas built with FastAPI (ba
   - Dual-write migration strategy (writes to both legacy + new schemas)
   - Admin dashboard updated to display conversations
 
+**Booking Refactor (Nov 2025)**
+- Shared helpers live in `backend/booking/` with `SlotSelectionCore` and `SlotSelectionManager` facades.
+- `booking.time_utils` owns Eastern Time normalization and formatting for all channels.
+- `messaging_service.py` and `realtime_client.py` delegate slot offer tracking, transcript capture, and enforcement to the manager.
+- Voice transcripts persist via conversation metadata, preserving selections across channels.
+- Regression suites: `backend/tests/test_voice_booking.py`, `backend/tests/booking/test_slot_selection.py`, `backend/tests/test_cross_channel_booking.py`.
+
 ## Development Commands
 
 ### Backend (FastAPI)

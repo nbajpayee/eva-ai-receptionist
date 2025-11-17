@@ -10,6 +10,7 @@ import pytest
 
 from database import Customer, SessionLocal, Conversation
 from messaging_service import MessagingService, SlotSelectionError
+from booking.manager import SlotSelectionManager
 
 
 @pytest.fixture
@@ -153,9 +154,9 @@ def _sample_slots():
 
 
 def _record_sample_offers(session, conversation, service_type="botox") -> None:
-    MessagingService._record_slot_offers(
-        db=session,
-        conversation=conversation,
+    SlotSelectionManager.record_offers(
+        session,
+        conversation,
         tool_call_id="test-call",
         arguments={"service_type": service_type, "date": "2025-11-16"},
         output={
@@ -180,7 +181,7 @@ def test_capture_slot_selection_records_choice(db_session, conversation_factory)
         metadata={"source": "test"},
     )
     session.refresh(conversation)
-    metadata = MessagingService._conversation_metadata(conversation)
+    metadata = SlotSelectionManager.conversation_metadata(conversation)
     pending = metadata.get("pending_slot_offers")
     assert pending is not None
     assert pending.get("selected_option_index") == 3

@@ -645,62 +645,63 @@ After confirming all callsites updated:
 ## Migration Checklist
 
 ### Phase 1: Extract + Wrap
-- [ ] Create `backend/booking/__init__.py`
-- [ ] Create `backend/booking/time_utils.py`
-  - [ ] Move `EASTERN_TZ`, `parse_iso_datetime()`, `to_eastern()`
-  - [ ] Move `format_for_display()` (channel-aware)
-- [ ] Create `backend/booking/slot_selection.py`
-  - [ ] Move `SlotSelectionError` exception
-  - [ ] Move `SlotSelectionCore` class with all methods
-  - [ ] Move internal helpers
-- [ ] Create `backend/booking/manager.py`
-  - [ ] Implement `SlotSelectionManager` façade
-- [ ] Update `backend/messaging_service.py`
-  - [ ] Add imports from `booking.manager`
-  - [ ] Replace method bodies with thin wrappers
-  - [ ] Update internal calls to use `time_utils`
-- [ ] Update `backend/booking_handlers.py`
-  - [ ] Import from `booking.time_utils`
-- [ ] Run tests: `pytest backend/tests/test_messaging_service.py -v`
+- [x] Create `backend/booking/__init__.py`
+- [x] Create `backend/booking/time_utils.py`
+  - [x] Move `EASTERN_TZ`, `parse_iso_datetime()`, `to_eastern()`
+  - [x] Move `format_for_display()` (channel-aware)
+- [x] Create `backend/booking/slot_selection.py`
+  - [x] Move `SlotSelectionError` exception
+  - [x] Move `SlotSelectionCore` class with all methods
+  - [x] Move internal helpers
+- [x] Create `backend/booking/manager.py`
+  - [x] Implement `SlotSelectionManager` façade
+- [x] Update `backend/messaging_service.py`
+  - [x] Add imports from `booking.manager`
+  - [x] Replace method bodies with thin wrappers
+  - [x] Update internal calls to use `time_utils`
+- [x] Update `backend/booking_handlers.py`
+  - [x] Import from `booking.time_utils`
+- [x] Run tests: `pytest backend/tests/test_messaging_service.py -v`
 - [ ] Smoke test SMS booking flow
 - [ ] Smoke test email booking flow
 
 ### Phase 2: Voice Integration
-- [ ] Update `backend/realtime_client.py`
-  - [ ] Add `self.db = SessionLocal()` to `__init__`
-  - [ ] Add `db.close()` to cleanup
-  - [ ] Implement `_get_or_create_conversation()`
-- [ ] Update `handle_function_call()`
-  - [ ] `check_availability`: Record offers after success
-  - [ ] `book_appointment`: Enforce selection before booking
-  - [ ] `book_appointment`: Clear offers after success
-- [ ] Add transcript selection capture
-  - [ ] Create message records for transcript chunks
-  - [ ] Call `SlotSelectionManager.capture_selection()`
-- [ ] Update voice response formatting
-  - [ ] Use `format_for_display(channel="voice")`
-- [ ] Create `tests/test_voice_booking.py`
-  - [ ] Test offer recording
-  - [ ] Test selection enforcement
-  - [ ] Test numeric selection capture
-  - [ ] Test natural language selection capture
-- [ ] Run voice integration tests
-- [ ] End-to-end voice booking smoke test
+- [x] Update `backend/realtime_client.py`
+  - [x] Add `self.db = SessionLocal()` to `__init__`
+  - [x] Add `db.close()` to cleanup
+  - [x] Implement `_get_or_create_conversation()`
+- [x] Update `handle_function_call()`
+  - [x] `check_availability`: Record offers after success
+  - [x] `book_appointment`: Enforce selection before booking
+  - [x] `book_appointment`: Clear offers after success
+- [x] Add transcript selection capture
+  - [x] Create message records for transcript chunks
+  - [x] Call `SlotSelectionManager.capture_selection()`
+- [x] Update voice response formatting
+  - [x] Use `format_for_display(channel="voice")`
+- [x] Create `tests/test_voice_booking.py`
+  - [x] Test offer recording
+  - [x] Test selection enforcement
+  - [x] Test numeric selection capture
+  - [x] Test natural language selection capture
+- [x] Run voice integration tests
+- [x] End-to-end voice booking smoke test (`pytest backend/tests/test_booking_smoke.py::test_voice_booking_smoke`)
 
 ### Phase 3: Testing & Validation
-- [ ] Create `tests/booking/test_slot_selection.py`
-  - [ ] Unit tests for all `SlotSelectionCore` methods
-- [ ] Create `tests/booking/test_time_utils.py`
-  - [ ] Unit tests for timezone utilities
-- [ ] Add cross-channel consistency test
-- [ ] Run full test suite: `pytest backend/tests/ -v`
-- [ ] Smoke test all channels (SMS, email, voice)
+- [x] Create `tests/booking/test_slot_selection.py`
+  - [x] Unit tests for all `SlotSelectionCore` methods
+- [x] Create `tests/booking/test_time_utils.py`
+  - [x] Unit tests for timezone utilities
+- [x] Add cross-channel consistency test
+- [x] Update documentation (README, CLAUDE.md) with new booking architecture summary
+- [x] Run full test suite: `pytest backend/tests/ -v`
+- [x] Smoke test all channels (SMS, email, voice) (`pytest backend/tests/test_booking_smoke.py`)
 
 ### Phase 4: Cleanup (Optional)
-- [ ] Update `api_messaging.py` to call `SlotSelectionManager` directly
-- [ ] Mark wrappers as `@deprecated`
-- [ ] Remove wrappers from `MessagingService`
-- [ ] Final test run
+- [x] Update `api_messaging.py` to call `SlotSelectionManager` directly
+- [x] Mark wrappers as `@deprecated`
+- [x] Remove wrappers from `MessagingService`
+- [x] Final test run
 
 ---
 

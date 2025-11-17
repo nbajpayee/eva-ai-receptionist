@@ -7,10 +7,18 @@ import logging
 import websockets
 from typing import Dict, Any, Optional, Callable, List
 from datetime import datetime, timedelta
+
 import pytz
-from config import get_settings, SERVICES, PROVIDERS, OPENING_SCRIPT
-from prompts import get_system_prompt
+from sqlalchemy.orm import Session
+
+from analytics import AnalyticsService
+from booking.manager import SlotSelectionManager, SlotSelectionError
+from booking.time_utils import format_for_display, parse_iso_datetime
+from booking_handlers import handle_book_appointment, handle_check_availability
 from calendar_service import get_calendar_service
+from config import get_settings, SERVICES, PROVIDERS, OPENING_SCRIPT
+from database import Conversation, SessionLocal
+from prompts import get_system_prompt
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -19,16 +27,32 @@ logger = logging.getLogger(__name__)
 class RealtimeClient:
     """Client for managing OpenAI Realtime API voice conversations."""
 
-    def __init__(self):
-        """Initialize the Realtime client."""
+    def __init__(
+        self,
+        *,
+        session_id: str,
+        db: Optional[Session] = None,
+        conversation: Optional[Conversation] = None,
+        legacy_call_session_id: Optional[str] = None,
+    ) -> None:
+        """Initialize the Realtime client with database context."""
         self.ws = None
         self.calendar_service = self._init_calendar_service()
+        self.session_id = session_id
+        self._owns_db_session = db is None
+        self.db = db or SessionLocal()
+        self.conversation = (
+            conversation
+            if conversation is not None
+            else self._get_or_create_conversation(legacy_call_session_id)
+        )
         self.session_data = {
             'transcript': [],
             'function_calls': [],
             'customer_data': {},
             'sentiment_markers': [],
             'last_appointment': None,
+            'conversation_id': str(self.conversation.id),
         }
         self.identity_instructions = ""
         self._current_customer_text = ""
@@ -36,6 +60,50 @@ class RealtimeClient:
         self._pending_items: Dict[str, Dict[str, Any]] = {}
         self._last_transcript_entry: Optional[str] = None
         self._awaiting_response: bool = False
+
+    def close(self) -> None:
+        """Release any resources owned by the client."""
+        if self._owns_db_session and self.db:
+            self.db.close()
+
+    def _get_or_create_conversation(
+        self, legacy_call_session_id: Optional[str]
+    ) -> Conversation:
+        """Return an existing voice conversation or create one for this session."""
+        existing = (
+            self.db.query(Conversation)
+            .filter(Conversation.channel == 'voice')
+            .order_by(Conversation.initiated_at.desc())
+            .all()
+        )
+        for candidate in existing:
+            metadata = candidate.custom_metadata or {}
+            if isinstance(metadata, str):
+                try:
+                    metadata = json.loads(metadata)
+                except json.JSONDecodeError:
+                    metadata = {}
+            if metadata.get('session_id') == self.session_id:
+                return candidate
+
+        metadata: Dict[str, Any] = {'session_id': self.session_id}
+        if legacy_call_session_id:
+            metadata['legacy_call_session_id'] = legacy_call_session_id
+
+        conversation = AnalyticsService.create_conversation(
+            db=self.db,
+            customer_id=None,
+            channel='voice',
+            metadata=metadata,
+        )
+        return conversation
+
+    def _refresh_conversation(self) -> None:
+        try:
+            self.db.refresh(self.conversation)
+        except Exception:  # noqa: BLE001
+            # Refresh can fail if conversation was expired or detached; ignore silently.
+            pass
 
     def _init_calendar_service(self):
         try:
@@ -319,74 +387,84 @@ class RealtimeClient:
                 date_str = arguments.get("date")
                 service_type = arguments.get("service_type")
 
-                date = datetime.strptime(date_str, "%Y-%m-%d")
-                slots = self.calendar_service.get_available_slots(date, service_type)
-
-                return {
-                    "success": True,
-                    "available_slots": slots[:10],  # Return first 10 slots
-                    "date": date_str,
-                    "service": SERVICES[service_type]["name"]
-                }
-
-            elif function_name == "book_appointment":
-                customer_name = arguments.get("customer_name")
-                customer_phone = arguments.get("customer_phone")
-                customer_email = arguments.get("customer_email", f"{customer_phone}@placeholder.com")
-                start_time_str = arguments.get("start_time")
-                service_type = arguments.get("service_type")
-                provider = arguments.get("provider")
-                notes = arguments.get("notes")
-
-                # Parse start time
-                start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
-
-                # Calculate end time
-                duration = SERVICES[service_type]["duration_minutes"]
-                end_time = start_time + timedelta(minutes=duration)
-
-                # Book in calendar
-                event_id = self.calendar_service.book_appointment(
-                    start_time=start_time,
-                    end_time=end_time,
-                    customer_name=customer_name,
-                    customer_email=customer_email,
-                    customer_phone=customer_phone,
+                availability = handle_check_availability(
+                    self.calendar_service,
+                    date=date_str,
                     service_type=service_type,
-                    provider=provider,
-                    notes=notes
+                    limit=10,
                 )
 
-                if event_id:
-                    # Store customer data
+                if availability.get("success"):
+                    availability["service_type"] = service_type
+                    SlotSelectionManager.record_offers(
+                        self.db,
+                        self.conversation,
+                        tool_call_id=None,
+                        arguments={"date": date_str, "service_type": service_type},
+                        output=availability,
+                    )
+                    self._refresh_conversation()
+
+                return availability
+
+            elif function_name == "book_appointment":
+                normalization_arguments = dict(arguments)
+                try:
+                    normalized_args, _ = SlotSelectionManager.enforce_booking(
+                        self.db,
+                        self.conversation,
+                        normalization_arguments,
+                    )
+                except SlotSelectionError as exc:
+                    logger.warning("Voice booking enforcement failed: %s", exc)
+                    return {
+                        "success": False,
+                        "error": str(exc),
+                        "user_message": "I'm sorry, I need to check availability first before I can book that time. Let me pull up the available slots for you.",
+                    }
+
+                booking_result = handle_book_appointment(
+                    self.calendar_service,
+                    **normalized_args,
+                )
+
+                if booking_result.get("success"):
+                    SlotSelectionManager.clear_offers(self.db, self.conversation)
+                    self._refresh_conversation()
+
+                    customer_name = normalized_args.get("customer_name")
+                    customer_phone = normalized_args.get("customer_phone")
+                    customer_email = normalized_args.get("customer_email") or f"{customer_phone}@placeholder.com"
+                    service_type = normalized_args.get("service_type")
+
+                    start_iso = booking_result.get("start_time")
+                    formatted_voice_time = None
+                    if start_iso:
+                        formatted_voice_time = format_for_display(
+                            parse_iso_datetime(start_iso),
+                            channel="voice",
+                        )
+                        booking_result["spoken_confirmation"] = (
+                            f"Perfect! I've booked your {booking_result.get('service', service_type)} appointment for {formatted_voice_time}."
+                        )
+
                     self.session_data['customer_data'] = {
                         'name': customer_name,
                         'phone': customer_phone,
-                        'email': customer_email
+                        'email': customer_email,
                     }
 
                     self.session_data['last_appointment'] = {
-                        'event_id': event_id,
+                        'event_id': booking_result.get('event_id'),
                         'service_type': service_type,
-                        'provider': provider,
-                        'start_time': start_time.isoformat(),
+                        'provider': normalized_args.get('provider'),
+                        'start_time': start_iso,
                         'customer_name': customer_name,
                         'customer_phone': customer_phone,
                         'customer_email': customer_email,
                     }
 
-                    return {
-                        "success": True,
-                        "event_id": event_id,
-                        "appointment_time": start_time.strftime("%B %d, %Y at %I:%M %p"),
-                        "service": SERVICES[service_type]["name"],
-                        "provider": provider
-                    }
-                else:
-                    return {
-                        "success": False,
-                        "error": "Failed to book appointment. Please try again or contact staff."
-                    }
+                return booking_result
 
             elif function_name == "get_service_info":
                 service_type = arguments.get("service_type")
@@ -775,15 +853,36 @@ class RealtimeClient:
             return
 
         print(f"📝 Captured transcript entry [{speaker}]: {text}")
-        self.session_data['transcript'].append({
+        entry = {
             'speaker': speaker,
             'text': text,
             'timestamp': datetime.utcnow().isoformat()
-        })
+        }
+        self.session_data['transcript'].append(entry)
         self._last_transcript_entry = fingerprint
         if speaker == "customer" and self._awaiting_response:
             self._awaiting_response = False
             asyncio.create_task(self._request_response())
+
+        if speaker == "customer":
+            self._record_customer_transcript_message(text)
+
+    def _record_customer_transcript_message(self, content: str) -> None:
+        """Persist customer transcript entries and capture slot selections."""
+        sanitized = content.strip()
+        if not sanitized:
+            return
+
+        message = AnalyticsService.add_message(
+            db=self.db,
+            conversation_id=self.conversation.id,
+            direction='inbound',
+            content=sanitized,
+            metadata={'source': 'voice_transcript'},
+        )
+
+        SlotSelectionManager.capture_selection(self.db, self.conversation, message)
+        self._refresh_conversation()
 
     def _process_conversation_item_created(self, payload: Dict[str, Any]) -> None:
         item = payload.get("item") or {}
