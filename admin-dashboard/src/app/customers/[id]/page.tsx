@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CustomerTimeline, type TimelineItem } from "@/components/customer-timeline";
 import { EditCustomerDialog } from "@/components/edit-customer-dialog";
 import { BookAppointmentDialog } from "@/components/book-appointment-dialog";
+import { SendMessageDialog } from "@/components/send-message-dialog";
 import { formatDistanceToNow, format } from "date-fns";
 
 type CustomerData = {
@@ -80,6 +81,7 @@ export default function CustomerDetailPage() {
   const [timelineHasMore, setTimelineHasMore] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [bookAppointmentDialogOpen, setBookAppointmentDialogOpen] = useState(false);
+  const [sendMessageDialogOpen, setSendMessageDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchCustomerData();
@@ -234,7 +236,11 @@ export default function CustomerDetailPage() {
               >
                 Edit Profile
               </Button>
-              <Button variant="outline" disabled>
+              <Button
+                variant="outline"
+                onClick={() => setSendMessageDialogOpen(true)}
+              >
+                <MessageSquare className="mr-2 h-4 w-4" />
                 Send Message
               </Button>
             </div>
@@ -578,6 +584,25 @@ export default function CustomerDetailPage() {
           customerName={customer.customer.name}
           open={bookAppointmentDialogOpen}
           onOpenChange={setBookAppointmentDialogOpen}
+          onSuccess={() => {
+            fetchCustomerData();
+            fetchStats();
+            if (activeTab === "timeline") {
+              fetchTimeline(1);
+            }
+          }}
+        />
+      )}
+
+      {/* Send Message Dialog */}
+      {customer && (
+        <SendMessageDialog
+          customerId={customer.customer.id}
+          customerName={customer.customer.name}
+          customerPhone={customer.customer.phone}
+          customerEmail={customer.customer.email}
+          open={sendMessageDialogOpen}
+          onOpenChange={setSendMessageDialogOpen}
           onSuccess={() => {
             fetchCustomerData();
             fetchStats();
