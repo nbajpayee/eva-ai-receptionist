@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Clock3, MessageSquare, Smile, Users, Download } from "lucide-react";
+import { ArrowUpRight, Clock3, MessageSquare, Smile, Users, Download, Calendar } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { SplitStatCard } from "@/components/split-stat-card";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/call-log-table";
 import { LiveStatus } from "@/components/dashboard/live-status";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
 
 type MetricsResponse = {
@@ -57,27 +58,6 @@ function getAppOrigin(): string {
 function resolveInternalUrl(path: string): string {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   return `${getAppOrigin()}${basePath}${path}`;
-}
-
-async function fetchMetrics(period: string = "today"): Promise<MetricsResponse> {
-  try {
-    const url = resolveInternalUrl(`/api/admin/metrics/overview?period=${period}`);
-
-    const response = await fetch(url, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      console.warn("Failed to fetch metrics", response.statusText);
-      return defaultMetrics;
-    }
-
-    const data = (await response.json()) as MetricsResponse;
-    return data;
-  } catch (error) {
-    console.error("Error fetching metrics", error);
-    return defaultMetrics;
-  }
 }
 
 async function fetchCallHistory(): Promise<CallRecord[]> {
@@ -153,24 +133,50 @@ const numberFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
+const PERIODS = [
+  { label: "Today", value: "today" },
+  { label: "Week", value: "week" },
+  { label: "Month", value: "month" },
+] as const;
+
 export default function Home() {
   const [metrics, setMetrics] = useState<MetricsResponse>(defaultMetrics);
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("today");
 
   useEffect(() => {
-    const loadData = async () => {
-      const [metricsData, callsData] = await Promise.all([
-        fetchMetrics(),
-        fetchCallHistory(),
-      ]);
+    const loadMetrics = async () => {
+      try {
+        const response = await fetch(`/api/admin/metrics/overview?period=${selectedPeriod}`, {
+          cache: "no-store",
+        });
 
-      setMetrics(metricsData);
+        if (!response.ok) {
+          console.warn("Failed to fetch metrics", response.statusText);
+          setMetrics(defaultMetrics);
+          return;
+        }
+
+        const data = (await response.json()) as MetricsResponse;
+        setMetrics(data);
+      } catch (error) {
+        console.error("Error fetching metrics", error);
+        setMetrics(defaultMetrics);
+      }
+    };
+
+    loadMetrics();
+  }, [selectedPeriod]);
+
+  useEffect(() => {
+    const loadCalls = async () => {
+      const callsData = await fetchCallHistory();
       setCalls(callsData);
       setIsLoading(false);
     };
 
-    loadData();
+    loadCalls();
   }, []);
 
   const handleExportCalls = () => {
@@ -189,8 +195,40 @@ export default function Home() {
     exportToCSV(exportData, generateExportFilename("calls"));
   };
 
+  const selectedPeriodLabel = PERIODS.find((p) => p.value === selectedPeriod)?.label || "Today";
+
   return (
     <div className="space-y-10">
+      {/* Header with Period Selector */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-900">Dashboard</h1>
+          <p className="text-sm text-zinc-500 mt-1">
+            Overview of key metrics and recent activity
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-zinc-500" />
+          <ToggleGroup
+            type="single"
+            value={selectedPeriod}
+            onValueChange={(value) => {
+              if (value) setSelectedPeriod(value);
+            }}
+          >
+            {PERIODS.map((period) => (
+              <ToggleGroupItem
+                key={period.value}
+                value={period.value}
+                aria-label={`View ${period.label}`}
+              >
+                {period.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
+      </div>
+
       {/* Live Status Indicator */}
       <LiveStatus />
 
@@ -250,8 +288,8 @@ export default function Home() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-2">
-            <h2 className="text-lg font-semibold text-zinc-900">Operational feed</h2>
-            <p className="text-sm text-zinc-500">Monitoring today's customer traffic.</p>
+            <h2 className="text-lg font-semibold text-zinc-900">Recent Communications</h2>
+            <p className="text-sm text-zinc-500">Latest customer interactions across all channels.</p>
           </div>
           <Button variant="outline" size="sm" onClick={handleExportCalls} disabled={calls.length === 0}>
             <Download className="mr-2 h-4 w-4" />
