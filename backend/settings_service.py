@@ -221,36 +221,49 @@ class SettingsService:
         if active_only:
             query = query.filter(Provider.is_active == True)
 
-        return query.order_by(Provider.display_order, Provider.name).all()
+        return query.order_by(Provider.name).all()
 
     @staticmethod
-    def get_provider(db: Session, provider_id: int) -> Optional[Provider]:
-        """Get a single provider by ID."""
-        return db.query(Provider).filter(Provider.id == provider_id).first()
+    def get_provider(db: Session, provider_id: str) -> Optional[Provider]:
+        """Get a single provider by ID (UUID string)."""
+        try:
+            import uuid as uuid_lib
+            provider_uuid = uuid_lib.UUID(provider_id)
+            return db.query(Provider).filter(Provider.id == provider_uuid).first()
+        except (ValueError, AttributeError):
+            return None
 
     @staticmethod
     def create_provider(db: Session, provider_data: dict) -> Provider:
         """Create a new provider."""
-        # Set display_order to max + 1 if not provided
-        if 'display_order' not in provider_data:
-            max_order = db.query(func.max(Provider.display_order)).scalar() or 0
-            provider_data['display_order'] = max_order + 1
+        # Note: Provider model uses UUID and has these fields:
+        # name, email, phone, specialties, hire_date, avatar_url, bio, is_active
+        valid_fields = {'name', 'email', 'phone', 'specialties', 'bio', 'is_active', 'hire_date', 'avatar_url'}
+        filtered_data = {k: v for k, v in provider_data.items() if k in valid_fields}
 
-        provider = Provider(**provider_data)
+        provider = Provider(**filtered_data)
         db.add(provider)
         db.commit()
         db.refresh(provider)
         return provider
 
     @staticmethod
-    def update_provider(db: Session, provider_id: int, provider_data: dict) -> Optional[Provider]:
+    def update_provider(db: Session, provider_id: str, provider_data: dict) -> Optional[Provider]:
         """Update a provider."""
-        provider = db.query(Provider).filter(Provider.id == provider_id).first()
+        try:
+            import uuid as uuid_lib
+            provider_uuid = uuid_lib.UUID(provider_id)
+            provider = db.query(Provider).filter(Provider.id == provider_uuid).first()
+        except (ValueError, AttributeError):
+            return None
+
         if not provider:
             return None
 
+        # Only update fields that exist in main Provider model
+        valid_fields = {'name', 'email', 'phone', 'specialties', 'bio', 'is_active', 'hire_date', 'avatar_url'}
         for key, value in provider_data.items():
-            if hasattr(provider, key):
+            if key in valid_fields and hasattr(provider, key):
                 setattr(provider, key, value)
 
         db.commit()
@@ -258,9 +271,15 @@ class SettingsService:
         return provider
 
     @staticmethod
-    def delete_provider(db: Session, provider_id: int) -> bool:
+    def delete_provider(db: Session, provider_id: str) -> bool:
         """Delete a provider (soft delete by setting inactive)."""
-        provider = db.query(Provider).filter(Provider.id == provider_id).first()
+        try:
+            import uuid as uuid_lib
+            provider_uuid = uuid_lib.UUID(provider_id)
+            provider = db.query(Provider).filter(Provider.id == provider_uuid).first()
+        except (ValueError, AttributeError):
+            return False
+
         if not provider:
             return False
 
@@ -290,10 +309,10 @@ class SettingsService:
         return services_dict
 
     @staticmethod
-    def get_providers_dict(db: Session) -> Dict[str, Any]:
+    def get_providers_dict(db: Session) -> List[Dict[str, Any]]:
         """
         Get providers in a structured format for the AI.
-        Returns list of provider details.
+        Returns list of provider details (compatible with main branch Provider model).
         """
         providers = SettingsService.get_all_providers(db, active_only=True)
         providers_list = []
@@ -301,9 +320,8 @@ class SettingsService:
         for provider in providers:
             providers_list.append({
                 "name": provider.name,
-                "title": provider.title,
                 "specialties": provider.specialties or [],
-                "credentials": provider.credentials or ""
+                "bio": provider.bio or ""
             })
 
         return providers_list

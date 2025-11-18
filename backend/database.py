@@ -198,6 +198,153 @@ class DailyMetric(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class Provider(Base):
+    """Provider/practitioner model for med spa staff."""
+    __tablename__ = "providers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, index=True)
+    phone = Column(String(20))
+
+    # Specialties as array
+    specialties = Column(ARRAY(Text), nullable=True)
+
+    # Profile info
+    hire_date = Column(DateTime, nullable=True)
+    avatar_url = Column(String(500), nullable=True)
+    bio = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    consultations = relationship("InPersonConsultation", back_populates="provider")
+    insights = relationship("AIInsight", back_populates="provider", foreign_keys="AIInsight.provider_id")
+    performance_metrics = relationship("ProviderPerformanceMetric", back_populates="provider")
+
+
+class InPersonConsultation(Base):
+    """In-person consultation recordings and transcripts."""
+    __tablename__ = "in_person_consultations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("providers.id"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
+
+    # Consultation details
+    service_type = Column(String(100), index=True)
+    duration_seconds = Column(Integer, nullable=True)
+
+    # Recording and transcript
+    recording_url = Column(String(500), nullable=True)
+    transcript = Column(Text, nullable=True)
+
+    # Outcome
+    outcome = Column(String(50), index=True)  # 'booked', 'declined', 'thinking', 'follow_up_needed'
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
+
+    # AI analytics
+    satisfaction_score = Column(Float, nullable=True)  # 0-10
+    sentiment = Column(String(50), nullable=True)  # positive, neutral, negative, mixed
+    ai_summary = Column(Text, nullable=True)
+
+    # Manual notes
+    notes = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    ended_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    provider = relationship("Provider", back_populates="consultations")
+    customer = relationship("Customer")
+    appointment = relationship("Appointment")
+    insights = relationship("AIInsight", back_populates="consultation", foreign_keys="AIInsight.consultation_id")
+
+    __table_args__ = (
+        CheckConstraint("outcome IS NULL OR outcome IN ('booked', 'declined', 'thinking', 'follow_up_needed')", name='check_consultation_outcome'),
+        CheckConstraint("satisfaction_score IS NULL OR (satisfaction_score >= 0 AND satisfaction_score <= 10)", name='check_consultation_satisfaction'),
+        CheckConstraint("sentiment IS NULL OR sentiment IN ('positive', 'neutral', 'negative', 'mixed')", name='check_consultation_sentiment'),
+    )
+
+
+class AIInsight(Base):
+    """AI-generated insights from consultation analysis."""
+    __tablename__ = "ai_insights"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Type of insight
+    insight_type = Column(String(50), nullable=False, index=True)
+    # Types: 'best_practice', 'objection_handling', 'coaching_opportunity', 'comparison', 'strength', 'weakness'
+
+    # Associated entities
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("providers.id"), nullable=True, index=True)
+    consultation_id = Column(UUID(as_uuid=True), ForeignKey("in_person_consultations.id"), nullable=True, index=True)
+    reference_consultation_id = Column(UUID(as_uuid=True), ForeignKey("in_person_consultations.id"), nullable=True)
+
+    # Insight content
+    title = Column(String(500), nullable=False)
+    insight_text = Column(Text, nullable=False)
+    supporting_quote = Column(Text, nullable=True)  # Exact transcript excerpt
+    recommendation = Column(Text, nullable=True)  # Actionable coaching tip
+
+    # Metadata
+    confidence_score = Column(Float, nullable=True)  # 0-1
+    is_positive = Column(Boolean, default=True)  # true = strength, false = opportunity
+
+    # Status
+    is_reviewed = Column(Boolean, default=False)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Relationships
+    provider = relationship("Provider", back_populates="insights", foreign_keys=[provider_id])
+    consultation = relationship("InPersonConsultation", back_populates="insights", foreign_keys=[consultation_id])
+
+    __table_args__ = (
+        CheckConstraint("confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)", name='check_insight_confidence'),
+    )
+
+
+class ProviderPerformanceMetric(Base):
+    """Aggregated performance metrics for providers."""
+    __tablename__ = "provider_performance_metrics"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("providers.id"), nullable=False, index=True)
+
+    # Time period
+    period_start = Column(DateTime, nullable=False, index=True)
+    period_end = Column(DateTime, nullable=False, index=True)
+    period_type = Column(String(20), nullable=False)  # 'daily', 'weekly', 'monthly'
+
+    # Consultation metrics
+    total_consultations = Column(Integer, default=0)
+    successful_bookings = Column(Integer, default=0)
+    conversion_rate = Column(Float, nullable=True)  # successful_bookings / total_consultations
+
+    # Financial metrics
+    total_revenue = Column(Float, default=0.0)
+
+    # Quality metrics
+    avg_consultation_duration_seconds = Column(Integer, nullable=True)
+    avg_satisfaction_score = Column(Float, nullable=True)
+    avg_nps_score = Column(Float, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    provider = relationship("Provider", back_populates="performance_metrics")
+
+    __table_args__ = (
+        CheckConstraint("period_type IN ('daily', 'weekly', 'monthly')", name='check_period_type'),
+    )
+
+
 # ==================== Omnichannel Communications Models (Phase 2) ====================
 
 class Conversation(Base):
@@ -212,6 +359,10 @@ class Conversation(Base):
 
     channel = Column(String(20), nullable=False, index=True)
     status = Column(String(20), nullable=False, index=True)
+
+    # Research/Outbound campaigns support
+    conversation_type = Column(String(50), nullable=False, default="inbound_service", index=True)  # inbound_service, research, outbound_sales
+    campaign_id = Column(UUID(as_uuid=True), ForeignKey("research_campaigns.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # Timestamps
     initiated_at = Column(DateTime, nullable=False, index=True)
@@ -237,12 +388,15 @@ class Conversation(Base):
     customer = relationship("Customer", back_populates="conversations")
     messages = relationship("CommunicationMessage", back_populates="conversation", cascade="all, delete-orphan")
     events = relationship("CommunicationEvent", back_populates="conversation", cascade="all, delete-orphan")
+    campaign = relationship("ResearchCampaign", back_populates="conversations")
+    manual_call_log = relationship("ManualCallLog", uselist=False, back_populates="conversation", cascade="all, delete-orphan")
 
     __table_args__ = (
         CheckConstraint("channel IN ('voice', 'sms', 'email')", name='check_channel'),
         CheckConstraint("status IN ('active', 'completed', 'failed')", name='check_status'),
         CheckConstraint("satisfaction_score IS NULL OR (satisfaction_score >= 1 AND satisfaction_score <= 10)", name='check_satisfaction_score'),
         CheckConstraint("sentiment IS NULL OR sentiment IN ('positive', 'neutral', 'negative', 'mixed')", name='check_sentiment'),
+        CheckConstraint("conversation_type IN ('inbound_service', 'research', 'outbound_sales')", name='check_conversation_type'),
     )
 
 
@@ -391,6 +545,102 @@ class CommunicationEvent(Base):
     # appointment_action, appointment_booked, appointment_rescheduled, appointment_cancelled
 
 
+# ==================== Research & Outbound Campaign Models ====================
+
+class ResearchCampaign(Base):
+    """
+    Research and outbound sales campaign model.
+    Defines customer segments and agent configurations for outbound communications.
+    """
+    __tablename__ = "research_campaigns"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    campaign_type = Column(String(50), nullable=False, index=True)  # research, outbound_sales
+
+    # Segment criteria (stores filter conditions as JSON)
+    segment_criteria = Column(JSONB, nullable=False, default={})
+
+    # Agent configuration (prompt, questions, voice settings)
+    agent_config = Column(JSONB, nullable=False, default={})
+
+    # Channel selection
+    channel = Column(String(20), nullable=False)  # sms, email, voice, multi
+
+    # Campaign status
+    status = Column(String(50), nullable=False, default="draft", index=True)  # draft, active, paused, completed
+
+    # Execution tracking
+    total_targeted = Column(Integer, default=0)
+    total_contacted = Column(Integer, default=0)
+    total_responded = Column(Integer, default=0)
+
+    # Timestamps
+    launched_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Future: admin user who created this
+    created_by = Column(String(255), nullable=True)
+
+    # Relationships
+    conversations = relationship("Conversation", back_populates="campaign")
+
+    __table_args__ = (
+        CheckConstraint("campaign_type IN ('research', 'outbound_sales')", name='check_campaign_type'),
+        CheckConstraint("channel IN ('sms', 'email', 'voice', 'multi')", name='check_campaign_channel'),
+        CheckConstraint("status IN ('draft', 'active', 'paused', 'completed')", name='check_campaign_status'),
+    )
+
+
+class CustomerSegment(Base):
+    """
+    Reusable customer segment definitions.
+    Allows saving and reusing segment criteria across multiple campaigns.
+    """
+    __tablename__ = "customer_segments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+
+    # Segment criteria (same structure as campaign segment_criteria)
+    criteria = Column(JSONB, nullable=False, default={})
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ManualCallLog(Base):
+    """
+    Manual call logs for staff-initiated calls.
+    Links to conversation for transcription and AI analysis.
+    """
+    __tablename__ = "manual_call_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Staff info
+    staff_name = Column(String(255), nullable=True)
+
+    # Pre-transcription notes
+    call_notes = Column(Text, nullable=True)
+
+    # Transcription status
+    transcription_status = Column(String(50), nullable=False, default="pending", index=True)  # pending, completed, failed
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationship
+    conversation = relationship("Conversation", back_populates="manual_call_log")
+
+    __table_args__ = (
+        CheckConstraint("transcription_status IN ('pending', 'completed', 'failed')", name='check_transcription_status'),
+    )
+
+
 # ==================== Med Spa Settings Models (Phase 3 - Configuration Management) ====================
 
 class MedSpaSettings(Base):
@@ -486,24 +736,6 @@ class Service(Base):
         CheckConstraint('duration_minutes > 0', name='check_duration_positive'),
         CheckConstraint('price_min IS NULL OR price_max IS NULL OR price_min <= price_max', name='check_price_range'),
     )
-
-
-class Provider(Base):
-    """Med spa providers (doctors, nurses, estheticians)."""
-    __tablename__ = "providers"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), nullable=False)
-    title = Column(String(255), nullable=False)  # "Medical Director", "Nurse Injector", etc.
-    specialties = Column(ARRAY(Text), nullable=True)
-    credentials = Column(String(255), nullable=True)
-    bio = Column(Text, nullable=True)
-
-    is_active = Column(Boolean, default=True, index=True)
-    display_order = Column(Integer, default=0)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 # Database initialization
