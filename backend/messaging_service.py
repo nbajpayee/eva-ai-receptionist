@@ -224,6 +224,164 @@ class MessagingService:
         return max(inbound_messages, key=lambda m: m.sent_at or conversation.last_activity_at or conversation.initiated_at)
 
     @staticmethod
+    def _resolve_selected_slot(pending: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if not pending:
+            return None
+
+        selected_slot = pending.get("selected_slot") if isinstance(pending, dict) else None
+        slots = pending.get("slots") if isinstance(pending, dict) else None
+
+        if not selected_slot and isinstance(slots, list):
+            index = pending.get("selected_option_index")
+            if isinstance(index, int) and 1 <= index <= len(slots):
+                selected_slot = slots[index - 1]
+
+        if isinstance(selected_slot, dict) and selected_slot.get("start"):
+            return selected_slot
+        return None
+
+    @staticmethod
+    def _should_execute_booking(db: Session, conversation: Conversation) -> Optional[Dict[str, Any]]:
+        pending = SlotSelectionManager.get_pending_slot_offers(db, conversation)
+        if not pending:
+            return None
+
+        selected_slot = MessagingService._resolve_selected_slot(pending)
+        if not selected_slot:
+            return None
+
+        customer = conversation.customer
+        if not customer or not customer.name or not customer.phone:
+            return None
+
+        last_message = MessagingService._latest_customer_message(conversation)
+        if not last_message or not last_message.content:
+            return None
+
+        selected_message_id = pending.get("selected_by_message_id")
+        if selected_message_id and str(last_message.id) != selected_message_id:
+            return None
+
+        metadata = SlotSelectionManager.conversation_metadata(conversation)
+        last_appointment = metadata.get("last_appointment") if isinstance(metadata, dict) else {}
+        if isinstance(last_appointment, dict) and last_appointment.get("status") == "scheduled":
+            last_start = last_appointment.get("start_time")
+            if last_start and last_start == selected_slot.get("start"):
+                return None
+
+        return {
+            "pending": pending,
+            "selected_slot": selected_slot,
+            "customer": customer,
+            "last_message": last_message,
+        }
+
+    @staticmethod
+    def _execute_deterministic_booking(
+        *,
+        db: Session,
+        conversation: Conversation,
+        calendar_service,
+        channel: str,
+        trace: Callable[..., None],
+        readiness: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        customer: Customer = readiness["customer"]
+        pending = readiness["pending"]
+        selected_slot = readiness["selected_slot"]
+
+        arguments: Dict[str, Any] = {
+            "customer_name": customer.name,
+            "customer_phone": customer.phone,
+            "customer_email": customer.email,
+            "start_time": selected_slot.get("start") or selected_slot.get("start_time"),
+            "service_type": pending.get("service_type"),
+        }
+
+        if not arguments["start_time"] or not arguments["service_type"]:
+            return {"status": "skipped"}
+
+        provider = pending.get("provider")
+        if provider:
+            arguments["provider"] = provider
+
+        tool_call_id = f"autobook_{uuid4()}"
+        call = SimpleNamespace(
+            id=tool_call_id,
+            type="function",
+            function=SimpleNamespace(
+                name="book_appointment",
+                arguments=json.dumps(arguments),
+            ),
+        )
+
+        trace(
+            "Deterministic book_appointment -> call_id=%s start=%s service=%s",
+            tool_call_id,
+            arguments.get("start_time"),
+            arguments.get("service_type"),
+        )
+
+        result = MessagingService._execute_tool_call(
+            db=db,
+            conversation=conversation,
+            customer=customer,
+            calendar_service=calendar_service,
+            call=call,
+        )
+
+        output = result.get("output") or {}
+        success = output.get("success") is True
+
+        tool_history = [
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": tool_call_id,
+                        "type": "function",
+                        "function": {
+                            "name": "book_appointment",
+                            "arguments": json.dumps(
+                                {
+                                    k: v
+                                    for k, v in arguments.items()
+                                    if v is not None
+                                }
+                            ),
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": tool_call_id,
+                "content": json.dumps(output),
+            },
+        ]
+
+        if success:
+            confirmation = MessagingService.build_booking_confirmation_message(
+                channel=channel,
+                tool_output=output,
+            )
+            if not confirmation:
+                confirmation = "✓ Booked! Your appointment is confirmed."
+            return {
+                "status": "success",
+                "message": confirmation,
+                "tool_history": tool_history,
+            }
+
+        trace("Deterministic booking failed: %s", output)
+        return {
+            "status": "failure",
+            "result": result,
+            "tool_history": tool_history,
+        }
+
+    @staticmethod
     def _extract_booking_params(conversation: Conversation) -> Tuple[str, str]:
         """Extract date and service type from recent conversation messages."""
         metadata = SlotSelectionManager.conversation_metadata(conversation)
@@ -506,6 +664,47 @@ class MessagingService:
             role = "user" if message.direction == "inbound" else "assistant"
             content = message.content or ""
             history.append({"role": role, "content": content})
+
+        # CRITICAL FIX: If pending slot offers exist, inject them into history
+        # so the AI knows availability was already checked and doesn't re-check
+        metadata = SlotSelectionManager.conversation_metadata(conversation)
+        pending_offers = metadata.get("pending_slot_offers")
+        if pending_offers and isinstance(pending_offers, dict):
+            # Reconstruct the check_availability tool call and result
+            tool_call_id = pending_offers.get("source_tool_call_id", "reconstructed_call")
+            service_type = pending_offers.get("service_type")
+            date = pending_offers.get("date")
+            slots = pending_offers.get("slots", [])
+
+            # Create a synthetic availability output matching what check_availability returns
+            availability_output = {
+                "success": True,
+                "date": date,
+                "service_type": service_type,
+                "all_slots": slots,
+                "available_slots": slots,
+                "availability_summary": f"We have availability on {date}",
+                "suggested_slots": slots[:3] if len(slots) > 3 else slots,
+            }
+
+            # Inject tool call and result into history
+            history.append({
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{
+                    "id": tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": "check_availability",
+                        "arguments": json.dumps({"date": date, "service_type": service_type})
+                    }
+                }]
+            })
+            history.append({
+                "role": "tool",
+                "tool_call_id": tool_call_id,
+                "content": json.dumps(availability_output)
+            })
 
         return history
 
@@ -1139,6 +1338,28 @@ class MessagingService:
                     exc,
                     exc_info=True
                 )
+
+        readiness = MessagingService._should_execute_booking(db, conversation)
+        if readiness:
+            booking_result = MessagingService._execute_deterministic_booking(
+                db=db,
+                conversation=conversation,
+                calendar_service=calendar_service,
+                channel=channel,
+                trace=trace,
+                readiness=readiness,
+            )
+
+            tool_history = booking_result.get("tool_history") or []
+            if tool_history:
+                history.extend(tool_history)
+
+            if booking_result.get("status") == "success":
+                trace("Deterministic booking completed successfully.")
+                return booking_result["message"], None
+
+            if booking_result.get("status") == "failure":
+                trace("Deterministic booking failed; proceeding with AI follow-up.")
 
         # With preemptive tool calling, we don't need complex retry loops.
         # Just call the AI once with the availability already in context.

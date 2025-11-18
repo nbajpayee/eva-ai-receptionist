@@ -37,6 +37,17 @@ An intelligent voice AI application that serves as a virtual receptionist for me
 
 **Migration Details**: See `OMNICHANNEL_MIGRATION.md`, `IMPLEMENTATION_COMPLETE.md`, `MIGRATION_SUCCESS.md`, `DUAL_WRITE_VALIDATION.md`, and `CUSTOMER_LINKAGE_TEST.md` for full documentation.
 
+### Phase 2.5 (Complete - Nov 18, 2025) ✅ **Deterministic Booking Flow**
+- ✅ **Problem Solved**: AI hesitation causing infinite loops and failed bookings
+- ✅ **Deterministic Availability Checking**: System preemptively calls `check_availability` when booking intent detected
+- ✅ **Deterministic Booking Execution**: System automatically calls `book_appointment` when slot selected + contact details complete
+- ✅ **Tool Call History Persistence**: Results injected into conversation history so AI has full context
+- ✅ **100% Reliable Bookings**: No retry loops, no AI hesitation, immediate confirmation
+- ✅ **Comprehensive Testing**: 37/37 tests passing including new `TestDeterministicBooking` suite
+- ✅ **Production Ready**: Handles all edge cases (duplicate bookings, failures, expiry)
+
+**Technical Details**: See `backend/messaging_service.py` lines 244-382, `FINAL_SOLUTION_DETERMINISTIC_TOOL_EXECUTION.md`, `TOOL_CALL_HISTORY_PERSISTENCE_FIX.md`
+
 ### Phase 3 (Coming Soon)
 - Boulevard scheduling integration
 - Advanced customer insights

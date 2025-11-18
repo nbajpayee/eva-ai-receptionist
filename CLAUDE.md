@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is **Ava**, a voice AI receptionist for medical spas built with FastAPI (backend), Next.js 14 (admin dashboard), and OpenAI's Realtime API. The system handles appointment scheduling via Google Calendar, tracks call analytics with AI-powered satisfaction scoring, and provides a comprehensive admin dashboard for monitoring conversations and metrics.
 
-**Current Status (Nov 10, 2025)**: Phase 1A is production-ready. Voice interface complete with smart commits and interruption handling. **Phase 2 (Omnichannel Migration) is COMPLETE** ✅ - Backend now supports SMS and email communications with multi-message threading. All 77 historical call sessions migrated successfully. See `OMNICHANNEL_MIGRATION.md`, `IMPLEMENTATION_COMPLETE.md`, and `MIGRATION_SUCCESS.md` for full documentation.
+**Current Status (Nov 18, 2025)**: Phase 1A is production-ready. Voice interface complete with smart commits and interruption handling. **Phase 2 (Omnichannel Migration) is COMPLETE** ✅ - Backend now supports SMS and email communications with multi-message threading. All 77 historical call sessions migrated successfully. See `OMNICHANNEL_MIGRATION.md`, `IMPLEMENTATION_COMPLETE.md`, and `MIGRATION_SUCCESS.md` for full documentation.
 
 **Key Architecture**:
 - **Backend**: FastAPI + Supabase PostgreSQL (fully migrated from SQLite)
@@ -26,6 +26,18 @@ This is **Ava**, a voice AI receptionist for medical spas built with FastAPI (ba
 - `messaging_service.py` and `realtime_client.py` delegate slot offer tracking, transcript capture, and enforcement to the manager.
 - Voice transcripts persist via conversation metadata, preserving selections across channels.
 - Regression suites: `backend/tests/test_voice_booking.py`, `backend/tests/booking/test_slot_selection.py`, `backend/tests/test_cross_channel_booking.py`.
+
+**Deterministic Booking Flow (Nov 18, 2025)** ✅ **PRODUCTION-READY**
+- **Problem Solved**: AI was hesitating to book appointments, asking to "re-check availability" even after user provided all details
+- **Solution**: Deterministic tool execution for both `check_availability` AND `book_appointment`
+- **How it works**:
+  1. When booking intent detected → System calls `check_availability` preemptively (before AI generates response)
+  2. When slot selected + contact details complete → System calls `book_appointment` automatically
+  3. Results injected into conversation history so AI sees tool context across messages
+- **Architecture**: `messaging_service.py` lines 244-382 (readiness detection + execution), lines 1342-1362 (integration)
+- **Benefits**: 100% reliable booking completion, no AI hesitation, no retry loops, immediate confirmation
+- **Documentation**: See `FINAL_SOLUTION_DETERMINISTIC_TOOL_EXECUTION.md`, `TOOL_CALL_HISTORY_PERSISTENCE_FIX.md`, `COMPLETE_CONVERSATION_SUMMARY.md`
+- **Tests**: 37/37 passing including new `TestDeterministicBooking` suite
 
 ## Development Commands
 

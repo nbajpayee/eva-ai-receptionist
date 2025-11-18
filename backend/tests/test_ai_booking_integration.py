@@ -285,6 +285,68 @@ class TestEndToEndBookingFlow:
         # not by generate_ai_response itself. This test verifies the AI behavior only.
 
 
+@patch("messaging_service.handle_book_appointment")
+@patch("messaging_service.openai_client.chat.completions.create")
+class TestDeterministicBooking:
+    """Tests around the proactive book_appointment execution."""
+
+    @patch("messaging_service.MessagingService._get_calendar_service")
+    def test_auto_books_when_slot_selected_and_details_complete(
+        self,
+        mock_calendar,
+        mock_openai,
+        mock_book,
+        db_session,
+        customer,
+        conversation,
+    ):
+        slots = _build_availability_output()["available_slots"]
+
+        SlotSelectionManager.record_offers(
+            db_session,
+            conversation,
+            tool_call_id="auto-test",
+            arguments={"date": "2025-11-20", "service_type": "botox"},
+            output={
+                "success": True,
+                "available_slots": slots,
+                "all_slots": slots,
+                "date": "2025-11-20",
+                "service_type": "botox",
+            },
+        )
+
+        selection_message = _add_user_message(db_session, conversation, "Option 1 sounds perfect")
+        assert SlotSelectionManager.capture_selection(db_session, conversation, selection_message) is True
+
+        mock_calendar.return_value = Mock()
+        mock_book.return_value = {
+            "success": True,
+            "event_id": "evt-123",
+            "start_time": slots[0]["start"],
+            "original_start_time": slots[0]["start"],
+            "service_type": "botox",
+            "service": "Botox",
+        }
+
+        response_text, message = MessagingService.generate_ai_response(
+            db_session,
+            conversation.id,
+            "sms",
+        )
+
+        mock_openai.assert_not_called()
+        mock_book.assert_called_once()
+        assert "Booked" in response_text
+        assert message is None
+
+        db_session.refresh(conversation)
+        metadata = SlotSelectionManager.conversation_metadata(conversation)
+        last_appt = metadata.get("last_appointment") or {}
+        assert last_appt.get("status") == "scheduled"
+        assert last_appt.get("start_time") == slots[0]["start"]
+
+
 class TestNonBookingRequests:
     """Ensure non-booking flows do not trigger preemptive availability checks."""
 
