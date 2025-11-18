@@ -1,4 +1,7 @@
-import { ArrowUpRight, Clock3, MessageSquare, Smile, Users } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { ArrowUpRight, Clock3, MessageSquare, Smile, Users, Download } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { SplitStatCard } from "@/components/split-stat-card";
 import {
@@ -6,6 +9,8 @@ import {
   type CallRecord,
 } from "@/components/call-log-table";
 import { LiveStatus } from "@/components/dashboard/live-status";
+import { Button } from "@/components/ui/button";
+import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
 
 type MetricsResponse = {
   period: string;
@@ -148,11 +153,41 @@ const numberFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
-export default async function Home() {
-  const [metrics, calls] = await Promise.all([
-    fetchMetrics(),
-    fetchCallHistory(),
-  ]);
+export default function Home() {
+  const [metrics, setMetrics] = useState<MetricsResponse>(defaultMetrics);
+  const [calls, setCalls] = useState<CallRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      const [metricsData, callsData] = await Promise.all([
+        fetchMetrics(),
+        fetchCallHistory(),
+      ]);
+
+      setMetrics(metricsData);
+      setCalls(callsData);
+      setIsLoading(false);
+    };
+
+    loadData();
+  }, []);
+
+  const handleExportCalls = () => {
+    const exportData = calls.map((call) => ({
+      ID: call.id,
+      "Started At": new Date(call.startedAt).toISOString(),
+      "Duration (seconds)": call.durationSeconds || 0,
+      Outcome: call.outcome || "",
+      Phone: call.phoneNumber || "",
+      "Customer Name": call.customerName || "",
+      Channel: call.channel || "voice",
+      "Satisfaction Score": call.satisfactionScore || "",
+      Escalated: call.escalated ? "Yes" : "No",
+    }));
+
+    exportToCSV(exportData, generateExportFilename("calls"));
+  };
 
   return (
     <div className="space-y-10">
@@ -213,9 +248,15 @@ export default async function Home() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex flex-col gap-2">
-          <h2 className="text-lg font-semibold text-zinc-900">Operational feed</h2>
-          <p className="text-sm text-zinc-500">Monitoring today’s customer traffic.</p>
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-lg font-semibold text-zinc-900">Operational feed</h2>
+            <p className="text-sm text-zinc-500">Monitoring today's customer traffic.</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleExportCalls} disabled={calls.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Export Calls
+          </Button>
         </div>
         <CallLogTable calls={calls} />
       </section>

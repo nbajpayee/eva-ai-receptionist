@@ -1,9 +1,13 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Phone, Mail, AlertTriangle, Baby } from "lucide-react";
+import { Plus, Phone, Mail, AlertTriangle, Baby, Download } from "lucide-react";
 import { format } from "date-fns";
+import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
 
 interface Customer {
   id: number;
@@ -44,31 +48,49 @@ function resolveInternalUrl(path: string): string {
   return `${getAppOrigin()}${basePath}${path}`;
 }
 
-async function fetchCustomers(): Promise<Customer[]> {
-  try {
-    const url = resolveInternalUrl("/api/admin/customers?page=1&page_size=50");
+export default function CustomersPage() {
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-    const response = await fetch(url, {
-      cache: "no-store",
-    });
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        const response = await fetch("/api/admin/customers?page=1&page_size=50");
 
-    if (!response.ok) {
-      console.warn("Failed to fetch customers", response.statusText);
-      return [];
-    }
+        if (!response.ok) {
+          console.warn("Failed to fetch customers", response.statusText);
+          return;
+        }
 
-    const data = (await response.json()) as CustomersResponse;
-    return data.customers || [];
-  } catch (error) {
-    console.error("Error fetching customers", error);
-    return [];
-  }
-}
+        const data = (await response.json()) as CustomersResponse;
+        setCustomers(data.customers || []);
+      } catch (error) {
+        console.error("Error fetching customers", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-export const dynamic = "force-dynamic";
+    fetchCustomers();
+  }, []);
 
-export default async function CustomersPage() {
-  const customers = await fetchCustomers();
+  const handleExport = () => {
+    const exportData = customers.map((customer) => ({
+      ID: customer.id,
+      Name: customer.name,
+      Phone: customer.phone,
+      Email: customer.email || "",
+      "New Client": customer.is_new_client ? "Yes" : "No",
+      "Has Allergies": customer.has_allergies ? "Yes" : "No",
+      "Is Pregnant": customer.is_pregnant ? "Yes" : "No",
+      "Appointments": customer.appointment_count || 0,
+      "Calls": customer.call_count || 0,
+      "Messages": customer.conversation_count || 0,
+      "Added": customer.created_at ? format(new Date(customer.created_at), "yyyy-MM-dd") : "",
+    }));
+
+    exportToCSV(exportData, generateExportFilename("customers"));
+  };
 
   return (
     <div className="space-y-6">
@@ -79,13 +101,25 @@ export default async function CustomersPage() {
             Manage customer profiles, medical screening, and interaction history
           </p>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          New Customer
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={customers.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            New Customer
+          </Button>
+        </div>
       </header>
 
-      {customers.length === 0 && (
+      {isLoading && (
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
+          <p className="text-sm text-zinc-600">Loading customers...</p>
+        </div>
+      )}
+
+      {!isLoading && customers.length === 0 && (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
           <p className="text-sm text-zinc-600">
             No customers found. Customers will appear here once they interact with Ava.
