@@ -256,6 +256,21 @@ class SlotSelectionCore:
                 choice_idx = int(match.group(1))
             except ValueError:  # pragma: no cover - defensive
                 continue
+
+            start_idx, end_idx = match.span()
+            prev_char = normalized[start_idx - 1] if start_idx > 0 else ""
+            next_char = normalized[end_idx] if end_idx < len(normalized) else ""
+            remainder = normalized[end_idx:]
+            remainder_stripped = remainder.lstrip()
+
+            looks_like_time = (
+                prev_char == ":"
+                or next_char == ":"
+                or remainder_stripped.startswith(("am", "pm", "a.m", "p.m"))
+            )
+            if looks_like_time:
+                continue
+
             if 1 <= choice_idx <= len(slots):
                 return choice_idx
 

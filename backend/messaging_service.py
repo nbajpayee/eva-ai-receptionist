@@ -258,10 +258,14 @@ class MessagingService:
         if not last_message or not last_message.content:
             return None
 
-        selected_message_id = pending.get("selected_by_message_id")
-        if selected_message_id and str(last_message.id) != selected_message_id:
+        selected_message_id = pending.get("selected_by_message_id") if isinstance(pending, dict) else None
+        if not selected_message_id:
             return None
 
+        if str(last_message.id) != str(selected_message_id):
+            return None
+
+        # Don't execute if last appointment already matches this slot (prevents duplicates)
         metadata = SlotSelectionManager.conversation_metadata(conversation)
         last_appointment = metadata.get("last_appointment") if isinstance(metadata, dict) else {}
         if isinstance(last_appointment, dict) and last_appointment.get("status") == "scheduled":
@@ -362,6 +366,12 @@ class MessagingService:
         ]
 
         if success:
+            # Clear booking intent and slot offers after successful booking
+            metadata = SlotSelectionManager.conversation_metadata(conversation)
+            metadata["pending_booking_intent"] = False
+            SlotSelectionManager.persist_conversation_metadata(db, conversation, metadata)
+            SlotSelectionManager.clear_offers(db, conversation)
+
             confirmation = MessagingService.build_booking_confirmation_message(
                 channel=channel,
                 tool_output=output,
@@ -1315,14 +1325,22 @@ class MessagingService:
                         "content": json.dumps(output)
                     })
 
-                    metadata.update(
-                        {
-                            "pending_booking_intent": True,
-                            "pending_booking_date": date,
-                            "pending_booking_service": service_type,
-                        }
-                    )
-                    SlotSelectionManager.persist_conversation_metadata(db, conversation, metadata)
+                    # Only set booking intent if not already completed
+                    # If last_appointment exists with same slot, don't restart the booking flow
+                    should_set_intent = True
+                    last_appt = metadata.get("last_appointment")
+                    if isinstance(last_appt, dict) and last_appt.get("status") == "scheduled":
+                        should_set_intent = False
+
+                    if should_set_intent:
+                        metadata.update(
+                            {
+                                "pending_booking_intent": True,
+                                "pending_booking_date": date,
+                                "pending_booking_service": service_type,
+                            }
+                        )
+                        SlotSelectionManager.persist_conversation_metadata(db, conversation, metadata)
 
                     trace("Preemptive check_availability succeeded. Injected results into context.")
                 else:
@@ -1441,6 +1459,26 @@ class MessagingService:
             return MessagingService._fallback_response(channel), None
 
         try:
+            # Check if any tool result was a successful book_appointment
+            booking_success = None
+            for result in tool_results:
+                output = result.get("output", {})
+                if isinstance(output, dict) and output.get("success") is True:
+                    # Check if this was a booking operation
+                    if output.get("event_id") or output.get("appointment_id"):
+                        booking_success = output
+                        break
+
+            # If booking succeeded, force a confirmation message
+            if booking_success:
+                confirmation = MessagingService.build_booking_confirmation_message(
+                    channel=channel,
+                    tool_output=booking_success,
+                )
+                if confirmation:
+                    # Return confirmation directly, don't let AI generate ambiguous text
+                    return confirmation, None
+
             response = openai_client.chat.completions.create(
                 model=s.OPENAI_MESSAGING_MODEL,
                 messages=history,
