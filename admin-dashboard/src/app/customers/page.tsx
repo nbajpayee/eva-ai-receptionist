@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowUpRight, Users, TrendingUp, AlertTriangle, Activity } from "lucide-react";
+import { ArrowUpRight, Users, TrendingUp, AlertTriangle, Activity, Download } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { SplitStatCard } from "@/components/split-stat-card";
 import { CustomerTable, type Customer } from "@/components/customer-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 type Analytics = {
@@ -94,6 +95,12 @@ export default function CustomersPage() {
     setPage(1); // Reset to first page on search
   };
 
+  const handleExportCSV = () => {
+    // Open the export endpoint in a new window to trigger download
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+    window.open(`${baseUrl}/api/admin/customers/export/csv`, "_blank");
+  };
+
   // Calculate channel percentages
   const totalChannelInteractions = Object.values(analytics.channel_distribution).reduce(
     (sum, count) => sum + count,
@@ -114,11 +121,17 @@ export default function CustomersPage() {
   return (
     <div className="space-y-10">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-zinc-900">Customers</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Manage customer relationships and track engagement across all channels
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-zinc-900">Customers</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            Manage customer relationships and track engagement across all channels
+          </p>
+        </div>
+        <Button variant="outline" onClick={handleExportCSV}>
+          <Download className="mr-2 h-4 w-4" />
+          Export to CSV
+        </Button>
       </div>
 
       {/* Metrics Row */}

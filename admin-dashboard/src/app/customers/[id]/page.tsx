@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CustomerTimeline, type TimelineItem } from "@/components/customer-timeline";
 import { EditCustomerDialog } from "@/components/edit-customer-dialog";
+import { BookAppointmentDialog } from "@/components/book-appointment-dialog";
 import { formatDistanceToNow, format } from "date-fns";
 
 type CustomerData = {
@@ -78,6 +79,7 @@ export default function CustomerDetailPage() {
   const [timelinePage, setTimelinePage] = useState(1);
   const [timelineHasMore, setTimelineHasMore] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [bookAppointmentDialogOpen, setBookAppointmentDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchCustomerData();
@@ -219,6 +221,13 @@ export default function CustomerDetailPage() {
 
             {/* Quick Actions */}
             <div className="flex flex-col gap-2">
+              <Button
+                variant="default"
+                onClick={() => setBookAppointmentDialogOpen(true)}
+              >
+                <Calendar className="mr-2 h-4 w-4" />
+                Book Appointment
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => setEditDialogOpen(true)}
@@ -558,6 +567,23 @@ export default function CustomerDetailPage() {
           onSuccess={() => {
             fetchCustomerData();
             fetchStats();
+          }}
+        />
+      )}
+
+      {/* Book Appointment Dialog */}
+      {customer && (
+        <BookAppointmentDialog
+          customerId={customer.customer.id}
+          customerName={customer.customer.name}
+          open={bookAppointmentDialogOpen}
+          onOpenChange={setBookAppointmentDialogOpen}
+          onSuccess={() => {
+            fetchCustomerData();
+            fetchStats();
+            if (activeTab === "timeline") {
+              fetchTimeline(1);
+            }
           }}
         />
       )}

@@ -613,6 +613,74 @@ async def create_appointment(
     }
 
 
+# ==================== Export Endpoints ====================
+
+@app.get("/api/admin/customers/export/csv")
+async def export_customers_csv(db: Session = Depends(get_db)):
+    """Export customers to CSV format."""
+    import csv
+    from io import StringIO
+    from fastapi.responses import StreamingResponse
+
+    # Fetch all customers with their stats
+    customers = db.query(
+        Customer,
+        func.count(Appointment.id).label('total_appointments'),
+        func.count(Conversation.id).label('total_conversations'),
+        func.avg(Conversation.satisfaction_score).label('avg_satisfaction_score')
+    ).outerjoin(Appointment, Customer.id == Appointment.customer_id)\
+     .outerjoin(Conversation, Customer.id == Conversation.customer_id)\
+     .group_by(Customer.id)\
+     .all()
+
+    # Create CSV in memory
+    output = StringIO()
+    writer = csv.writer(output)
+
+    # Write header
+    writer.writerow([
+        'ID',
+        'Name',
+        'Phone',
+        'Email',
+        'Is New Client',
+        'Has Allergies',
+        'Is Pregnant',
+        'Total Appointments',
+        'Total Conversations',
+        'Avg Satisfaction Score',
+        'Created At',
+        'Notes'
+    ])
+
+    # Write data
+    for customer, total_appts, total_convs, avg_satisfaction in customers:
+        writer.writerow([
+            customer.id,
+            customer.name,
+            customer.phone,
+            customer.email or '',
+            'Yes' if customer.is_new_client else 'No',
+            'Yes' if customer.has_allergies else 'No',
+            'Yes' if customer.is_pregnant else 'No',
+            total_appts or 0,
+            total_convs or 0,
+            round(avg_satisfaction, 1) if avg_satisfaction else '',
+            customer.created_at.strftime('%Y-%m-%d %H:%M:%S') if customer.created_at else '',
+            customer.notes or ''
+        ])
+
+    # Return CSV as download
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=customers_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+        }
+    )
+
+
 # ==================== Admin Dashboard Endpoints ====================
 
 @app.get("/api/admin/metrics/overview")
