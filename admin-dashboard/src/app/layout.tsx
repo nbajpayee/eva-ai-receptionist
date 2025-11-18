@@ -22,6 +22,11 @@ const NAV_ITEMS: SidebarNavItem[] = [
     icon: "dashboard",
   },
   {
+    title: "Analytics",
+    href: "/analytics",
+    icon: "reports",
+  },
+  {
     title: "Customers",
     href: "/customers",
     icon: "customers",

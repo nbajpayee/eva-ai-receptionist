@@ -799,6 +799,134 @@ async def get_daily_analytics(
     }
 
 
+@app.get("/api/admin/analytics/timeseries")
+async def get_timeseries_analytics(
+    period: str = Query("week", regex="^(today|week|month)$"),
+    interval: str = Query("hour", regex="^(hour|day)$"),
+    db: Session = Depends(get_db)
+):
+    """Get time-series metrics for charting."""
+    return AnalyticsService.get_timeseries_metrics(
+        db=db,
+        period=period,
+        interval=interval
+    )
+
+
+@app.get("/api/admin/analytics/funnel")
+async def get_conversion_funnel(
+    period: str = Query("week", regex="^(today|week|month)$"),
+    db: Session = Depends(get_db)
+):
+    """Get conversion funnel metrics."""
+    return AnalyticsService.get_conversion_funnel(db=db, period=period)
+
+
+@app.get("/api/admin/analytics/peak-hours")
+async def get_peak_hours(
+    period: str = Query("week", regex="^(week|month)$"),
+    db: Session = Depends(get_db)
+):
+    """Get peak hours heatmap data."""
+    return AnalyticsService.get_peak_hours(db=db, period=period)
+
+
+@app.get("/api/admin/analytics/channel-distribution")
+async def get_channel_distribution(
+    period: str = Query("week", regex="^(today|week|month)$"),
+    db: Session = Depends(get_db)
+):
+    """Get channel distribution data."""
+    return AnalyticsService.get_channel_distribution(db=db, period=period)
+
+
+@app.get("/api/admin/analytics/outcome-distribution")
+async def get_outcome_distribution(
+    period: str = Query("week", regex="^(today|week|month)$"),
+    db: Session = Depends(get_db)
+):
+    """Get outcome distribution data."""
+    return AnalyticsService.get_outcome_distribution(db=db, period=period)
+
+
+@app.get("/api/admin/customers")
+async def get_customers_list(
+    search: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """Get customers list with search and pagination."""
+    query = db.query(Customer)
+
+    # Apply search filter
+    if search:
+        query = query.filter(
+            (Customer.name.ilike(f"%{search}%")) |
+            (Customer.phone.ilike(f"%{search}%")) |
+            (Customer.email.ilike(f"%{search}%"))
+        )
+
+    # Get total count
+    total = query.count()
+
+    # Apply pagination
+    offset = (page - 1) * page_size
+    customers = query.order_by(Customer.created_at.desc())\
+        .offset(offset)\
+        .limit(page_size)\
+        .all()
+
+    # Get conversation counts for each customer
+    serialized = []
+    for customer in customers:
+        conversation_count = db.query(func.count(Conversation.id))\
+            .filter(Conversation.customer_id == customer.id)\
+            .scalar() or 0
+
+        booking_count = db.query(func.count(Conversation.id))\
+            .filter(
+                Conversation.customer_id == customer.id,
+                Conversation.outcome == 'appointment_scheduled'
+            )\
+            .scalar() or 0
+
+        serialized.append({
+            "id": customer.id,
+            "name": customer.name,
+            "phone": customer.phone,
+            "email": customer.email,
+            "created_at": customer.created_at.isoformat() if customer.created_at else None,
+            "conversation_count": conversation_count,
+            "booking_count": booking_count,
+        })
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+        "customers": serialized
+    }
+
+
+@app.get("/api/admin/customers/{customer_id}/timeline")
+async def get_customer_timeline(
+    customer_id: int,
+    limit: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """Get conversation timeline for a specific customer."""
+    try:
+        return AnalyticsService.get_customer_timeline(
+            db=db,
+            customer_id=customer_id,
+            limit=limit
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 # ==================== Appointments Endpoints ====================
 
 @app.get("/api/appointments")
