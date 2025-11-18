@@ -8,6 +8,7 @@ import {
   Waves,
   FileBarChart2,
   MessageSquare,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ const ICONS = {
   voice: Waves,
   reports: FileBarChart2,
   messaging: MessageSquare,
+  users: Users,
 } satisfies Record<string, LucideIcon>;
 
 export type SidebarNavIconKey = keyof typeof ICONS;
