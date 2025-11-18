@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Phone, Mail, AlertTriangle, Baby, Download } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Plus, Phone, Mail, AlertTriangle, Baby, Download, Search, X } from "lucide-react";
 import { format } from "date-fns";
 import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
 import { CreateCustomerModal } from "@/components/customers/create-customer-modal";
@@ -53,6 +54,10 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showNewOnly, setShowNewOnly] = useState(false);
+  const [showAllergiesOnly, setShowAllergiesOnly] = useState(false);
+  const [showPregnantOnly, setShowPregnantOnly] = useState(false);
 
   const fetchCustomers = async () => {
     try {
@@ -81,8 +86,29 @@ export default function CustomersPage() {
     fetchCustomers();
   };
 
+  // Filter customers based on search and filters
+  const filteredCustomers = customers.filter((customer) => {
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesName = customer.name.toLowerCase().includes(query);
+      const matchesPhone = customer.phone.toLowerCase().includes(query);
+      const matchesEmail = customer.email?.toLowerCase().includes(query);
+      if (!matchesName && !matchesPhone && !matchesEmail) {
+        return false;
+      }
+    }
+
+    // Medical/status filters
+    if (showNewOnly && !customer.is_new_client) return false;
+    if (showAllergiesOnly && !customer.has_allergies) return false;
+    if (showPregnantOnly && !customer.is_pregnant) return false;
+
+    return true;
+  });
+
   const handleExport = () => {
-    const exportData = customers.map((customer) => ({
+    const exportData = filteredCustomers.map((customer) => ({
       ID: customer.id,
       Name: customer.name,
       Phone: customer.phone,
@@ -109,7 +135,7 @@ export default function CustomersPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleExport} disabled={customers.length === 0}>
+          <Button variant="outline" onClick={handleExport} disabled={filteredCustomers.length === 0}>
             <Download className="mr-2 h-4 w-4" />
             Export CSV
           </Button>
@@ -119,6 +145,74 @@ export default function CustomersPage() {
           </Button>
         </div>
       </header>
+
+      {/* Search and Filters */}
+      <div className="space-y-3">
+        {/* Search Bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <Input
+            placeholder="Search by name, phone, or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 pr-10"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Badges */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-zinc-500">Filters:</span>
+          <Button
+            variant={showNewOnly ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowNewOnly(!showNewOnly)}
+          >
+            New Clients
+          </Button>
+          <Button
+            variant={showAllergiesOnly ? "destructive" : "outline"}
+            size="sm"
+            onClick={() => setShowAllergiesOnly(!showAllergiesOnly)}
+          >
+            <AlertTriangle className="mr-1 h-3 w-3" />
+            Allergies
+          </Button>
+          <Button
+            variant={showPregnantOnly ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowPregnantOnly(!showPregnantOnly)}
+            className={showPregnantOnly ? "bg-pink-600 hover:bg-pink-700" : ""}
+          >
+            <Baby className="mr-1 h-3 w-3" />
+            Pregnant
+          </Button>
+          {(searchQuery || showNewOnly || showAllergiesOnly || showPregnantOnly) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchQuery("");
+                setShowNewOnly(false);
+                setShowAllergiesOnly(false);
+                setShowPregnantOnly(false);
+              }}
+            >
+              Clear All
+            </Button>
+          )}
+          <span className="ml-auto text-sm text-zinc-500">
+            Showing {filteredCustomers.length} of {customers.length} customers
+          </span>
+        </div>
+      </div>
 
       {isLoading && (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
@@ -134,9 +228,17 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {customers.length > 0 && (
+      {!isLoading && customers.length > 0 && filteredCustomers.length === 0 && (
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
+          <p className="text-sm text-zinc-600">
+            No customers match your search or filter criteria.
+          </p>
+        </div>
+      )}
+
+      {filteredCustomers.length > 0 && (
         <div className="grid gap-4">
-          {customers.map((customer) => (
+          {filteredCustomers.map((customer) => (
             <Card key={customer.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
