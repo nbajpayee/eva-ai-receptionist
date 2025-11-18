@@ -10,10 +10,15 @@ const contactFormSchema = z.object({
   firstName: z.string().min(2, "First name must be at least 2 characters"),
   lastName: z.string().min(2, "Last name must be at least 2 characters"),
   email: z.string().email("Please enter a valid email address"),
-  phone: z.string().regex(
-    /^[\d\s()+-]+$/,
-    "Phone number can only contain digits, spaces, parentheses, plus and dash"
-  ).min(10, "Phone number must be at least 10 digits"),
+  phone: z.string()
+    .regex(
+      /^[\d\s()+-]+$/,
+      "Phone number can only contain digits, spaces, parentheses, plus and dash"
+    )
+    .refine(
+      (val) => val.replace(/\D/g, "").length >= 10,
+      "Phone number must contain at least 10 digits"
+    ),
   practiceName: z.string().min(2, "Practice name must be at least 2 characters"),
   locations: z.string(),
   message: z.string().optional(),
