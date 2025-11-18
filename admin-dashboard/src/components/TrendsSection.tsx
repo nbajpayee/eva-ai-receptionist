@@ -5,6 +5,9 @@ import { ChartCard, TimeSeriesChart } from "./charts";
 import { format, formatDistanceToNow } from "date-fns";
 import { usePolling } from "@/hooks/usePolling";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Button } from "@/components/ui/button";
+import { ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 type TimeSeriesData = {
   timestamp: string;
@@ -77,16 +80,24 @@ export function TrendsSection() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-900">Metrics Trends</h2>
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-zinc-500">Track performance over time</p>
-            {lastUpdated && (
-              <span className="text-xs text-zinc-400">
-                • Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
-              </span>
-            )}
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-900">Metrics Trends</h2>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-zinc-500">Track performance over time</p>
+              {lastUpdated && (
+                <span className="text-xs text-zinc-400">
+                  • Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
+                </span>
+              )}
+            </div>
           </div>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/analytics">
+              View Full Analytics
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
         </div>
         <ToggleGroup
           type="single"

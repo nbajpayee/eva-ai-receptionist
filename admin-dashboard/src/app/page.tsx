@@ -1,4 +1,4 @@
-import { ArrowUpRight, Clock3, MessageSquare, Smile, Users } from "lucide-react";
+import { ArrowUpRight, Clock3, MessageSquare, Smile, Users, ArrowRight } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { SplitStatCard } from "@/components/split-stat-card";
 import {
@@ -6,6 +6,8 @@ import {
   type CallRecord,
 } from "@/components/call-log-table";
 import { TrendsSection } from "@/components/TrendsSection";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 type MetricsResponse = {
   period: string;
@@ -212,9 +214,17 @@ export default async function Home() {
       <TrendsSection />
 
       <section className="space-y-4">
-        <div className="flex flex-col gap-2">
-          <h2 className="text-lg font-semibold text-zinc-900">Operational feed</h2>
-          <p className="text-sm text-zinc-500">Monitoring today's customer traffic.</p>
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-lg font-semibold text-zinc-900">Operational feed</h2>
+            <p className="text-sm text-zinc-500">Monitoring today's customer traffic.</p>
+          </div>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/customers">
+              View All Customers
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
         </div>
         <CallLogTable calls={calls} />
       </section>

@@ -1191,3 +1191,111 @@ Consider:
             },
             "timeline": timeline
         }
+
+    @staticmethod
+    def get_channel_distribution(
+        db: Session,
+        period: str = "week"
+    ) -> List[Dict[str, Any]]:
+        """
+        Get conversation count by communication channel.
+
+        Args:
+            db: Database session
+            period: Time period (today, week, month)
+
+        Returns:
+            List of channel distribution data
+        """
+        from datetime import timedelta
+
+        now = _utcnow()
+
+        # Determine date range
+        if period == "today":
+            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+        elif period == "week":
+            start_date = now - timedelta(days=7)
+        elif period == "month":
+            start_date = now - timedelta(days=30)
+        else:
+            start_date = now - timedelta(days=7)
+
+        # Query channel counts
+        results = db.query(
+            Conversation.channel,
+            func.count(Conversation.id).label('count')
+        ).filter(
+            Conversation.initiated_at >= start_date
+        ).group_by(Conversation.channel).all()
+
+        channel_colors = {
+            'voice': '#3b82f6',  # blue-500
+            'sms': '#8b5cf6',    # violet-500
+            'email': '#10b981',  # emerald-500
+        }
+
+        return [
+            {
+                "name": r.channel.capitalize(),
+                "conversations": r.count,
+                "color": channel_colors.get(r.channel, '#6b7280')
+            }
+            for r in results
+        ]
+
+    @staticmethod
+    def get_outcome_distribution(
+        db: Session,
+        period: str = "week"
+    ) -> List[Dict[str, Any]]:
+        """
+        Get conversation count by outcome.
+
+        Args:
+            db: Database session
+            period: Time period (today, week, month)
+
+        Returns:
+            List of outcome distribution data
+        """
+        from datetime import timedelta
+
+        now = _utcnow()
+
+        # Determine date range
+        if period == "today":
+            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+        elif period == "week":
+            start_date = now - timedelta(days=7)
+        elif period == "month":
+            start_date = now - timedelta(days=30)
+        else:
+            start_date = now - timedelta(days=7)
+
+        # Query outcome counts
+        results = db.query(
+            Conversation.outcome,
+            func.count(Conversation.id).label('count')
+        ).filter(
+            Conversation.initiated_at >= start_date,
+            Conversation.outcome.isnot(None)
+        ).group_by(Conversation.outcome).all()
+
+        outcome_names = {
+            'appointment_scheduled': 'Booked',
+            'info_request': 'Info Only',
+            'complaint': 'Complaint',
+            'unresolved': 'Unresolved',
+            'browsing': 'Browsing',
+            'escalated': 'Escalated',
+            'abandoned': 'Abandoned',
+        }
+
+        return [
+            {
+                "name": outcome_names.get(r.outcome, r.outcome.replace('_', ' ').title()),
+                "count": r.count
+            }
+            for r in results
+        ]

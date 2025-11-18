@@ -14,6 +14,8 @@ type ChartCardProps = {
   isLoading?: boolean;
   error?: string | null;
   className?: string;
+  actions?: ReactNode;
+  id?: string;
 };
 
 export function ChartCard({
@@ -23,14 +25,21 @@ export function ChartCard({
   isLoading = false,
   error = null,
   className = "",
+  actions,
+  id,
 }: ChartCardProps) {
   return (
-    <Card className={className}>
+    <Card className={className} id={id}>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        {description && (
-          <p className="text-sm text-zinc-500">{description}</p>
-        )}
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle>{title}</CardTitle>
+            {description && (
+              <p className="text-sm text-zinc-500">{description}</p>
+            )}
+          </div>
+          {actions && <div className="flex gap-2">{actions}</div>}
+        </div>
       </CardHeader>
 
       <CardContent>
