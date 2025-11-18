@@ -37,8 +37,8 @@ const NAV_ITEMS: SidebarNavItem[] = [
     icon: "voice",
   },
   {
-    title: "Console Reports",
-    href: "/reports",
+    title: "Analytics",
+    href: "/analytics",
     icon: "reports",
   },
 ];
