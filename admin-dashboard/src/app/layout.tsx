@@ -47,6 +47,11 @@ const NAV_ITEMS: SidebarNavItem[] = [
     icon: "voice",
   },
   {
+    title: "Research",
+    href: "/research",
+    icon: "reports",
+  },
+  {
     title: "Console Reports",
     href: "/reports",
     icon: "reports",
