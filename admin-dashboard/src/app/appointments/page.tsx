@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar, Clock, User, Download, ChevronRight } from "lucide-react";
 import { format, parseISO, isFuture, isPast } from "date-fns";
 import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
+import { AppointmentCardSkeletonList } from "@/components/skeletons/appointment-card-skeleton";
 
 interface Appointment {
   id: number;
@@ -181,11 +182,7 @@ export default function AppointmentsPage() {
         </span>
       </div>
 
-      {isLoading && (
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
-          <p className="text-sm text-zinc-600">Loading appointments...</p>
-        </div>
-      )}
+      {isLoading && <AppointmentCardSkeletonList count={5} />}
 
       {!isLoading && appointments.length === 0 && (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">

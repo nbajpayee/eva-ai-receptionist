@@ -10,6 +10,7 @@ import { Plus, Phone, Mail, AlertTriangle, Baby, Download, Search, X } from "luc
 import { format } from "date-fns";
 import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
 import { CreateCustomerModal } from "@/components/customers/create-customer-modal";
+import { CustomerCardSkeletonList } from "@/components/skeletons/customer-card-skeleton";
 
 interface Customer {
   id: number;
@@ -214,11 +215,7 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {isLoading && (
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
-          <p className="text-sm text-zinc-600">Loading customers...</p>
-        </div>
-      )}
+      {isLoading && <CustomerCardSkeletonList count={5} />}
 
       {!isLoading && customers.length === 0 && (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
