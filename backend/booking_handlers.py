@@ -4,7 +4,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, time
 from typing import Any, Dict, List, Optional, Tuple
 
-from config import PROVIDERS, SERVICES
+# Import SERVICES and PROVIDERS as fallbacks for backward compatibility
+try:
+    from config import PROVIDERS as FALLBACK_PROVIDERS, SERVICES as FALLBACK_SERVICES
+except ImportError:
+    FALLBACK_PROVIDERS = {}
+    FALLBACK_SERVICES = {}
+
 from booking.time_utils import EASTERN_TZ, parse_iso_datetime, to_eastern
 
 
@@ -200,6 +206,7 @@ def handle_check_availability(
     date: str,
     service_type: str,
     limit: Optional[int] = 10,
+    services_dict: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return available slots for the given date/service."""
     try:
@@ -208,7 +215,7 @@ def handle_check_availability(
         return {"success": False, "error": f"Invalid date format: {exc}"}
 
     try:
-        slots = calendar_service.get_available_slots(target_date, service_type)
+        slots = calendar_service.get_available_slots(target_date, service_type, services_dict=services_dict)
     except Exception as exc:  # noqa: BLE001
         return {"success": False, "error": f"Failed to fetch availability: {exc}"}
 
@@ -241,7 +248,8 @@ def handle_check_availability(
     if limit is not None and limit > 0:
         limited_slots = future_slots[:limit]
 
-    service_config = SERVICES.get(service_type, {})
+    services = services_dict if services_dict is not None else FALLBACK_SERVICES
+    service_config = services.get(service_type, {})
     return {
         "success": True,
         "available_slots": limited_slots,
@@ -264,6 +272,7 @@ def handle_book_appointment(
     service_type: str,
     provider: Optional[str] = None,
     notes: Optional[str] = None,
+    services_dict: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Book an appointment and return booking metadata."""
     try:
@@ -273,7 +282,8 @@ def handle_book_appointment(
 
     start_dt, was_adjusted = _ensure_future_datetime(start_dt_original)
 
-    service_config = SERVICES.get(service_type)
+    services = services_dict if services_dict is not None else FALLBACK_SERVICES
+    service_config = services.get(service_type)
     if not service_config:
         return {"success": False, "error": f"Unknown service type: {service_type}"}
 
@@ -337,6 +347,7 @@ def handle_book_appointment(
             customer_email=email_value,
             customer_phone=customer_phone,
             service_type=service_type,
+            services_dict=services_dict,
             provider=provider,
             notes=notes,
         )

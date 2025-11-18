@@ -773,6 +773,462 @@ async def get_conversation_detail(
     }
 
 
+# ==================== Settings Management Endpoints (Phase 3) ====================
+
+from settings_service import SettingsService
+from pydantic import BaseModel, Field
+from decimal import Decimal
+
+# Pydantic models for request validation
+class MedSpaSettingsUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    timezone: Optional[str] = None
+    ai_assistant_name: Optional[str] = None
+    cancellation_policy: Optional[str] = None
+
+class LocationCreate(BaseModel):
+    name: str
+    address: str
+    phone: Optional[str] = None
+    is_primary: bool = False
+    is_active: bool = True
+
+class LocationUpdate(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    is_primary: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+class BusinessHoursUpdate(BaseModel):
+    day_of_week: int = Field(..., ge=0, le=6)
+    open_time: Optional[str] = None  # "09:00" format
+    close_time: Optional[str] = None  # "17:00" format
+    is_closed: bool = False
+
+class ServiceCreate(BaseModel):
+    name: str
+    slug: Optional[str] = None
+    description: str
+    duration_minutes: int = Field(..., gt=0)
+    price_min: Optional[Decimal] = None
+    price_max: Optional[Decimal] = None
+    price_display: Optional[str] = None
+    prep_instructions: Optional[str] = None
+    aftercare_instructions: Optional[str] = None
+    category: Optional[str] = None
+    is_active: bool = True
+
+class ServiceUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    duration_minutes: Optional[int] = Field(None, gt=0)
+    price_min: Optional[Decimal] = None
+    price_max: Optional[Decimal] = None
+    price_display: Optional[str] = None
+    prep_instructions: Optional[str] = None
+    aftercare_instructions: Optional[str] = None
+    category: Optional[str] = None
+    is_active: Optional[bool] = None
+    display_order: Optional[int] = None
+
+class ProviderCreate(BaseModel):
+    name: str
+    title: str
+    specialties: Optional[List[str]] = None
+    credentials: Optional[str] = None
+    bio: Optional[str] = None
+    is_active: bool = True
+
+class ProviderUpdate(BaseModel):
+    name: Optional[str] = None
+    title: Optional[str] = None
+    specialties: Optional[List[str]] = None
+    credentials: Optional[str] = None
+    bio: Optional[str] = None
+    is_active: Optional[bool] = None
+    display_order: Optional[int] = None
+
+# Settings endpoints
+@app.get("/api/admin/settings")
+async def get_settings(db: Session = Depends(get_db)):
+    """Get med spa settings."""
+    settings = SettingsService.get_settings(db)
+    if not settings:
+        raise HTTPException(status_code=404, detail="Settings not found. Please run seed_settings.py")
+
+    return {
+        "id": settings.id,
+        "name": settings.name,
+        "phone": settings.phone,
+        "email": settings.email,
+        "website": settings.website,
+        "timezone": settings.timezone,
+        "ai_assistant_name": settings.ai_assistant_name,
+        "cancellation_policy": settings.cancellation_policy,
+        "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+    }
+
+@app.put("/api/admin/settings")
+async def update_settings(
+    settings_data: MedSpaSettingsUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update med spa settings."""
+    data_dict = settings_data.dict(exclude_unset=True)
+    settings = SettingsService.update_settings(db, data_dict)
+
+    return {
+        "id": settings.id,
+        "name": settings.name,
+        "phone": settings.phone,
+        "email": settings.email,
+        "website": settings.website,
+        "timezone": settings.timezone,
+        "ai_assistant_name": settings.ai_assistant_name,
+        "cancellation_policy": settings.cancellation_policy,
+        "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+    }
+
+# Location endpoints
+@app.get("/api/admin/locations")
+async def get_locations(
+    active_only: bool = Query(False),
+    db: Session = Depends(get_db)
+):
+    """Get all locations."""
+    locations = SettingsService.get_all_locations(db, active_only=active_only)
+
+    return [{
+        "id": loc.id,
+        "name": loc.name,
+        "address": loc.address,
+        "phone": loc.phone,
+        "is_primary": loc.is_primary,
+        "is_active": loc.is_active,
+        "created_at": loc.created_at.isoformat() if loc.created_at else None,
+    } for loc in locations]
+
+@app.get("/api/admin/locations/{location_id}")
+async def get_location(location_id: int, db: Session = Depends(get_db)):
+    """Get a single location."""
+    location = SettingsService.get_location(db, location_id)
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    return {
+        "id": location.id,
+        "name": location.name,
+        "address": location.address,
+        "phone": location.phone,
+        "is_primary": location.is_primary,
+        "is_active": location.is_active,
+        "created_at": location.created_at.isoformat() if location.created_at else None,
+    }
+
+@app.post("/api/admin/locations")
+async def create_location(
+    location_data: LocationCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new location."""
+    data_dict = location_data.dict()
+    location = SettingsService.create_location(db, data_dict)
+
+    return {
+        "id": location.id,
+        "name": location.name,
+        "address": location.address,
+        "phone": location.phone,
+        "is_primary": location.is_primary,
+        "is_active": location.is_active,
+    }
+
+@app.put("/api/admin/locations/{location_id}")
+async def update_location(
+    location_id: int,
+    location_data: LocationUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a location."""
+    data_dict = location_data.dict(exclude_unset=True)
+    location = SettingsService.update_location(db, location_id, data_dict)
+
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    return {
+        "id": location.id,
+        "name": location.name,
+        "address": location.address,
+        "phone": location.phone,
+        "is_primary": location.is_primary,
+        "is_active": location.is_active,
+    }
+
+@app.delete("/api/admin/locations/{location_id}")
+async def delete_location(location_id: int, db: Session = Depends(get_db)):
+    """Delete (deactivate) a location."""
+    try:
+        success = SettingsService.delete_location(db, location_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Location not found")
+        return {"message": "Location deleted successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Business hours endpoints
+@app.get("/api/admin/locations/{location_id}/hours")
+async def get_business_hours(location_id: int, db: Session = Depends(get_db)):
+    """Get business hours for a location."""
+    hours = SettingsService.get_business_hours(db, location_id)
+
+    return [{
+        "id": h.id,
+        "day_of_week": h.day_of_week,
+        "open_time": h.open_time.strftime("%H:%M") if h.open_time else None,
+        "close_time": h.close_time.strftime("%H:%M") if h.close_time else None,
+        "is_closed": h.is_closed,
+    } for h in hours]
+
+@app.put("/api/admin/locations/{location_id}/hours")
+async def update_business_hours(
+    location_id: int,
+    hours_data: List[BusinessHoursUpdate],
+    db: Session = Depends(get_db)
+):
+    """Update business hours for a location (bulk update)."""
+    from datetime import time as dt_time
+
+    # Convert time strings to time objects
+    hours_list = []
+    for hour in hours_data:
+        hour_dict = {
+            "day_of_week": hour.day_of_week,
+            "is_closed": hour.is_closed,
+        }
+
+        if not hour.is_closed and hour.open_time and hour.close_time:
+            open_parts = hour.open_time.split(":")
+            close_parts = hour.close_time.split(":")
+            hour_dict["open_time"] = dt_time(int(open_parts[0]), int(open_parts[1]))
+            hour_dict["close_time"] = dt_time(int(close_parts[0]), int(close_parts[1]))
+        else:
+            hour_dict["open_time"] = None
+            hour_dict["close_time"] = None
+
+        hours_list.append(hour_dict)
+
+    hours = SettingsService.update_business_hours(db, location_id, hours_list)
+
+    return [{
+        "id": h.id,
+        "day_of_week": h.day_of_week,
+        "open_time": h.open_time.strftime("%H:%M") if h.open_time else None,
+        "close_time": h.close_time.strftime("%H:%M") if h.close_time else None,
+        "is_closed": h.is_closed,
+    } for h in hours]
+
+# Service endpoints
+@app.get("/api/admin/services")
+async def get_services(
+    active_only: bool = Query(False),
+    category: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get all services."""
+    services = SettingsService.get_all_services(db, active_only=active_only, category=category)
+
+    return [{
+        "id": svc.id,
+        "name": svc.name,
+        "slug": svc.slug,
+        "description": svc.description,
+        "duration_minutes": svc.duration_minutes,
+        "price_min": float(svc.price_min) if svc.price_min else None,
+        "price_max": float(svc.price_max) if svc.price_max else None,
+        "price_display": svc.price_display,
+        "prep_instructions": svc.prep_instructions,
+        "aftercare_instructions": svc.aftercare_instructions,
+        "category": svc.category,
+        "is_active": svc.is_active,
+        "display_order": svc.display_order,
+    } for svc in services]
+
+@app.get("/api/admin/services/{service_id}")
+async def get_service(service_id: int, db: Session = Depends(get_db)):
+    """Get a single service."""
+    service = SettingsService.get_service(db, service_id)
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    return {
+        "id": service.id,
+        "name": service.name,
+        "slug": service.slug,
+        "description": service.description,
+        "duration_minutes": service.duration_minutes,
+        "price_min": float(service.price_min) if service.price_min else None,
+        "price_max": float(service.price_max) if service.price_max else None,
+        "price_display": service.price_display,
+        "prep_instructions": service.prep_instructions,
+        "aftercare_instructions": service.aftercare_instructions,
+        "category": service.category,
+        "is_active": service.is_active,
+        "display_order": service.display_order,
+    }
+
+@app.post("/api/admin/services")
+async def create_service(
+    service_data: ServiceCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new service."""
+    data_dict = service_data.dict()
+    service = SettingsService.create_service(db, data_dict)
+
+    return {
+        "id": service.id,
+        "name": service.name,
+        "slug": service.slug,
+        "description": service.description,
+        "duration_minutes": service.duration_minutes,
+        "price_display": service.price_display,
+        "category": service.category,
+        "is_active": service.is_active,
+    }
+
+@app.put("/api/admin/services/{service_id}")
+async def update_service(
+    service_id: int,
+    service_data: ServiceUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a service."""
+    data_dict = service_data.dict(exclude_unset=True)
+    service = SettingsService.update_service(db, service_id, data_dict)
+
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    return {
+        "id": service.id,
+        "name": service.name,
+        "slug": service.slug,
+        "description": service.description,
+        "duration_minutes": service.duration_minutes,
+        "price_display": service.price_display,
+        "category": service.category,
+        "is_active": service.is_active,
+    }
+
+@app.delete("/api/admin/services/{service_id}")
+async def delete_service(service_id: int, db: Session = Depends(get_db)):
+    """Delete (deactivate) a service."""
+    success = SettingsService.delete_service(db, service_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Service not found")
+    return {"message": "Service deleted successfully"}
+
+@app.post("/api/admin/services/reorder")
+async def reorder_services(
+    service_orders: List[dict],
+    db: Session = Depends(get_db)
+):
+    """Reorder services. Expects list of {id: int, display_order: int}."""
+    SettingsService.reorder_services(db, service_orders)
+    return {"message": "Services reordered successfully"}
+
+# Provider endpoints
+@app.get("/api/admin/providers")
+async def get_providers(
+    active_only: bool = Query(False),
+    db: Session = Depends(get_db)
+):
+    """Get all providers."""
+    providers = SettingsService.get_all_providers(db, active_only=active_only)
+
+    return [{
+        "id": p.id,
+        "name": p.name,
+        "title": p.title,
+        "specialties": p.specialties,
+        "credentials": p.credentials,
+        "bio": p.bio,
+        "is_active": p.is_active,
+        "display_order": p.display_order,
+    } for p in providers]
+
+@app.get("/api/admin/providers/{provider_id}")
+async def get_provider(provider_id: int, db: Session = Depends(get_db)):
+    """Get a single provider."""
+    provider = SettingsService.get_provider(db, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    return {
+        "id": provider.id,
+        "name": provider.name,
+        "title": provider.title,
+        "specialties": provider.specialties,
+        "credentials": provider.credentials,
+        "bio": provider.bio,
+        "is_active": provider.is_active,
+        "display_order": provider.display_order,
+    }
+
+@app.post("/api/admin/providers")
+async def create_provider(
+    provider_data: ProviderCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new provider."""
+    data_dict = provider_data.dict()
+    provider = SettingsService.create_provider(db, data_dict)
+
+    return {
+        "id": provider.id,
+        "name": provider.name,
+        "title": provider.title,
+        "specialties": provider.specialties,
+        "credentials": provider.credentials,
+        "is_active": provider.is_active,
+    }
+
+@app.put("/api/admin/providers/{provider_id}")
+async def update_provider(
+    provider_id: int,
+    provider_data: ProviderUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a provider."""
+    data_dict = provider_data.dict(exclude_unset=True)
+    provider = SettingsService.update_provider(db, provider_id, data_dict)
+
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    return {
+        "id": provider.id,
+        "name": provider.name,
+        "title": provider.title,
+        "specialties": provider.specialties,
+        "credentials": provider.credentials,
+        "is_active": provider.is_active,
+    }
+
+@app.delete("/api/admin/providers/{provider_id}")
+async def delete_provider(provider_id: int, db: Session = Depends(get_db)):
+    """Delete (deactivate) a provider."""
+    success = SettingsService.delete_provider(db, provider_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return {"message": "Provider deleted successfully"}
+
+
 # ==================== Webhook Endpoints (Phase 2) ====================
 
 @app.post("/api/webhooks/twilio/sms")
