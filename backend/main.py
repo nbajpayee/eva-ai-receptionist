@@ -566,6 +566,55 @@ async def get_daily_analytics(
     }
 
 
+@app.get("/api/admin/analytics/timeseries")
+async def get_timeseries_analytics(
+    period: str = Query("week", regex="^(today|week|month)$"),
+    interval: str = Query("hour", regex="^(hour|day)$"),
+    db: Session = Depends(get_db)
+):
+    """Get time-series metrics for charting."""
+    return AnalyticsService.get_timeseries_metrics(
+        db=db,
+        period=period,
+        interval=interval
+    )
+
+
+@app.get("/api/admin/analytics/funnel")
+async def get_conversion_funnel(
+    period: str = Query("week", regex="^(today|week|month)$"),
+    db: Session = Depends(get_db)
+):
+    """Get conversion funnel metrics."""
+    return AnalyticsService.get_conversion_funnel(db=db, period=period)
+
+
+@app.get("/api/admin/analytics/peak-hours")
+async def get_peak_hours(
+    period: str = Query("week", regex="^(week|month)$"),
+    db: Session = Depends(get_db)
+):
+    """Get peak hours heatmap data."""
+    return AnalyticsService.get_peak_hours(db=db, period=period)
+
+
+@app.get("/api/admin/customers/{customer_id}/timeline")
+async def get_customer_timeline(
+    customer_id: int,
+    limit: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """Get conversation timeline for a specific customer."""
+    try:
+        return AnalyticsService.get_customer_timeline(
+            db=db,
+            customer_id=customer_id,
+            limit=limit
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 # ==================== Appointments Endpoints ====================
 
 @app.get("/api/appointments")

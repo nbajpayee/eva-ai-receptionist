@@ -930,3 +930,264 @@ Consider:
         db.commit()
         db.refresh(event)
         return event
+
+    @staticmethod
+    def get_timeseries_metrics(
+        db: Session,
+        period: str = "week",
+        interval: str = "hour",
+        metrics: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get time-series metrics for charting.
+
+        Args:
+            db: Database session
+            period: Time period (today, week, month)
+            interval: Aggregation interval (hour, day)
+            metrics: List of metrics to include (calls, bookings, satisfaction)
+
+        Returns:
+            List of time-series data points
+        """
+        from datetime import timedelta
+        from sqlalchemy import func, cast, Integer
+
+        now = _utcnow()
+
+        # Determine date range
+        if period == "today":
+            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            trunc_format = "hour"
+        elif period == "week":
+            start_date = now - timedelta(days=7)
+            trunc_format = interval if interval in ["hour", "day"] else "hour"
+        elif period == "month":
+            start_date = now - timedelta(days=30)
+            trunc_format = "day"
+        else:
+            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            trunc_format = "hour"
+
+        # Query conversations grouped by time interval
+        query = db.query(
+            func.date_trunc(trunc_format, Conversation.initiated_at).label('timestamp'),
+            func.count(Conversation.id).label('total_calls'),
+            func.count(func.nullif(Conversation.outcome == 'appointment_scheduled', False)).label('appointments_booked'),
+            func.avg(cast(Conversation.satisfaction_score, Integer)).label('avg_satisfaction_score')
+        ).filter(
+            Conversation.initiated_at >= start_date
+        ).group_by(
+            func.date_trunc(trunc_format, Conversation.initiated_at)
+        ).order_by('timestamp')
+
+        results = query.all()
+
+        return [
+            {
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                "total_calls": r.total_calls or 0,
+                "appointments_booked": r.appointments_booked or 0,
+                "avg_satisfaction_score": round(float(r.avg_satisfaction_score or 0), 2)
+            }
+            for r in results
+        ]
+
+    @staticmethod
+    def get_conversion_funnel(
+        db: Session,
+        period: str = "week"
+    ) -> Dict[str, Any]:
+        """
+        Get conversion funnel metrics.
+
+        Args:
+            db: Database session
+            period: Time period (today, week, month)
+
+        Returns:
+            Dictionary with funnel stage counts
+        """
+        from datetime import timedelta
+
+        now = _utcnow()
+
+        # Determine date range
+        if period == "today":
+            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+        elif period == "week":
+            start_date = now - timedelta(days=7)
+        elif period == "month":
+            start_date = now - timedelta(days=30)
+        else:
+            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+
+        # Stage 1: Total inquiries (all conversations)
+        total_inquiries = db.query(func.count(Conversation.id)).filter(
+            Conversation.initiated_at >= start_date
+        ).scalar() or 0
+
+        # Stage 2: Browsing (conversations with check_availability function calls)
+        browsing_count = db.query(func.count(func.distinct(CommunicationEvent.conversation_id))).filter(
+            CommunicationEvent.event_type == 'function_called',
+            CommunicationEvent.timestamp >= start_date,
+            CommunicationEvent.details['tool'].astext == 'check_availability'
+        ).scalar() or 0
+
+        # Stage 3: Booking attempts (book_appointment function called)
+        booking_attempts = db.query(func.count(func.distinct(CommunicationEvent.conversation_id))).filter(
+            CommunicationEvent.event_type == 'function_called',
+            CommunicationEvent.timestamp >= start_date,
+            CommunicationEvent.details['tool'].astext == 'book_appointment'
+        ).scalar() or 0
+
+        # Stage 4: Completed bookings (outcome = 'appointment_scheduled')
+        completed_bookings = db.query(func.count(Conversation.id)).filter(
+            Conversation.initiated_at >= start_date,
+            Conversation.outcome == 'appointment_scheduled'
+        ).scalar() or 0
+
+        return {
+            "period": period,
+            "stages": [
+                {
+                    "name": "Total Inquiries",
+                    "value": total_inquiries,
+                    "color": "#3b82f6"  # blue-500
+                },
+                {
+                    "name": "Checked Availability",
+                    "value": browsing_count,
+                    "color": "#8b5cf6"  # violet-500
+                },
+                {
+                    "name": "Attempted Booking",
+                    "value": booking_attempts,
+                    "color": "#f59e0b"  # amber-500
+                },
+                {
+                    "name": "Booked Successfully",
+                    "value": completed_bookings,
+                    "color": "#10b981"  # emerald-500
+                }
+            ]
+        }
+
+    @staticmethod
+    def get_peak_hours(
+        db: Session,
+        period: str = "week"
+    ) -> List[Dict[str, Any]]:
+        """
+        Get peak hours heatmap data.
+
+        Args:
+            db: Database session
+            period: Time period (week, month)
+
+        Returns:
+            List of heatmap cells with day/hour/value
+        """
+        from datetime import timedelta
+        from sqlalchemy import extract
+
+        now = _utcnow()
+
+        # Determine date range
+        if period == "week":
+            start_date = now - timedelta(days=7)
+        elif period == "month":
+            start_date = now - timedelta(days=30)
+        else:
+            start_date = now - timedelta(days=7)
+
+        # Query conversations grouped by day of week and hour
+        results = db.query(
+            extract('dow', Conversation.initiated_at).label('day'),
+            extract('hour', Conversation.initiated_at).label('hour'),
+            func.count(Conversation.id).label('value')
+        ).filter(
+            Conversation.initiated_at >= start_date
+        ).group_by(
+            extract('dow', Conversation.initiated_at),
+            extract('hour', Conversation.initiated_at)
+        ).all()
+
+        return [
+            {
+                "day": int(r.day),
+                "hour": int(r.hour),
+                "value": r.value or 0
+            }
+            for r in results
+        ]
+
+    @staticmethod
+    def get_customer_timeline(
+        db: Session,
+        customer_id: int,
+        limit: int = 50
+    ) -> Dict[str, Any]:
+        """
+        Get conversation timeline for a specific customer.
+
+        Args:
+            db: Database session
+            customer_id: Customer ID
+            limit: Maximum number of conversations to return
+
+        Returns:
+            Dictionary with customer info and timeline
+        """
+        from sqlalchemy.orm import joinedload
+
+        # Get customer
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise ValueError(f"Customer {customer_id} not found")
+
+        # Get conversations
+        conversations = db.query(Conversation)\
+            .options(joinedload(Conversation.messages))\
+            .filter(Conversation.customer_id == customer_id)\
+            .order_by(Conversation.initiated_at.desc())\
+            .limit(limit)\
+            .all()
+
+        # Serialize timeline
+        timeline = []
+        for conv in conversations:
+            timeline.append({
+                "id": str(conv.id),
+                "channel": conv.channel,
+                "initiated_at": conv.initiated_at.isoformat() if conv.initiated_at else None,
+                "completed_at": conv.completed_at.isoformat() if conv.completed_at else None,
+                "outcome": conv.outcome,
+                "satisfaction_score": conv.satisfaction_score,
+                "sentiment": conv.sentiment,
+                "ai_summary": conv.ai_summary,
+                "message_count": len(conv.messages),
+                "status": conv.status
+            })
+
+        # Calculate customer stats
+        total_conversations = len(conversations)
+        avg_satisfaction = sum(c.satisfaction_score or 0 for c in conversations) / max(total_conversations, 1)
+        total_bookings = sum(1 for c in conversations if c.outcome == 'appointment_scheduled')
+
+        return {
+            "customer": {
+                "id": customer.id,
+                "name": customer.name,
+                "phone": customer.phone,
+                "email": customer.email,
+                "created_at": customer.created_at.isoformat() if customer.created_at else None
+            },
+            "stats": {
+                "total_conversations": total_conversations,
+                "avg_satisfaction_score": round(avg_satisfaction, 2),
+                "total_bookings": total_bookings,
+                "channels_used": list(set(c.channel for c in conversations))
+            },
+            "timeline": timeline
+        }

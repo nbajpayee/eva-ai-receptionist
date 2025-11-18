@@ -5,6 +5,7 @@ import {
   CallLogTable,
   type CallRecord,
 } from "@/components/call-log-table";
+import { TrendsSection } from "@/components/TrendsSection";
 
 type MetricsResponse = {
   period: string;
@@ -208,10 +209,12 @@ export default async function Home() {
         />
       </section>
 
+      <TrendsSection />
+
       <section className="space-y-4">
         <div className="flex flex-col gap-2">
           <h2 className="text-lg font-semibold text-zinc-900">Operational feed</h2>
-          <p className="text-sm text-zinc-500">Monitoring today’s customer traffic.</p>
+          <p className="text-sm text-zinc-500">Monitoring today's customer traffic.</p>
         </div>
         <CallLogTable calls={calls} />
       </section>
