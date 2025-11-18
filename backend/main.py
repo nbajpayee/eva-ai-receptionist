@@ -4,21 +4,25 @@ Main FastAPI application for Med Spa Voice AI.
 import uuid
 import asyncio
 import logging
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query, Request, UploadFile, File, Form
 from starlette.websockets import WebSocketState
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, desc
 from typing import Optional, Dict, List
 from datetime import datetime
+from pydantic import BaseModel
 from config import get_settings
-from database import get_db, init_db, Customer, Appointment, CallSession, Conversation
+from database import get_db, init_db, Customer, Appointment, CallSession, Conversation, Provider, InPersonConsultation, AIInsight
 from realtime_client import RealtimeClient
 from analytics import AnalyticsService
 from api_messaging import messaging_router
 from api_research import router as research_router
 from calendar_service import check_calendar_credentials
+from consultation_service import ConsultationService
+from ai_insights_service import AIInsightsService
+from provider_analytics_service import ProviderAnalyticsService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -46,6 +50,30 @@ app.add_middleware(
 # Active WebSocket connections
 active_connections: Dict[str, WebSocket] = {}
 
+
+# ==================== Request/Response Models ====================
+
+class ConsultationCreateRequest(BaseModel):
+    provider_id: str
+    customer_id: Optional[int] = None
+    service_type: Optional[str] = None
+
+
+class ConsultationEndRequest(BaseModel):
+    outcome: str
+    appointment_id: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class ProviderCreateRequest(BaseModel):
+    name: str
+    email: str
+    phone: Optional[str] = None
+    specialties: Optional[List[str]] = None
+    bio: Optional[str] = None
+
+
+# ==================== App Events ====================
 
 @app.on_event("startup")
 async def startup_event():
@@ -1623,36 +1651,6 @@ async def handle_sendgrid_email(
 
 
 # ==================== Provider Analytics Endpoints ====================
-
-from consultation_service import ConsultationService
-from ai_insights_service import AIInsightsService
-from provider_analytics_service import ProviderAnalyticsService
-from database import Provider, InPersonConsultation, AIInsight
-from fastapi import UploadFile, File, Form
-from pydantic import BaseModel
-from typing import List as TypingList
-
-
-# Request/Response models
-class ConsultationCreateRequest(BaseModel):
-    provider_id: str
-    customer_id: Optional[int] = None
-    service_type: Optional[str] = None
-
-
-class ConsultationEndRequest(BaseModel):
-    outcome: str
-    appointment_id: Optional[int] = None
-    notes: Optional[str] = None
-
-
-class ProviderCreateRequest(BaseModel):
-    name: str
-    email: str
-    phone: Optional[str] = None
-    specialties: Optional[TypingList[str]] = None
-    bio: Optional[str] = None
-
 
 # ===== Consultation Endpoints =====
 

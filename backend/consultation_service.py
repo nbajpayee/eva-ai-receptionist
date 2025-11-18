@@ -68,7 +68,9 @@ class ConsultationService:
         For now, we'll save locally and return a local path.
         """
         # Create uploads directory if it doesn't exist
-        upload_dir = Path("backend/uploads/consultations")
+        # Use path relative to this file's location
+        current_dir = Path(__file__).parent
+        upload_dir = current_dir / "uploads" / "consultations"
         upload_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate unique filename

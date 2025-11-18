@@ -88,8 +88,9 @@ class ProviderAnalyticsService:
                         else:
                             avg_price = float(price_str)
                         total_revenue += avg_price
-                    except:
-                        pass
+                    except (ValueError, AttributeError) as e:
+                        # Skip if price format is invalid
+                        continue
 
         # Calculate average consultation duration
         durations = [c.duration_seconds for c in consultations if c.duration_seconds]
@@ -208,7 +209,8 @@ class ProviderAnalyticsService:
                             else:
                                 avg_price = float(price_str)
                             revenue += avg_price
-                        except:
+                        except (ValueError, AttributeError):
+                            # Skip if price format is invalid
                             pass
 
             # Average satisfaction
