@@ -6,9 +6,9 @@ from typing import Optional
 import uuid
 from sqlalchemy import (
     create_engine, Column, Integer, String, Float, DateTime,
-    Text, ForeignKey, Boolean, JSON, CheckConstraint, ARRAY
+    Text, ForeignKey, Boolean, JSON, CheckConstraint, TypeDecorator
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker, Session
 try:  # Prefer package-style import when available
@@ -37,6 +37,39 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Base class for models
 Base = declarative_base()
+
+
+# Custom GUID type that works with both PostgreSQL and SQLite
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+
+    Uses PostgreSQL's UUID type when available, otherwise uses String(36).
+    """
+    impl = String
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(GUID())
+        else:
+            return dialect.type_descriptor(String(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        elif dialect.name == 'postgresql':
+            return value
+        else:
+            if isinstance(value, uuid.UUID):
+                return str(value)
+            return value
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        if isinstance(value, uuid.UUID):
+            return value
+        return uuid.UUID(value)
 
 
 # Dependency for FastAPI
@@ -207,7 +240,7 @@ class Conversation(Base):
     """
     __tablename__ = "conversations"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)  # Nullable - some calls may not identify customer
 
     channel = Column(String(20), nullable=False, index=True)
@@ -228,7 +261,7 @@ class Conversation(Base):
     ai_summary = Column(Text, nullable=True)
 
     # Flexible metadata (use custom_metadata to avoid SQLAlchemy reserved name)
-    custom_metadata = Column('metadata', JSONB, nullable=True, default={})
+    custom_metadata = Column('metadata', JSON, nullable=True, default={})
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -253,8 +286,8 @@ class CommunicationMessage(Base):
     """
     __tablename__ = "communication_messages"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(GUID(), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
 
     direction = Column(String(20), nullable=False, index=True)
     content = Column(Text, nullable=False)
@@ -264,7 +297,7 @@ class CommunicationMessage(Base):
     processed = Column(Boolean, default=False)
     processing_error = Column(Text, nullable=True)
 
-    custom_metadata = Column('metadata', JSONB, nullable=True, default={})
+    custom_metadata = Column('metadata', JSON, nullable=True, default={})
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -282,17 +315,17 @@ class VoiceCallDetails(Base):
     """Voice-specific metadata for call messages."""
     __tablename__ = "voice_call_details"
 
-    message_id = Column(UUID(as_uuid=True), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
+    message_id = Column(GUID(), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
 
     recording_url = Column(String(500), nullable=True)
     duration_seconds = Column(Integer, nullable=False)
 
     # Structured transcript with timestamps
-    transcript_segments = Column(JSONB, nullable=True)
+    transcript_segments = Column(JSON, nullable=True)
     # Example: [{"speaker": "customer", "text": "Hello", "timestamp": 1.2}, ...]
 
     # Function calls made during call
-    function_calls = Column(JSONB, nullable=True)
+    function_calls = Column(JSON, nullable=True)
     # Example: [{"name": "book_appointment", "args": {...}, "result": {...}}]
 
     # Audio quality metrics
@@ -307,7 +340,7 @@ class EmailDetails(Base):
     """Email-specific metadata for email messages."""
     __tablename__ = "email_details"
 
-    message_id = Column(UUID(as_uuid=True), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
+    message_id = Column(GUID(), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
 
     subject = Column(String(500), nullable=False)
     body_html = Column(Text, nullable=True)
@@ -315,15 +348,15 @@ class EmailDetails(Base):
 
     from_address = Column(String(255), nullable=False)
     to_address = Column(String(255), nullable=False)
-    cc_addresses = Column(ARRAY(Text), nullable=True)
-    bcc_addresses = Column(ARRAY(Text), nullable=True)
+    cc_addresses = Column(JSON, nullable=True)
+    bcc_addresses = Column(JSON, nullable=True)
 
     # Email threading
     in_reply_to = Column(String(500), nullable=True)
-    references = Column(ARRAY(Text), nullable=True)
+    references = Column(JSON, nullable=True)
 
     # Attachments
-    attachments = Column(JSONB, nullable=True)
+    attachments = Column(JSON, nullable=True)
     # Example: [{"filename": "invoice.pdf", "size": 12345, "url": "..."}]
 
     # Provider metadata (SendGrid, Mailgun, etc.)
@@ -340,7 +373,7 @@ class SMSDetails(Base):
     """SMS-specific metadata for text messages."""
     __tablename__ = "sms_details"
 
-    message_id = Column(UUID(as_uuid=True), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
+    message_id = Column(GUID(), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
 
     from_number = Column(String(20), nullable=False)
     to_number = Column(String(20), nullable=False)
@@ -353,7 +386,7 @@ class SMSDetails(Base):
 
     # SMS properties
     segments = Column(Integer, default=1)
-    media_urls = Column(ARRAY(Text), nullable=True)
+    media_urls = Column(JSON, nullable=True)
 
     delivered_at = Column(DateTime, nullable=True)
     failed_at = Column(DateTime, nullable=True)
@@ -373,14 +406,14 @@ class CommunicationEvent(Base):
     """
     __tablename__ = "communication_events"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
-    message_id = Column(UUID(as_uuid=True), ForeignKey("communication_messages.id", ondelete="CASCADE"), nullable=True, index=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(GUID(), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id = Column(GUID(), ForeignKey("communication_messages.id", ondelete="CASCADE"), nullable=True, index=True)
 
     event_type = Column(String(50), nullable=False, index=True)
     timestamp = Column(DateTime, nullable=False, index=True)
 
-    details = Column(JSONB, nullable=True, default={})
+    details = Column(JSON, nullable=True, default={})
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationship

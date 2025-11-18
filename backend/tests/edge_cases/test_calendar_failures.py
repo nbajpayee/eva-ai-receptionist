@@ -19,14 +19,14 @@ from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 
 from booking_handlers import handle_book_appointment, handle_check_availability
-from calendar_service import CalendarService
+from calendar_service import GoogleCalendarService
 
 
 @pytest.mark.integration
 class TestCalendarFailures:
     """Test Calendar API failure scenarios."""
 
-    @patch("calendar_service.CalendarService._get_credentials")
+    @patch("calendar_service.GoogleCalendarService._get_credentials")
     def test_token_refresh_failure(self, mock_creds, db_session, customer):
         """Test handling when token refresh fails."""
         mock_creds.side_effect = RefreshError("Token refresh failed")
@@ -45,7 +45,7 @@ class TestCalendarFailures:
         error_msg = result.get("error", "").lower()
         assert "error" in error_msg or "unavailable" in error_msg
 
-    @patch("calendar_service.CalendarService._get_credentials")
+    @patch("calendar_service.GoogleCalendarService._get_credentials")
     def test_credentials_expired(self, mock_creds, db_session, customer):
         """Test handling of expired credentials."""
         mock_creds.return_value = None  # No valid credentials
@@ -62,7 +62,7 @@ class TestCalendarFailures:
         # Should indicate system error
         assert result["success"] is False
 
-    @patch("calendar_service.CalendarService.events")
+    @patch("calendar_service.GoogleCalendarService.events")
     def test_calendar_deleted(self, mock_events, db_session, customer):
         """Test handling when calendar is deleted."""
         # Simulate 404 Not Found
@@ -84,7 +84,7 @@ class TestCalendarFailures:
             # If propagated, that's also acceptable
             pass
 
-    @patch("calendar_service.CalendarService.book_appointment")
+    @patch("calendar_service.GoogleCalendarService.book_appointment")
     def test_event_creation_failed(self, mock_book, db_session, customer):
         """Test handling when event creation fails."""
         mock_book.return_value = {
@@ -104,7 +104,7 @@ class TestCalendarFailures:
         assert result["success"] is False
         assert "failed" in result.get("error", "").lower() or "error" in result.get("error", "").lower()
 
-    @patch("calendar_service.CalendarService.events")
+    @patch("calendar_service.GoogleCalendarService.events")
     def test_event_update_conflict(self, mock_events, db_session, customer):
         """Test handling of event update conflicts."""
         # Simulate 409 Conflict
@@ -133,7 +133,7 @@ class TestCalendarFailures:
             # Acceptable if error propagates
             pass
 
-    @patch("calendar_service.CalendarService.check_availability")
+    @patch("calendar_service.GoogleCalendarService.check_availability")
     def test_timezone_mismatch(self, mock_check, db_session, customer):
         """Test handling of timezone mismatches."""
         # Return times in wrong timezone
