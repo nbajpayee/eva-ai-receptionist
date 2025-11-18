@@ -158,19 +158,56 @@ class SegmentationService:
         """
         query = db.query(Customer)
         conditions = []
+        joined_conversation = False
+        joined_appointment = False
+        joined_message = False
 
         now = datetime.utcnow()
 
+        # Track which filters need Conversation join
+        needs_conversation = any([
+            criteria.get("channel"),
+            criteria.get("has_booking_intent"),
+            criteria.get("days_since_last_contact"),
+            criteria.get("min_satisfaction_score"),
+            criteria.get("max_satisfaction_score"),
+            criteria.get("outcome")
+        ])
+
+        # Track which filters need Appointment join
+        needs_appointment = any([
+            criteria.get("has_appointment") is True,
+            criteria.get("days_since_last_appointment"),
+            criteria.get("last_appointment_status"),
+            criteria.get("days_since_cancellation")
+        ])
+
+        # Perform joins once if needed
+        if needs_conversation:
+            query = query.join(Conversation, Customer.id == Conversation.customer_id)
+            joined_conversation = True
+
+        if criteria.get("has_booking_intent"):
+            if not joined_message:
+                query = query.join(CommunicationMessage, Conversation.id == CommunicationMessage.conversation_id)
+                joined_message = True
+
+        if needs_appointment:
+            query = query.join(Appointment, Customer.id == Appointment.customer_id)
+            joined_appointment = True
+        elif criteria.get("has_appointment") is False:
+            # For "no appointments" filter, use outerjoin
+            query = query.outerjoin(Appointment, Customer.id == Appointment.customer_id)
+            joined_appointment = True
+
+        # Now apply all filters
+
         # Channel filter
         if criteria.get("channel"):
-            channel = criteria["channel"]
-            query = query.join(Conversation, Customer.id == Conversation.customer_id)
-            conditions.append(Conversation.channel == channel)
+            conditions.append(Conversation.channel == criteria["channel"])
 
-        # Booking intent filter (checks for keywords in conversations)
+        # Booking intent filter
         if criteria.get("has_booking_intent"):
-            query = query.join(Conversation, Customer.id == Conversation.customer_id)
-            query = query.join(CommunicationMessage, Conversation.id == CommunicationMessage.conversation_id)
             conditions.append(
                 or_(
                     CommunicationMessage.content.ilike('%book%'),
@@ -180,33 +217,26 @@ class SegmentationService:
             )
 
         # Appointment existence filter
-        if "has_appointment" in criteria:
-            has_appointment = criteria["has_appointment"]
-            if has_appointment:
-                query = query.join(Appointment, Customer.id == Appointment.customer_id)
-            else:
-                # Use LEFT JOIN and filter for NULL
-                query = query.outerjoin(Appointment, Customer.id == Appointment.customer_id)
-                conditions.append(Appointment.id == None)
+        if criteria.get("has_appointment") is False:
+            conditions.append(Appointment.id.is_(None))
 
         # Days since last contact
         if criteria.get("days_since_last_contact"):
             days = criteria["days_since_last_contact"]
             cutoff_date = now - timedelta(days=days)
-            query = query.join(Conversation, Customer.id == Conversation.customer_id)
             conditions.append(Conversation.initiated_at >= cutoff_date)
 
         # Days since last appointment
         if criteria.get("days_since_last_appointment"):
             days = criteria["days_since_last_appointment"]
             cutoff_date = now - timedelta(days=days)
-            query = query.join(Appointment, Customer.id == Appointment.customer_id)
             conditions.append(Appointment.appointment_datetime <= cutoff_date)
 
-        # Days since last activity (conversation or appointment)
+        # Days since last activity (uses subqueries to avoid join conflicts)
         if criteria.get("days_since_last_activity"):
             days = criteria["days_since_last_activity"]
             cutoff_date = now - timedelta(days=days)
+
             # Subquery for last conversation date
             last_conv = db.query(
                 Conversation.customer_id,
@@ -223,29 +253,24 @@ class SegmentationService:
             query = query.outerjoin(last_appt, Customer.id == last_appt.c.customer_id)
             conditions.append(
                 or_(
-                    and_(last_conv.c.last_conv != None, last_conv.c.last_conv <= cutoff_date),
-                    and_(last_appt.c.last_appt != None, last_appt.c.last_appt <= cutoff_date)
+                    and_(last_conv.c.last_conv.isnot(None), last_conv.c.last_conv <= cutoff_date),
+                    and_(last_appt.c.last_appt.isnot(None), last_appt.c.last_appt <= cutoff_date)
                 )
             )
 
         # Satisfaction score filters
         if criteria.get("min_satisfaction_score"):
-            min_score = criteria["min_satisfaction_score"]
-            query = query.join(Conversation, Customer.id == Conversation.customer_id)
-            conditions.append(Conversation.satisfaction_score >= min_score)
+            conditions.append(Conversation.satisfaction_score >= criteria["min_satisfaction_score"])
 
         if criteria.get("max_satisfaction_score"):
-            max_score = criteria["max_satisfaction_score"]
-            query = query.join(Conversation, Customer.id == Conversation.customer_id)
-            conditions.append(Conversation.satisfaction_score <= max_score)
+            conditions.append(Conversation.satisfaction_score <= criteria["max_satisfaction_score"])
 
-        # Outcome filter (from conversations)
+        # Outcome filter
         if criteria.get("outcome"):
             outcomes = criteria["outcome"] if isinstance(criteria["outcome"], list) else [criteria["outcome"]]
-            query = query.join(Conversation, Customer.id == Conversation.customer_id)
             conditions.append(Conversation.outcome.in_(outcomes))
 
-        # Appointment count filter
+        # Appointment count filter (uses subquery)
         if "appointment_count" in criteria:
             count = criteria["appointment_count"]
             appt_count = db.query(
@@ -255,7 +280,7 @@ class SegmentationService:
 
             query = query.join(appt_count, Customer.id == appt_count.c.customer_id)
 
-        # Last appointment status
+        # Last appointment status (uses subquery to avoid multiple joins)
         if criteria.get("last_appointment_status"):
             status = criteria["last_appointment_status"]
             # Subquery to get most recent appointment per customer
@@ -264,7 +289,10 @@ class SegmentationService:
                 func.max(Appointment.appointment_datetime).label('max_date')
             ).group_by(Appointment.customer_id).subquery()
 
-            query = query.join(Appointment, Customer.id == Appointment.customer_id)
+            # Only join if we haven't already
+            if not joined_appointment:
+                query = query.join(Appointment, Customer.id == Appointment.customer_id)
+
             query = query.join(
                 last_appt_subq,
                 and_(
@@ -278,7 +306,6 @@ class SegmentationService:
         if criteria.get("days_since_cancellation"):
             days = criteria["days_since_cancellation"]
             cutoff_date = now - timedelta(days=days)
-            query = query.join(Appointment, Customer.id == Appointment.customer_id)
             conditions.append(Appointment.status == "cancelled")
             conditions.append(Appointment.cancelled_at >= cutoff_date)
 

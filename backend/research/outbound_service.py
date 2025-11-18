@@ -130,30 +130,23 @@ class OutboundService:
         if not customer.phone:
             raise ValueError(f"Customer {customer.id} has no phone number")
 
-        # Find or create conversation
-        conversation = MessagingService.find_active_conversation(
+        # Always create NEW conversation for campaign outbound
+        # Don't reuse existing conversations - each campaign gets its own thread
+        conversation = MessagingService.create_conversation(
             db=db,
             customer_id=customer.id,
-            channel="sms"
+            channel="sms",
+            metadata={
+                "campaign_id": str(campaign.id),
+                "campaign_type": campaign.campaign_type
+            }
         )
 
-        if not conversation:
-            # Create new conversation linked to campaign
-            conversation = MessagingService.create_conversation(
-                db=db,
-                customer_id=customer.id,
-                channel="sms",
-                metadata={
-                    "campaign_id": str(campaign.id),
-                    "campaign_type": campaign.campaign_type
-                }
-            )
-
-            # Link to campaign
-            conversation.campaign_id = campaign.id
-            conversation.conversation_type = campaign.campaign_type
-            db.commit()
-            db.refresh(conversation)
+        # Link to campaign
+        conversation.campaign_id = campaign.id
+        conversation.conversation_type = campaign.campaign_type
+        db.commit()
+        db.refresh(conversation)
 
         # Format initial message from agent config
         initial_message = self._format_initial_message(campaign, customer)
@@ -199,31 +192,24 @@ class OutboundService:
         if not customer.email:
             raise ValueError(f"Customer {customer.id} has no email")
 
-        # Find or create conversation
-        conversation = MessagingService.find_active_conversation(
+        # Always create NEW conversation for campaign outbound
+        # Don't reuse existing conversations - each campaign gets its own thread
+        conversation = MessagingService.create_conversation(
             db=db,
             customer_id=customer.id,
-            channel="email"
+            channel="email",
+            subject=f"{campaign.name} - {settings.MED_SPA_NAME}",
+            metadata={
+                "campaign_id": str(campaign.id),
+                "campaign_type": campaign.campaign_type
+            }
         )
 
-        if not conversation:
-            # Create new conversation linked to campaign
-            conversation = MessagingService.create_conversation(
-                db=db,
-                customer_id=customer.id,
-                channel="email",
-                subject=f"{campaign.name} - {settings.MED_SPA_NAME}",
-                metadata={
-                    "campaign_id": str(campaign.id),
-                    "campaign_type": campaign.campaign_type
-                }
-            )
-
-            # Link to campaign
-            conversation.campaign_id = campaign.id
-            conversation.conversation_type = campaign.campaign_type
-            db.commit()
-            db.refresh(conversation)
+        # Link to campaign
+        conversation.campaign_id = campaign.id
+        conversation.conversation_type = campaign.campaign_type
+        db.commit()
+        db.refresh(conversation)
 
         # Format email message
         subject = f"{campaign.name} - {settings.MED_SPA_NAME}"

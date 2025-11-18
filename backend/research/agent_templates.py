@@ -266,11 +266,14 @@ Your goal: Get 1-2 referrals from happy customers.""",
         errors = []
 
         # Required fields
-        if not config.get("system_prompt"):
+        if not config.get("system_prompt") or not config.get("system_prompt").strip():
             errors.append("System prompt is required")
 
-        if not config.get("questions") or not isinstance(config.get("questions"), list):
+        questions = config.get("questions")
+        if not questions or not isinstance(questions, list) or len(questions) == 0:
             errors.append("At least one question is required")
+        elif any(not q or not str(q).strip() for q in questions):
+            errors.append("All questions must be non-empty strings")
 
         # Voice settings validation
         voice_settings = config.get("voice_settings", {})
