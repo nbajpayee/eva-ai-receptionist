@@ -198,6 +198,153 @@ class DailyMetric(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class Provider(Base):
+    """Provider/practitioner model for med spa staff."""
+    __tablename__ = "providers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, index=True)
+    phone = Column(String(20))
+
+    # Specialties as array
+    specialties = Column(ARRAY(Text), nullable=True)
+
+    # Profile info
+    hire_date = Column(DateTime, nullable=True)
+    avatar_url = Column(String(500), nullable=True)
+    bio = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    consultations = relationship("InPersonConsultation", back_populates="provider")
+    insights = relationship("AIInsight", back_populates="provider", foreign_keys="AIInsight.provider_id")
+    performance_metrics = relationship("ProviderPerformanceMetric", back_populates="provider")
+
+
+class InPersonConsultation(Base):
+    """In-person consultation recordings and transcripts."""
+    __tablename__ = "in_person_consultations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("providers.id"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
+
+    # Consultation details
+    service_type = Column(String(100), index=True)
+    duration_seconds = Column(Integer, nullable=True)
+
+    # Recording and transcript
+    recording_url = Column(String(500), nullable=True)
+    transcript = Column(Text, nullable=True)
+
+    # Outcome
+    outcome = Column(String(50), index=True)  # 'booked', 'declined', 'thinking', 'follow_up_needed'
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
+
+    # AI analytics
+    satisfaction_score = Column(Float, nullable=True)  # 0-10
+    sentiment = Column(String(50), nullable=True)  # positive, neutral, negative, mixed
+    ai_summary = Column(Text, nullable=True)
+
+    # Manual notes
+    notes = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    ended_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    provider = relationship("Provider", back_populates="consultations")
+    customer = relationship("Customer")
+    appointment = relationship("Appointment")
+    insights = relationship("AIInsight", back_populates="consultation", foreign_keys="AIInsight.consultation_id")
+
+    __table_args__ = (
+        CheckConstraint("outcome IS NULL OR outcome IN ('booked', 'declined', 'thinking', 'follow_up_needed')", name='check_consultation_outcome'),
+        CheckConstraint("satisfaction_score IS NULL OR (satisfaction_score >= 0 AND satisfaction_score <= 10)", name='check_consultation_satisfaction'),
+        CheckConstraint("sentiment IS NULL OR sentiment IN ('positive', 'neutral', 'negative', 'mixed')", name='check_consultation_sentiment'),
+    )
+
+
+class AIInsight(Base):
+    """AI-generated insights from consultation analysis."""
+    __tablename__ = "ai_insights"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Type of insight
+    insight_type = Column(String(50), nullable=False, index=True)
+    # Types: 'best_practice', 'objection_handling', 'coaching_opportunity', 'comparison', 'strength', 'weakness'
+
+    # Associated entities
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("providers.id"), nullable=True, index=True)
+    consultation_id = Column(UUID(as_uuid=True), ForeignKey("in_person_consultations.id"), nullable=True, index=True)
+    reference_consultation_id = Column(UUID(as_uuid=True), ForeignKey("in_person_consultations.id"), nullable=True)
+
+    # Insight content
+    title = Column(String(500), nullable=False)
+    insight_text = Column(Text, nullable=False)
+    supporting_quote = Column(Text, nullable=True)  # Exact transcript excerpt
+    recommendation = Column(Text, nullable=True)  # Actionable coaching tip
+
+    # Metadata
+    confidence_score = Column(Float, nullable=True)  # 0-1
+    is_positive = Column(Boolean, default=True)  # true = strength, false = opportunity
+
+    # Status
+    is_reviewed = Column(Boolean, default=False)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Relationships
+    provider = relationship("Provider", back_populates="insights", foreign_keys=[provider_id])
+    consultation = relationship("InPersonConsultation", back_populates="insights", foreign_keys=[consultation_id])
+
+    __table_args__ = (
+        CheckConstraint("confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)", name='check_insight_confidence'),
+    )
+
+
+class ProviderPerformanceMetric(Base):
+    """Aggregated performance metrics for providers."""
+    __tablename__ = "provider_performance_metrics"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("providers.id"), nullable=False, index=True)
+
+    # Time period
+    period_start = Column(DateTime, nullable=False, index=True)
+    period_end = Column(DateTime, nullable=False, index=True)
+    period_type = Column(String(20), nullable=False)  # 'daily', 'weekly', 'monthly'
+
+    # Consultation metrics
+    total_consultations = Column(Integer, default=0)
+    successful_bookings = Column(Integer, default=0)
+    conversion_rate = Column(Float, nullable=True)  # successful_bookings / total_consultations
+
+    # Financial metrics
+    total_revenue = Column(Float, default=0.0)
+
+    # Quality metrics
+    avg_consultation_duration_seconds = Column(Integer, nullable=True)
+    avg_satisfaction_score = Column(Float, nullable=True)
+    avg_nps_score = Column(Float, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    provider = relationship("Provider", back_populates="performance_metrics")
+
+    __table_args__ = (
+        CheckConstraint("period_type IN ('daily', 'weekly', 'monthly')", name='check_period_type'),
+    )
+
+
 # ==================== Omnichannel Communications Models (Phase 2) ====================
 
 class Conversation(Base):
