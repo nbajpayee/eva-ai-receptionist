@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
-export async function GET(request: Request) {
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   if (!baseUrl) {
@@ -10,13 +13,8 @@ export async function GET(request: Request) {
     );
   }
 
-  const incomingUrl = new URL(request.url);
-  const proxyUrl = new URL("/api/admin/customers", baseUrl);
-
-  // Forward query parameters (page, page_size, search, sort_by, sort_order, filters)
-  incomingUrl.searchParams.forEach((value, key) => {
-    proxyUrl.searchParams.set(key, value);
-  });
+  const customerId = params.id;
+  const proxyUrl = new URL(`/api/admin/customers/${customerId}/stats`, baseUrl);
 
   try {
     const response = await fetch(proxyUrl.toString(), {
@@ -30,7 +28,7 @@ export async function GET(request: Request) {
       const errorBody = await response.text();
       return NextResponse.json(
         {
-          error: "Failed to fetch customers from FastAPI backend",
+          error: "Failed to fetch customer stats from FastAPI backend",
           status: response.status,
           details: errorBody,
         },

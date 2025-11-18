@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
-export async function GET(request: Request) {
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   if (!baseUrl) {
@@ -10,13 +13,8 @@ export async function GET(request: Request) {
     );
   }
 
-  const incomingUrl = new URL(request.url);
-  const proxyUrl = new URL("/api/appointments", baseUrl);
-
-  // Forward query parameters (start_date, end_date, status)
-  incomingUrl.searchParams.forEach((value, key) => {
-    proxyUrl.searchParams.set(key, value);
-  });
+  const customerId = params.id;
+  const proxyUrl = new URL(`/api/admin/customers/${customerId}`, baseUrl);
 
   try {
     const response = await fetch(proxyUrl.toString(), {
@@ -30,7 +28,7 @@ export async function GET(request: Request) {
       const errorBody = await response.text();
       return NextResponse.json(
         {
-          error: "Failed to fetch appointments from FastAPI backend",
+          error: "Failed to fetch customer from FastAPI backend",
           status: response.status,
           details: errorBody,
         },
@@ -51,7 +49,10 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   if (!baseUrl) {
@@ -61,7 +62,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const proxyUrl = new URL("/api/admin/appointments", baseUrl);
+  const customerId = params.id;
+  const proxyUrl = new URL(`/api/admin/customers/${customerId}`, baseUrl);
 
   try {
     const body = await request.json();
@@ -75,7 +77,7 @@ export async function POST(request: Request) {
     });
 
     const response = await fetch(`${proxyUrl.toString()}?${searchParams.toString()}`, {
-      method: "POST",
+      method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
@@ -85,7 +87,7 @@ export async function POST(request: Request) {
       const errorBody = await response.text();
       return NextResponse.json(
         {
-          error: "Failed to create appointment in FastAPI backend",
+          error: "Failed to update customer in FastAPI backend",
           status: response.status,
           details: errorBody,
         },

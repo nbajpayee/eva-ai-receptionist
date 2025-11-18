@@ -29,17 +29,17 @@ const NAV_ITEMS: SidebarNavItem[] = [
   {
     title: "Customers",
     href: "/customers",
-    icon: "messaging",
-  },
-  {
-    title: "Messaging",
-    href: "/messaging",
-    icon: "messaging",
+    icon: "customers",
   },
   {
     title: "Appointments",
     href: "/appointments",
     icon: "appointments",
+  },
+  {
+    title: "Messaging",
+    href: "/messaging",
+    icon: "messaging",
   },
   {
     title: "Voice",

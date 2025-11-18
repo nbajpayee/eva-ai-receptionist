@@ -1,242 +1,330 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { format } from "date-fns";
-import { Search, User, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useState, useEffect } from "react";
+import { ArrowUpRight, Users, TrendingUp, AlertTriangle, Activity, Download } from "lucide-react";
+import { StatCard } from "@/components/stat-card";
+import { SplitStatCard } from "@/components/split-stat-card";
+import { CustomerTable, type Customer } from "@/components/customer-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
-type Customer = {
-  id: number;
-  name: string;
-  phone: string;
-  email: string | null;
-  created_at: string;
-  conversation_count: number;
-  booking_count: number;
+type Analytics = {
+  total_customers: number;
+  new_this_month: number;
+  new_clients_count: number;
+  returning_clients_count: number;
+  top_customers: Array<{
+    id: number;
+    name: string;
+    phone: string;
+    appointment_count: number;
+  }>;
+  at_risk_customers: Array<{
+    id: number;
+    name: string;
+    phone: string;
+    email: string | null;
+  }>;
+  channel_distribution: Record<string, number>;
+  medical_screening: {
+    has_allergies: number;
+    is_pregnant: number;
+  };
 };
 
-type CustomersResponse = {
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-  customers: Customer[];
+const defaultAnalytics: Analytics = {
+  total_customers: 0,
+  new_this_month: 0,
+  new_clients_count: 0,
+  returning_clients_count: 0,
+  top_customers: [],
+  at_risk_customers: [],
+  channel_distribution: {},
+  medical_screening: { has_allergies: 0, is_pregnant: 0 },
 };
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [analytics, setAnalytics] = useState<Analytics>(defaultAnalytics);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    const fetchCustomers = async () => {
-      setIsLoading(true);
-      setError(null);
+    fetchData();
+  }, [page, searchQuery]);
 
-      try {
-        const params = new URLSearchParams({
-          page: page.toString(),
-          page_size: "20",
-        });
-
-        if (search) {
-          params.set("search", search);
-        }
-
-        const response = await fetch(
-          `/api/admin/customers?${params.toString()}`,
-          { cache: "no-store" }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch customers");
-        }
-
-        const data: CustomersResponse = await response.json();
-        setCustomers(data.customers);
-        setTotalPages(data.total_pages);
-        setTotal(data.total);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unknown error");
-      } finally {
-        setIsLoading(false);
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // Fetch customers
+      const customersUrl = new URL("/api/admin/customers", window.location.origin);
+      customersUrl.searchParams.set("page", page.toString());
+      customersUrl.searchParams.set("page_size", "50");
+      if (searchQuery) {
+        customersUrl.searchParams.set("search", searchQuery);
       }
-    };
 
-    // Debounce search
-    const timeoutId = setTimeout(() => {
-      fetchCustomers();
-    }, 300);
+      const [customersRes, analyticsRes] = await Promise.all([
+        fetch(customersUrl.toString()),
+        fetch("/api/admin/customers/analytics"),
+      ]);
 
-    return () => clearTimeout(timeoutId);
-  }, [search, page]);
+      if (customersRes.ok) {
+        const customersData = await customersRes.json();
+        setCustomers(customersData.customers || []);
+        setTotalPages(customersData.total_pages || 1);
+      }
+
+      if (analyticsRes.ok) {
+        const analyticsData = await analyticsRes.json();
+        setAnalytics(analyticsData);
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setPage(1); // Reset to first page on search
+  };
+
+  const handleExportCSV = () => {
+    // Open the export endpoint in a new window to trigger download
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+    window.open(`${baseUrl}/api/admin/customers/export/csv`, "_blank");
+  };
+
+  // Calculate channel percentages
+  const totalChannelInteractions = Object.values(analytics.channel_distribution).reduce(
+    (sum, count) => sum + count,
+    0
+  );
+
+  const channelPercentages = Object.entries(analytics.channel_distribution).map(
+    ([channel, count]) => ({
+      channel,
+      percentage: totalChannelInteractions > 0 ? (count / totalChannelInteractions) * 100 : 0,
+    })
+  );
+
+  const numberFormatter = new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 1,
+  });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Customers</h1>
+          <h1 className="text-3xl font-bold text-zinc-900">Customers</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            {total} total customers
+            Manage customer relationships and track engagement across all channels
           </p>
         </div>
+        <Button variant="outline" onClick={handleExportCSV}>
+          <Download className="mr-2 h-4 w-4" />
+          Export to CSV
+        </Button>
       </div>
 
-      {/* Search */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Search Customers</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-            <Input
-              type="text"
-              placeholder="Search by name, phone, or email..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1); // Reset to first page on search
-              }}
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      {/* Metrics Row */}
+      <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        {/* Total Customers */}
+        <StatCard
+          title="Total Customers"
+          value={analytics.total_customers.toString()}
+          description="All-time customer base"
+          icon={<Users className="h-5 w-5" />}
+          trend={
+            <span className="text-xs uppercase tracking-[0.2em] text-emerald-600">
+              {analytics.new_this_month} new this month
+            </span>
+          }
+        />
 
-      {/* Customers Table */}
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="space-y-3 p-6">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <Skeleton className="h-12 w-12 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-48" />
-                    <Skeleton className="h-3 w-32" />
+        {/* New This Month */}
+        <StatCard
+          title="New This Month"
+          value={analytics.new_this_month.toString()}
+          description="Recent customer acquisitions"
+          icon={<ArrowUpRight className="h-5 w-5" />}
+        />
+
+        {/* Client Split */}
+        <SplitStatCard
+          title="Client Distribution"
+          leftMetric={{
+            label: "New",
+            value: analytics.new_clients_count.toString(),
+            icon: <Users className="h-4 w-4" />,
+          }}
+          rightMetric={{
+            label: "Returning",
+            value: analytics.returning_clients_count.toString(),
+            icon: <TrendingUp className="h-4 w-4" />,
+          }}
+          description="Client type breakdown"
+        />
+
+        {/* Medical Screening */}
+        <StatCard
+          title="Medical Flags"
+          value={
+            (analytics.medical_screening.has_allergies +
+              analytics.medical_screening.is_pregnant).toString()
+          }
+          description={`${analytics.medical_screening.has_allergies} allergies, ${analytics.medical_screening.is_pregnant} pregnant`}
+          icon={<AlertTriangle className="h-5 w-5" />}
+        />
+      </section>
+
+      {/* Insights Row */}
+      <section className="grid gap-6 md:grid-cols-3">
+        {/* Top Customers */}
+        <Card className="border-zinc-200">
+          <CardHeader>
+            <CardTitle className="text-lg">Top Customers</CardTitle>
+            <p className="text-sm text-zinc-500">Most appointments booked</p>
+          </CardHeader>
+          <CardContent>
+            {analytics.top_customers.length === 0 ? (
+              <p className="text-center text-sm text-zinc-500 py-4">No data yet</p>
+            ) : (
+              <div className="space-y-3">
+                {analytics.top_customers.slice(0, 5).map((customer, index) => (
+                  <Link
+                    key={customer.id}
+                    href={`/customers/${customer.id}`}
+                    className="flex items-center justify-between rounded-lg border border-zinc-200 p-3 transition-colors hover:bg-zinc-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sm font-medium text-sky-700">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium text-zinc-900">{customer.name}</p>
+                        <p className="text-xs text-zinc-500">{customer.phone}</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                      {customer.appointment_count} appts
+                    </Badge>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* At-Risk Customers */}
+        <Card className="border-zinc-200">
+          <CardHeader>
+            <CardTitle className="text-lg">At-Risk Customers</CardTitle>
+            <p className="text-sm text-zinc-500">No activity in 90+ days</p>
+          </CardHeader>
+          <CardContent>
+            {analytics.at_risk_customers.length === 0 ? (
+              <p className="text-center text-sm text-zinc-500 py-4">No at-risk customers</p>
+            ) : (
+              <div className="space-y-3">
+                {analytics.at_risk_customers.slice(0, 5).map((customer) => (
+                  <Link
+                    key={customer.id}
+                    href={`/customers/${customer.id}`}
+                    className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-3 transition-colors hover:bg-amber-100"
+                  >
+                    <div>
+                      <p className="font-medium text-zinc-900">{customer.name}</p>
+                      <p className="text-xs text-zinc-600">{customer.phone}</p>
+                    </div>
+                    <ArrowUpRight className="h-4 w-4 text-amber-700" />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Channel Distribution */}
+        <Card className="border-zinc-200">
+          <CardHeader>
+            <CardTitle className="text-lg">Channel Preferences</CardTitle>
+            <p className="text-sm text-zinc-500">How customers engage</p>
+          </CardHeader>
+          <CardContent>
+            {channelPercentages.length === 0 ? (
+              <p className="text-center text-sm text-zinc-500 py-4">No data yet</p>
+            ) : (
+              <div className="space-y-4">
+                {channelPercentages.map(({ channel, percentage }) => (
+                  <div key={channel} className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium capitalize text-zinc-900">
+                        {channel}
+                      </span>
+                      <span className="text-zinc-600">
+                        {numberFormatter.format(percentage)}%
+                      </span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100">
+                      <div
+                        className={`h-full rounded-full ${
+                          channel === "voice"
+                            ? "bg-sky-500"
+                            : channel === "sms"
+                            ? "bg-emerald-500"
+                            : "bg-violet-500"
+                        }`}
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : error ? (
-            <div className="p-8 text-center">
-              <p className="text-sm font-medium text-red-600">Error loading customers</p>
-              <p className="mt-1 text-xs text-zinc-500">{error}</p>
-            </div>
-          ) : customers.length === 0 ? (
-            <div className="p-8 text-center">
-              <User className="mx-auto h-12 w-12 text-zinc-300" />
-              <p className="mt-2 text-sm text-zinc-500">
-                {search ? "No customers found" : "No customers yet"}
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-zinc-100">
-              {customers.map((customer) => (
-                <Link
-                  key={customer.id}
-                  href={`/customers/${customer.id}`}
-                  className="block transition-colors hover:bg-zinc-50"
-                >
-                  <div className="flex items-center gap-4 p-4">
-                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-zinc-100">
-                      <User className="h-6 w-6 text-zinc-600" />
-                    </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </section>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-zinc-900 truncate">
-                          {customer.name}
-                        </h3>
-                      </div>
-                      <div className="mt-1 flex items-center gap-3 text-sm text-zinc-500">
-                        <span>{customer.phone}</span>
-                        {customer.email && (
-                          <>
-                            <span>•</span>
-                            <span className="truncate">{customer.email}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
+      {/* Customer Table */}
+      <section>
+        <CustomerTable
+          customers={customers}
+          onSearch={handleSearch}
+          searchQuery={searchQuery}
+          loading={loading}
+        />
 
-                    <div className="flex items-center gap-4 text-sm">
-                      <div className="text-center">
-                        <div className="font-semibold text-zinc-900">
-                          {customer.conversation_count}
-                        </div>
-                        <div className="text-xs text-zinc-500">Conversations</div>
-                      </div>
-
-                      <div className="text-center">
-                        <div className="font-semibold text-zinc-900">
-                          {customer.booking_count}
-                        </div>
-                        <div className="text-xs text-zinc-500">Bookings</div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="text-xs text-zinc-500">
-                          Joined {format(new Date(customer.created_at), "MMM d, yyyy")}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-zinc-500">
-            Page {page} of {totalPages}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
+              className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium transition-colors hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
+            </button>
+            <span className="text-sm text-zinc-600">
+              Page {page} of {totalPages}
+            </span>
+            <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
+              className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium transition-colors hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
-            </Button>
+            </button>
           </div>
-        </div>
-      )}
+        )}
+      </section>
     </div>
   );
 }

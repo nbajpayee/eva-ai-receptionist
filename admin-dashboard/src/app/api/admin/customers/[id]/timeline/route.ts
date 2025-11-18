@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -13,16 +13,20 @@ export async function GET(
     );
   }
 
-  const { id } = await params;
+  const customerId = params.id;
   const incomingUrl = new URL(request.url);
-  const proxyUrl = new URL(`/api/admin/customers/${id}/timeline`, baseUrl);
+  const proxyUrl = new URL(`/api/admin/customers/${customerId}/timeline`, baseUrl);
+
+  // Forward query parameters (page, page_size, channel)
   incomingUrl.searchParams.forEach((value, key) => {
     proxyUrl.searchParams.set(key, value);
   });
 
   try {
     const response = await fetch(proxyUrl.toString(), {
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       cache: "no-store",
     });
 
