@@ -16,9 +16,10 @@ from booking.manager import SlotSelectionManager, SlotSelectionError
 from booking.time_utils import format_for_display, parse_iso_datetime
 from booking_handlers import handle_book_appointment, handle_check_availability
 from calendar_service import get_calendar_service
-from config import get_settings, SERVICES, PROVIDERS, OPENING_SCRIPT
+from config import get_settings, OPENING_SCRIPT
 from database import Conversation, SessionLocal
 from prompts import get_system_prompt
+from settings_service import SettingsService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -60,6 +61,22 @@ class RealtimeClient:
         self._pending_items: Dict[str, Dict[str, Any]] = {}
         self._last_transcript_entry: Optional[str] = None
         self._awaiting_response: bool = False
+
+        # Load services and providers from database (with caching)
+        self._services_dict = None
+        self._providers_list = None
+
+    def _get_services(self) -> Dict[str, Any]:
+        """Get services from database (cached)."""
+        if self._services_dict is None:
+            self._services_dict = SettingsService.get_services_dict(self.db)
+        return self._services_dict
+
+    def _get_providers(self) -> List[Dict[str, Any]]:
+        """Get providers from database (cached)."""
+        if self._providers_list is None:
+            self._providers_list = SettingsService.get_providers_dict(self.db)
+        return self._providers_list
 
     def close(self) -> None:
         """Release any resources owned by the client."""
@@ -209,7 +226,7 @@ class RealtimeClient:
                         },
                         "service_type": {
                             "type": "string",
-                            "enum": list(SERVICES.keys()),
+                            "enum": list(self._get_services().keys()),
                             "description": "Type of service requested"
                         }
                     },
@@ -241,7 +258,7 @@ class RealtimeClient:
                         },
                         "service_type": {
                             "type": "string",
-                            "enum": list(SERVICES.keys()),
+                            "enum": list(self._get_services().keys()),
                             "description": "Type of service"
                         },
                         "provider": {
@@ -265,7 +282,7 @@ class RealtimeClient:
                     "properties": {
                         "service_type": {
                             "type": "string",
-                            "enum": list(SERVICES.keys()),
+                            "enum": list(self._get_services().keys()),
                             "description": "Type of service to get information about"
                         }
                     },
@@ -333,7 +350,7 @@ class RealtimeClient:
                         },
                         "service_type": {
                             "type": "string",
-                            "enum": list(SERVICES.keys()),
+                            "enum": list(self._get_services().keys()),
                             "description": "Service type for duration lookup (optional if previously stored)"
                         },
                         "provider": {
@@ -392,6 +409,7 @@ class RealtimeClient:
                     date=date_str,
                     service_type=service_type,
                     limit=10,
+                    services_dict=self._get_services(),
                 )
 
                 if availability.get("success"):
@@ -426,6 +444,7 @@ class RealtimeClient:
                 booking_result = handle_book_appointment(
                     self.calendar_service,
                     **normalized_args,
+                    services_dict=self._get_services(),
                 )
 
                 if booking_result.get("success"):
@@ -468,7 +487,7 @@ class RealtimeClient:
 
             elif function_name == "get_service_info":
                 service_type = arguments.get("service_type")
-                service = SERVICES.get(service_type)
+                service = self._get_services().get(service_type)
 
                 if service:
                     return {
@@ -560,7 +579,7 @@ class RealtimeClient:
                     }
 
                 start_time = datetime.fromisoformat(new_start_time_str.replace('Z', '+00:00'))
-                duration = SERVICES[service_type]["duration_minutes"]
+                duration = self._get_services()[service_type]["duration_minutes"]
                 end_time = start_time + timedelta(minutes=duration)
 
                 success = self.calendar_service.reschedule_appointment(
@@ -584,7 +603,7 @@ class RealtimeClient:
                         "success": True,
                         "appointment_id": appointment_id,
                         "new_time": start_time.strftime("%B %d, %Y at %I:%M %p"),
-                        "service": SERVICES[service_type]["name"],
+                        "service": self._get_services()[service_type]["name"],
                     }
 
                 return {

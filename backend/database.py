@@ -1,12 +1,12 @@
 """
 Database models and session management for the Med Spa Voice AI application.
 """
-from datetime import datetime
+from datetime import datetime, time
 from typing import Optional
 import uuid
 from sqlalchemy import (
     create_engine, Column, Integer, String, Float, DateTime,
-    Text, ForeignKey, Boolean, JSON, CheckConstraint, ARRAY
+    Text, ForeignKey, Boolean, JSON, CheckConstraint, ARRAY, Time, Numeric
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.declarative import declarative_base
@@ -638,6 +638,103 @@ class ManualCallLog(Base):
 
     __table_args__ = (
         CheckConstraint("transcription_status IN ('pending', 'completed', 'failed')", name='check_transcription_status'),
+    )
+
+
+# ==================== Med Spa Settings Models (Phase 3 - Configuration Management) ====================
+
+class MedSpaSettings(Base):
+    """
+    Singleton table for general med spa settings.
+    Only one row should exist - enforced at application level.
+    """
+    __tablename__ = "med_spa_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    name = Column(String(255), nullable=False)
+    phone = Column(String(20), nullable=False)
+    email = Column(String(255), nullable=False)
+    website = Column(String(255), nullable=True)
+    timezone = Column(String(50), nullable=False, default="America/New_York")
+    ai_assistant_name = Column(String(100), nullable=False, default="Ava")
+
+    # Policies
+    cancellation_policy = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        CheckConstraint('id = 1', name='singleton_med_spa_settings'),
+    )
+
+
+class Location(Base):
+    """Med spa locations - supports multi-location businesses."""
+    __tablename__ = "locations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    address = Column(Text, nullable=False)
+    phone = Column(String(20), nullable=True)
+    is_primary = Column(Boolean, default=False, index=True)
+    is_active = Column(Boolean, default=True, index=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    business_hours = relationship("BusinessHours", back_populates="location", cascade="all, delete-orphan")
+
+
+class BusinessHours(Base):
+    """Business hours per location and day of week."""
+    __tablename__ = "business_hours"
+
+    id = Column(Integer, primary_key=True, index=True)
+    location_id = Column(Integer, ForeignKey("locations.id"), nullable=False, index=True)
+    day_of_week = Column(Integer, nullable=False)  # 0=Monday, 6=Sunday
+    open_time = Column(Time, nullable=True)
+    close_time = Column(Time, nullable=True)
+    is_closed = Column(Boolean, default=False)
+
+    # Relationships
+    location = relationship("Location", back_populates="business_hours")
+
+    __table_args__ = (
+        CheckConstraint('day_of_week >= 0 AND day_of_week <= 6', name='check_day_of_week'),
+        CheckConstraint('is_closed = true OR (open_time IS NOT NULL AND close_time IS NOT NULL)', name='check_hours_when_open'),
+    )
+
+
+class Service(Base):
+    """Med spa services configuration."""
+    __tablename__ = "services"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    slug = Column(String(255), unique=True, nullable=False, index=True)  # URL-friendly identifier
+    description = Column(Text, nullable=False)
+    duration_minutes = Column(Integer, nullable=False)
+    price_min = Column(Numeric(10, 2), nullable=True)
+    price_max = Column(Numeric(10, 2), nullable=True)
+    price_display = Column(String(100), nullable=True)  # e.g., "Complimentary", "$300-$600"
+
+    # Instructions
+    prep_instructions = Column(Text, nullable=True)
+    aftercare_instructions = Column(Text, nullable=True)
+
+    # Organization
+    category = Column(String(100), nullable=True)  # "injectables", "skincare", "body", etc.
+    is_active = Column(Boolean, default=True, index=True)
+    display_order = Column(Integer, default=0)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        CheckConstraint('duration_minutes > 0', name='check_duration_positive'),
+        CheckConstraint('price_min IS NULL OR price_max IS NULL OR price_min <= price_max', name='check_price_range'),
     )
 
 
