@@ -40,6 +40,17 @@ def get_booking_tools() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "function": {
+                "name": "get_current_date",
+                "description": "Retrieve the current Eastern time date context. Call this before referencing relative dates like 'today' or 'tomorrow'.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "book_appointment",
                 "description": "Book an appointment for a customer",
                 "parameters": {

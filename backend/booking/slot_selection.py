@@ -60,7 +60,7 @@ class SlotSelectionCore:
         arguments: Dict[str, Any],
         output: Dict[str, Any],
     ) -> None:
-        slots = output.get("available_slots") or []
+        slots = output.get("all_slots") or output.get("available_slots") or []
         metadata = SlotSelectionCore.conversation_metadata(conversation)
 
         if not slots:
@@ -89,17 +89,44 @@ class SlotSelectionCore:
 
         existing_pending = metadata.get("pending_slot_offers", {})
         preserved_selection = False
+        matched_slot: Optional[Dict[str, Any]] = None
+        matched_index: Optional[int] = None
+
         if isinstance(existing_pending, dict):
-            for key in [
-                "selected_option_index",
-                "selected_slot",
-                "selected_by_message_id",
-                "selected_content_preview",
-                "selected_at",
-            ]:
-                if key in existing_pending:
-                    offer_payload[key] = existing_pending[key]
-                    preserved_selection = True
+            existing_selected_slot = existing_pending.get("selected_slot")
+            candidate_start = None
+            if isinstance(existing_selected_slot, dict):
+                candidate_start = existing_selected_slot.get("start")
+
+            if candidate_start:
+                for idx, slot in enumerate(slots, start=1):
+                    if slot.get("start") == candidate_start:
+                        matched_slot = slot
+                        matched_index = idx
+                        break
+
+            if matched_slot is None:
+                existing_index = existing_pending.get("selected_option_index")
+                if isinstance(existing_index, int) and 1 <= existing_index <= len(slots):
+                    matched_slot = slots[existing_index - 1]
+                    matched_index = existing_index
+
+            if matched_slot is not None and matched_index is not None:
+                offer_payload["selected_option_index"] = matched_index
+                offer_payload["selected_slot"] = matched_slot
+                preserved_selection = True
+                for key in [
+                    "selected_by_message_id",
+                    "selected_content_preview",
+                    "selected_at",
+                ]:
+                    if key in existing_pending:
+                        offer_payload[key] = existing_pending[key]
+            elif existing_pending.get("selected_slot") or existing_pending.get("selected_option_index"):
+                logger.info(
+                    "Clearing stale slot selection for conversation_id=%s after refreshed availability.",
+                    conversation.id,
+                )
 
         metadata["pending_slot_offers"] = offer_payload
         SlotSelectionCore.persist_conversation_metadata(db, conversation, metadata)
@@ -293,13 +320,28 @@ class SlotSelectionCore:
         selected_slot: Optional[Dict[str, Any]] = None
 
         if isinstance(choice_index, int) and 1 <= choice_index <= len(slots):
-            selected_slot = slots[choice_index - 1]
-            logger.info(
-                "Slot selection via numbered choice: conversation_id=%s, choice_index=%d, slot=%s",
-                conversation.id,
-                choice_index,
-                selected_slot.get("start_time", selected_slot.get("start")),
-            )
+            candidate_slot = slots[choice_index - 1]
+            candidate_label = candidate_slot.get("start_time", candidate_slot.get("start"))
+
+            # When a user has explicitly selected an option, ALWAYS honor that selection
+            # even if the AI passes a different time in the booking arguments.
+            # The selection takes precedence over the requested time.
+            selected_slot = candidate_slot
+            if requested_start and not SlotSelectionCore.slot_matches_request(candidate_slot, requested_start):
+                logger.info(
+                    "Numbered selection takes precedence for conversation_id=%s: choice_index=%d is %s, AI requested %s. Using selection.",
+                    conversation.id,
+                    choice_index,
+                    candidate_label,
+                    requested_start,
+                )
+            else:
+                logger.info(
+                    "Slot selection via numbered choice: conversation_id=%s, choice_index=%d, slot=%s",
+                    conversation.id,
+                    choice_index,
+                    candidate_label,
+                )
         elif requested_start:
             for idx, slot in enumerate(slots, start=1):
                 if SlotSelectionCore.slot_matches_request(slot, requested_start):

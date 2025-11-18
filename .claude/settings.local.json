@@ -4,7 +4,9 @@
       "Bash(curl:*)",
       "Bash(python:*)",
       "Bash(PYTHONPATH=/Users/neerajbajpayee/Coding/Eva/backend python3:*)",
-      "Bash(PYTHONPATH=/Users/neerajbajpayee/Coding/Eva/backend pytest:*)"
+      "Bash(PYTHONPATH=/Users/neerajbajpayee/Coding/Eva/backend pytest:*)",
+      "Bash(python3:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

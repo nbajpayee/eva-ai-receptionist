@@ -83,7 +83,8 @@ def test_sms_offers_consumed_by_voice_selection(db_session):
         arguments={"date": "2025-11-16", "service_type": "hydrafacial"},
         output={
             "success": True,
-            "available_slots": slots,
+            "all_slots": slots,  # Full slot list for validation
+            "available_slots": slots,  # Display slots (same for this test)
             "date": "2025-11-16",
             "service": "Hydrafacial",
             "service_type": "hydrafacial",

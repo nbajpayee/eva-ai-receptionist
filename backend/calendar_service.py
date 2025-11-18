@@ -1,9 +1,8 @@
-"""
-Google Calendar integration service for managing appointments.
-"""
+"""Google Calendar integration service for managing appointments."""
 import logging
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 try:  # pragma: no cover - import guard for optional dependency environments
@@ -39,6 +38,19 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 EASTERN_TZ = pytz.timezone('America/New_York')
 
 
+def _resolve_path(path_str: str) -> Path:
+    path = Path(path_str)
+    if path.is_absolute():
+        return path
+    return Path(__file__).resolve().parent / path
+
+
+def _credentials_available() -> bool:
+    creds_path = _resolve_path(settings.GOOGLE_CREDENTIALS_FILE)
+    token_path = _resolve_path(settings.GOOGLE_TOKEN_FILE)
+    return creds_path.exists() and token_path.exists()
+
+
 class GoogleCalendarService:
     """Service for interacting with Google Calendar API."""
 
@@ -59,9 +71,12 @@ class GoogleCalendarService:
     def _authenticate(self):
         """Authenticate with Google Calendar API."""
         # The file token.json stores the user's access and refresh tokens
-        if os.path.exists(settings.GOOGLE_TOKEN_FILE):
+        credentials_path = _resolve_path(settings.GOOGLE_CREDENTIALS_FILE)
+        token_path = _resolve_path(settings.GOOGLE_TOKEN_FILE)
+
+        if token_path.exists():
             self.creds = Credentials.from_authorized_user_file(
-                settings.GOOGLE_TOKEN_FILE, SCOPES
+                str(token_path), SCOPES
             )
 
         # If there are no (valid) credentials available, let the user log in
@@ -70,22 +85,22 @@ class GoogleCalendarService:
                 logger.info("Refreshing expired Google Calendar credentials")
                 self.creds.refresh(Request())
             else:
-                if not os.path.exists(settings.GOOGLE_CREDENTIALS_FILE):
+                if not credentials_path.exists():
                     message = (
                         "Google credentials file not found: "
-                        f"{settings.GOOGLE_CREDENTIALS_FILE}"
+                        f"{credentials_path}"
                     )
                     logger.error(message)
                     raise FileNotFoundError(message)
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    settings.GOOGLE_CREDENTIALS_FILE, SCOPES
+                    str(credentials_path), SCOPES
                 )
                 self.creds = flow.run_local_server(port=0)
 
             # Save the credentials for the next run
-            with open(settings.GOOGLE_TOKEN_FILE, 'w') as token:
+            with open(token_path, 'w') as token:
                 token.write(self.creds.to_json())
-                logger.info("Saved new Google Calendar OAuth token to %s", settings.GOOGLE_TOKEN_FILE)
+                logger.info("Saved new Google Calendar OAuth token to %s", token_path)
 
         self.service = build('calendar', 'v3', credentials=self.creds)
         logger.info("Initialized Google Calendar service client")
@@ -107,6 +122,14 @@ class GoogleCalendarService:
         Returns:
             List of available time slots with start and end times
         """
+        if not _credentials_available():
+            logger.warning(
+                "Google Calendar credentials unavailable – returning no slots for %s on %s",
+                service_type,
+                date.strftime("%Y-%m-%d"),
+            )
+            return []
+
         try:
             # Get service duration
             if duration_minutes is None:
@@ -210,8 +233,9 @@ class GoogleCalendarService:
             service_name = service_info.get('name', service_type)
 
             # Create event
+            summary = f'{service_name} - {customer_name}'
             event = {
-                'summary': f'{service_name} - {customer_name}',
+                'summary': summary,
                 'description': f"""
 Service: {service_name}
 Customer: {customer_name}
@@ -249,11 +273,80 @@ Notes: {notes or 'None'}
                 body=event
             ).execute()
 
-            return event.get('id')
+            event_id = event.get('id')
+            if event_id:
+                return event_id
+
+            logger.warning(
+                "Google Calendar insert returned without an event ID; attempting fallback lookup."
+            )
+            return self._find_existing_event(
+                start_time=start_time,
+                end_time=end_time,
+                summary=summary,
+            )
 
         except HttpError as error:
             logger.exception("Google Calendar API booking error: %s", error)
+            fallback_id = self._find_existing_event(
+                start_time=start_time,
+                end_time=end_time,
+                summary=summary,
+            )
+            if fallback_id:
+                logger.warning(
+                    "Google Calendar reported an error but matching event exists; treating as success."
+                )
+                return fallback_id
             return None
+
+    def _find_existing_event(
+        self,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+        summary: str,
+    ) -> Optional[str]:
+        """Best-effort search for an event matching the requested booking details."""
+        window_start = (start_time - timedelta(minutes=1)).astimezone(EASTERN_TZ)
+        window_end = (end_time + timedelta(minutes=1)).astimezone(EASTERN_TZ)
+
+        try:
+            events_result = self.service.events().list(
+                calendarId=settings.GOOGLE_CALENDAR_ID,
+                timeMin=window_start.isoformat(),
+                timeMax=window_end.isoformat(),
+                singleEvents=True,
+                orderBy='startTime',
+            ).execute()
+        except HttpError as lookup_error:  # pragma: no cover - defensive
+            logger.exception(
+                "Google Calendar fallback lookup failed: %s", lookup_error
+            )
+            return None
+
+        for event in events_result.get('items', []):
+            event_id = event.get('id')
+            if not event_id:
+                continue
+
+            event_summary = event.get('summary') or ""
+            if event_summary.strip() != summary.strip():
+                continue
+
+            raw_start = event.get('start', {}).get('dateTime') or event.get('start', {}).get('date')
+            if not raw_start:
+                continue
+
+            try:
+                event_start = datetime.fromisoformat(raw_start.replace('Z', '+00:00'))
+            except ValueError:
+                continue
+
+            if abs((event_start.astimezone(EASTERN_TZ) - start_time.astimezone(EASTERN_TZ)).total_seconds()) <= 60:
+                return event_id
+
+        return None
 
     def cancel_appointment(self, event_id: str) -> bool:
         """Cancel an appointment in Google Calendar."""
@@ -341,15 +434,18 @@ def get_calendar_service() -> GoogleCalendarService:
 
 def check_calendar_credentials() -> Dict[str, Any]:
     """Validate Google Calendar credential and token availability."""
+    credentials_path = _resolve_path(settings.GOOGLE_CREDENTIALS_FILE)
+    token_path = _resolve_path(settings.GOOGLE_TOKEN_FILE)
+
     status: Dict[str, Any] = {
         "dependencies_ok": GOOGLE_API_IMPORT_ERROR is None,
         "credentials_file": {
-            "path": settings.GOOGLE_CREDENTIALS_FILE,
-            "exists": os.path.exists(settings.GOOGLE_CREDENTIALS_FILE),
+            "path": str(credentials_path),
+            "exists": credentials_path.exists(),
         },
         "token_file": {
-            "path": settings.GOOGLE_TOKEN_FILE,
-            "exists": os.path.exists(settings.GOOGLE_TOKEN_FILE),
+            "path": str(token_path),
+            "exists": token_path.exists(),
             "valid": False,
             "needs_refresh": False,
         },
@@ -364,8 +460,8 @@ def check_calendar_credentials() -> Dict[str, Any]:
         )
         return status
 
-    credential_path = status["credentials_file"]["path"]
-    token_path = status["token_file"]["path"]
+    credential_path = credentials_path
+    token_file_path = token_path
 
     if not status["credentials_file"]["exists"]:
         logger.error("Google Calendar credentials file missing at %s", credential_path)
@@ -374,7 +470,7 @@ def check_calendar_credentials() -> Dict[str, Any]:
 
     if status["token_file"]["exists"]:
         try:
-            creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+            creds = Credentials.from_authorized_user_file(str(token_file_path), SCOPES)
             if creds.valid:
                 status["token_file"]["valid"] = True
                 logger.debug("Google Calendar OAuth token is valid")
@@ -388,10 +484,10 @@ def check_calendar_credentials() -> Dict[str, Any]:
         except Exception as exc:  # noqa: BLE001
             status["token_file"]["error"] = str(exc)
             logger.exception(
-                "Failed to load Google Calendar token from %s: %s", token_path, exc
+                "Failed to load Google Calendar token from %s: %s", token_file_path, exc
             )
     else:
-        logger.warning("Google Calendar token file missing at %s", token_path)
+        logger.warning("Google Calendar token file missing at %s", token_file_path)
 
     status["ok"] = (
         status["dependencies_ok"]

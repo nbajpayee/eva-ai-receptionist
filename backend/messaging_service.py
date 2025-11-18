@@ -4,11 +4,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import textwrap
 import os
 import re
+from types import SimpleNamespace
 
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Callable, Any as TypingAny
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -39,8 +41,8 @@ from booking.time_utils import parse_iso_datetime, format_for_display, EASTERN_T
 from booking.manager import SlotSelectionManager, SlotSelectionError
 
 logger = logging.getLogger(__name__)
-
-settings = get_settings()
+logger.setLevel(logging.INFO)
+s = get_settings()
 
 
 class MessagingService:
@@ -49,46 +51,64 @@ class MessagingService:
     _calendar_service_instance = None
     _calendar_credentials_logged = False
 
-    @staticmethod
-    def _coerce_phone(channel: str, customer_phone: Optional[str], customer_email: Optional[str]) -> Optional[str]:
-        """Ensure we always have a phone value for customer records.
+    def __init__(
+        self,
+        *,
+        db_session_factory,
+        calendar_service=None,
+        analytics_service=None,
+    ):
+        self._db_session_factory = db_session_factory
+        self.calendar_service = calendar_service or get_calendar_service()
+        self.analytics_service = analytics_service or AnalyticsService(db_session_factory)
+        self._trace_seq = 0
 
-        The customers table requires a unique, non-null phone. For email-only tests,
-        use a deterministic placeholder derived from the email address.
-        """
-        if customer_phone:
-            return customer_phone
-        if channel == "email" and customer_email:
-            digest = hashlib.sha1(customer_email.lower().encode("utf-8")).hexdigest()[:10]
-            return f"email:{digest}"
-        return None
+    @staticmethod
+    def _format_start_for_channel(dt: datetime, channel: str) -> str:
+        return format_for_display(dt, channel=channel)
+
+    # ------------------------------------------------------------------
+    # Customer & conversation helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
     def find_or_create_customer(
-        db: Session,
         *,
+        db: Session,
         channel: str,
         customer_name: str,
         customer_phone: Optional[str],
         customer_email: Optional[str],
     ) -> Customer:
-        phone_value = MessagingService._coerce_phone(channel, customer_phone, customer_email)
-        if not phone_value:
-            raise HTTPException(status_code=422, detail="customer_phone or customer_email is required")
+        """Find an existing customer by phone/email or create a new record."""
 
-        customer = (
-            db.query(Customer)
-            .filter(Customer.phone == phone_value)
-            .first()
-        )
+        customer: Optional[Customer] = None
+        canonical_phone = (customer_phone or "").strip() or None
+        email_value = (customer_email or "").strip() or None
+
+        if canonical_phone:
+            customer = (
+                db.query(Customer)
+                .filter(Customer.phone == canonical_phone)
+                .first()
+            )
+
+        if customer is None and email_value:
+            customer = (
+                db.query(Customer)
+                .filter(Customer.email == email_value)
+                .first()
+            )
 
         if customer:
-            # Update name/email if missing to keep data fresh
             updated = False
-            if customer_email and customer.email != customer_email:
-                customer.email = customer_email
+            if canonical_phone and not customer.phone:
+                customer.phone = canonical_phone
                 updated = True
-            if customer_name and customer.name != customer_name:
+            if email_value and not customer.email:
+                customer.email = email_value
+                updated = True
+            if customer.name != customer_name and customer_name:
                 customer.name = customer_name
                 updated = True
             if updated:
@@ -97,9 +117,9 @@ class MessagingService:
             return customer
 
         customer = Customer(
-            name=customer_name or "Unknown",
-            phone=phone_value,
-            email=customer_email,
+            name=customer_name,
+            phone=canonical_phone,
+            email=email_value,
             is_new_client=True,
         )
         db.add(customer)
@@ -107,55 +127,204 @@ class MessagingService:
         db.refresh(customer)
         return customer
 
-    # ------------------------------------------------------------------
-    # Calendar helpers
-    # ------------------------------------------------------------------
+    @staticmethod
+    def find_active_conversation(
+        *,
+        db: Session,
+        customer_id: int,
+        channel: str,
+    ) -> Optional[Conversation]:
+        return (
+            db.query(Conversation)
+            .filter(
+                Conversation.customer_id == customer_id,
+                Conversation.channel == channel,
+                Conversation.status == "active",
+            )
+            .order_by(Conversation.last_activity_at.desc())
+            .first()
+        )
+
+    @staticmethod
+    def create_conversation(
+        *,
+        db: Session,
+        customer_id: Optional[int],
+        channel: str,
+        subject: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Conversation:
+        conversation = AnalyticsService.create_conversation(
+            db=db,
+            customer_id=customer_id,
+            channel=channel,
+            metadata=metadata or {},
+        )
+        if subject:
+            conversation.subject = subject
+            db.commit()
+            db.refresh(conversation)
+        return conversation
+
+    @staticmethod
+    def add_customer_message(
+        *,
+        db: Session,
+        conversation: Conversation,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> CommunicationMessage:
+        message = AnalyticsService.add_message(
+            db=db,
+            conversation_id=conversation.id,
+            direction="inbound",
+            content=content,
+            metadata=metadata or {},
+        )
+        return message
+
+    @staticmethod
+    def add_assistant_message(
+        *,
+        db: Session,
+        conversation: Conversation,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> CommunicationMessage:
+        message = AnalyticsService.add_message(
+            db=db,
+            conversation_id=conversation.id,
+            direction="outbound",
+            content=content,
+            metadata=metadata or {},
+        )
+        return message
 
     @staticmethod
     def _get_calendar_service():
-        """Return a reusable calendar service instance with safe fallback."""
-        if MessagingService._calendar_service_instance is not None:
-            return MessagingService._calendar_service_instance
-
-        if not MessagingService._calendar_credentials_logged:
-            credentials_exists = os.path.exists(settings.GOOGLE_CREDENTIALS_FILE)
-            token_exists = os.path.exists(settings.GOOGLE_TOKEN_FILE)
-            logger.info(
-                "Google Calendar credential status (env=%s): credentials=%s, token=%s",
-                settings.ENV,
-                credentials_exists,
-                token_exists,
-            )
-            if not credentials_exists or not token_exists:
-                logger.warning(
-                    "Google Calendar credential files missing (credentials=%s, token=%s)",
-                    credentials_exists,
-                    token_exists,
-                )
-            MessagingService._calendar_credentials_logged = True
-
-        credentials_exists = os.path.exists(settings.GOOGLE_CREDENTIALS_FILE)
-        token_exists = os.path.exists(settings.GOOGLE_TOKEN_FILE)
-
-        try:
-            service = get_calendar_service()
-            logger.info("Using Google Calendar service (env=%s)", settings.ENV)
-        except Exception as exc:  # noqa: BLE001
-            logger.critical(
-                "Google Calendar initialization failed (env=%s, credentials=%s, token=%s): %s",
-                settings.ENV,
-                credentials_exists,
-                token_exists,
-                exc,
-            )
-            raise RuntimeError("Calendar service unavailable") from exc
-
-        MessagingService._calendar_service_instance = service
+        if MessagingService._calendar_service_instance is None:
+            MessagingService._calendar_service_instance = get_calendar_service()
         return MessagingService._calendar_service_instance
 
     @staticmethod
-    def _format_start_for_channel(dt: datetime, channel: str) -> str:
-        return format_for_display(dt, channel=channel)
+    def _parse_iso_datetime(value: str) -> datetime:
+        return parse_iso_datetime(value)
+
+    # ------------------------------------------------------------------
+    # Conversation intent helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _latest_customer_message(conversation: Conversation) -> Optional[CommunicationMessage]:
+        if not conversation.messages:
+            return None
+        inbound_messages = [m for m in conversation.messages if m.direction == "inbound"]
+        if not inbound_messages:
+            return None
+        return max(inbound_messages, key=lambda m: m.sent_at or conversation.last_activity_at or conversation.initiated_at)
+
+    @staticmethod
+    def _extract_booking_params(conversation: Conversation) -> Tuple[str, str]:
+        """Extract date and service type from recent conversation messages."""
+        metadata = SlotSelectionManager.conversation_metadata(conversation)
+        hinted_date = metadata.get("pending_booking_date")
+        hinted_service = metadata.get("pending_booking_service")
+
+        # Default date is tomorrow
+        date = hinted_date or (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
+        service_type = hinted_service
+
+        # Consider last few inbound and outbound messages to capture user requests
+        relevant_messages = [m for m in conversation.messages if m.direction == "inbound"][-5:]
+        # Include last assistant reply in case it mentioned a service the user confirmed
+        outbound_messages = [m for m in conversation.messages if m.direction == "outbound"][-3:]
+
+        def _scan(messages: List[CommunicationMessage]) -> None:
+            nonlocal date, service_type
+            for msg in reversed(messages):
+                content = (msg.content or "").lower()
+                if not content:
+                    continue
+
+                if service_type is None:
+                    for service_name in SERVICES.keys():
+                        if service_name.lower() in content:
+                            service_type = service_name.lower()
+                            break
+
+                if "today" in content:
+                    date = datetime.utcnow().strftime("%Y-%m-%d")
+                elif any(token in content for token in ("tomorrow", "tmrw", "tmr")):
+                    date = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        _scan(relevant_messages)
+        if service_type is None:
+            _scan(outbound_messages)
+
+        if service_type is None:
+            service_type = "botox"
+            logger.warning(
+                "Could not extract service type from conversation %s. Defaulting to 'botox'.",
+                conversation.id,
+            )
+
+        return date, service_type
+
+    @staticmethod
+    def _requires_availability_enforcement(db: Session, conversation: Conversation) -> bool:
+        pending = SlotSelectionManager.get_pending_slot_offers(db, conversation, enforce_expiry=False)
+        if pending:
+            return False
+
+        # Check if there's a pending booking intent from a previous message
+        metadata = conversation.custom_metadata or {}
+        pending_booking_intent = metadata.get("pending_booking_intent", False)
+
+        last_customer = MessagingService._latest_customer_message(conversation)
+        if not last_customer or not last_customer.content:
+            return False
+
+        text = last_customer.content.lower()
+        booking_keywords = ["book", "schedule", "appointment", "reserve", "slot"]
+        current_message_is_booking = any(keyword in text for keyword in booking_keywords)
+
+        # Return True if EITHER current message OR pending intent indicates booking
+        if current_message_is_booking or pending_booking_intent:
+            return True
+        return False
+
+    @staticmethod
+    def _should_force_availability(
+        db: Session,
+        conversation: Conversation,
+        ai_message: Any,
+    ) -> bool:
+        tool_calls = getattr(ai_message, "tool_calls", None) or []
+        if tool_calls:
+            return False
+
+        # Check if there's a pending booking intent in the conversation metadata
+        metadata = conversation.custom_metadata or {}
+        pending_booking_intent = metadata.get("pending_booking_intent", False)
+
+        # If we already have pending slot offers, don't force check_availability again
+        # (the user might be trying to select from existing offers)
+        if metadata.get("pending_slot_offers"):
+            return False
+
+        last_customer = MessagingService._latest_customer_message(conversation)
+        if not last_customer or not last_customer.content:
+            return False
+
+        text = last_customer.content.lower()
+        booking_keywords = ["book", "schedule", "appointment", "reserve", "slot"]
+
+        # Check if the current message OR pending intent indicates a booking request
+        current_message_is_booking = any(keyword in text for keyword in booking_keywords)
+
+        if current_message_is_booking or pending_booking_intent:
+            return True
+        return False
 
     @staticmethod
     def build_booking_confirmation_message(*, channel: str, tool_output: Dict[str, Any]) -> Optional[str]:
@@ -190,13 +359,66 @@ class MessagingService:
         return message
 
     @staticmethod
-    def _normalize_tool_arguments(tool_name: Optional[str], arguments: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Optional[str]]]]:
+    def _normalize_tool_arguments(
+        tool_name: Optional[str],
+        arguments: Dict[str, Any],
+        conversation: Optional[Conversation] = None,
+    ) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Optional[str]]]]:
         if not arguments:
             return {}, {}
 
         normalized = {k: v for k, v in arguments.items()}
         adjustments: Dict[str, Dict[str, Optional[str]]] = {}
         reference = datetime.now(EASTERN_TZ)
+
+        def _message_mentions_tomorrow(text: Optional[str]) -> bool:
+            if not text:
+                return False
+            lowered = text.lower()
+            if "tomor" in lowered:
+                return True
+            return any(token in lowered for token in ("tmrw", "tmr"))
+
+        tomorrow_hint = False
+        if conversation and conversation.messages:
+            ordered_messages = sorted(
+                conversation.messages,
+                key=lambda message: (
+                    message.sent_at
+                    or conversation.last_activity_at
+                    or conversation.initiated_at
+                    or datetime.utcnow()
+                ),
+            )
+
+            last_customer_message: Optional[CommunicationMessage] = None
+            preceding_assistant_message: Optional[CommunicationMessage] = None
+
+            for message in reversed(ordered_messages):
+                if message.direction == "inbound":
+                    last_customer_message = message
+                    break
+
+            if last_customer_message is not None:
+                if _message_mentions_tomorrow(last_customer_message.content):
+                    tomorrow_hint = True
+                else:
+                    try:
+                        idx = ordered_messages.index(last_customer_message)
+                    except ValueError:
+                        idx = -1
+                    if idx > 0:
+                        for candidate in reversed(ordered_messages[:idx]):
+                            if candidate.direction == "outbound":
+                                preceding_assistant_message = candidate
+                                break
+                    if (
+                        preceding_assistant_message is not None
+                        and _message_mentions_tomorrow(preceding_assistant_message.content)
+                    ):
+                        stripped = (last_customer_message.content or "").strip().lower()
+                        if stripped in {"1", "option 1", "1.", "one", "1)"}:
+                            tomorrow_hint = True
 
         def _set(field: str, new_value: str) -> None:
             original_value = normalized.get(field)
@@ -219,7 +441,11 @@ class MessagingService:
                         new_date = normalize_date_to_future(str(date_value), reference=reference)
                     except ValueError:
                         new_date = reference.strftime("%Y-%m-%d")
-                    _set("date", new_date)
+                    if tomorrow_hint and new_date == reference.strftime("%Y-%m-%d"):
+                        tomorrow_date = (reference + timedelta(days=1)).strftime("%Y-%m-%d")
+                        _set("date", tomorrow_date)
+                    else:
+                        _set("date", new_date)
 
             elif tool_name == "book_appointment":
                 for key in ("start_time", "start"):
@@ -376,6 +602,21 @@ class MessagingService:
         return context
 
     @staticmethod
+    def _current_datetime_context() -> Dict[str, Any]:
+        now = datetime.now(EASTERN_TZ)
+        tomorrow = now + timedelta(days=1)
+        next_week = now + timedelta(days=7)
+        return {
+            "success": True,
+            "date": now.strftime("%Y-%m-%d"),
+            "day_of_week": now.strftime("%A"),
+            "time": now.strftime("%I:%M %p %Z").lstrip("0"),
+            "datetime_iso": now.isoformat(),
+            "tomorrow": tomorrow.strftime("%Y-%m-%d"),
+            "next_week": next_week.strftime("%Y-%m-%d"),
+        }
+
+    @staticmethod
     def _update_customer_from_arguments(db: Session, customer: Customer, arguments: Dict[str, Any]) -> None:
         updated = False
 
@@ -458,6 +699,9 @@ class MessagingService:
                         arguments=arguments,
                         output=output,
                     )
+                    # NOTE: Don't clear pending_booking_intent here!
+                    # It should persist until the booking is complete or user changes topic.
+                    # Clearing it too early causes the retry loop to stop triggering.
                 else:
                     SlotSelectionManager.clear_offers(db, conversation)
                 result["slot_offers"] = SlotSelectionManager.pending_slot_summary(db, conversation)
@@ -488,6 +732,13 @@ class MessagingService:
                         provider=arguments.get("provider"),
                         notes=arguments.get("notes"),
                     )
+                    # Clear pending booking intent after successful booking
+                    if output.get("success"):
+                        metadata = conversation.custom_metadata or {}
+                        if metadata.get("pending_booking_intent"):
+                            metadata["pending_booking_intent"] = False
+                            conversation.custom_metadata = metadata
+                            db.commit()
                 result["slot_offers"] = SlotSelectionManager.pending_slot_summary(db, conversation)
             elif name == "reschedule_appointment":
                 output = handle_reschedule_appointment(
@@ -520,6 +771,8 @@ class MessagingService:
                 output = handle_search_customer(
                     phone=arguments.get("phone", ""),
                 )
+            elif name == "get_current_date":
+                output = MessagingService._current_datetime_context()
             else:
                 output = {"success": False, "error": f"Unsupported tool: {name}"}
         except Exception as exc:  # noqa: BLE001
@@ -705,77 +958,79 @@ class MessagingService:
         if commit_required:
             SlotSelectionManager.persist_conversation_metadata(db, conversation, metadata)
 
+    @staticmethod
+    def _make_trace_logger(conversation: Conversation):
+        conversation_id = conversation.id
+        counter = {"value": 0}
+
+        def _trace(message: str, *args) -> None:
+            counter["value"] += 1
+            formatted = message % args if args else message
+            logger.info("[trace:%s:%03d] %s", conversation_id, counter["value"], formatted)
+
+        return _trace
 
     @staticmethod
-    def find_active_conversation(db: Session, *, customer_id: int, channel: str) -> Optional[Conversation]:
-        return (
-            db.query(Conversation)
-            .filter(
-                Conversation.customer_id == customer_id,
-                Conversation.channel == channel,
-                Conversation.status == "active",
-            )
-            .order_by(Conversation.last_activity_at.desc())
-            .first()
-        )
+    def _condense_messages_for_trace(messages: List[Dict[str, Any]]) -> str:
+        lines: List[str] = []
+        for entry in messages[-12:]:  # limit for readability
+            role = entry.get("role")
+            if role == "system":
+                content = entry.get("content", "").splitlines()[0:3]
+                lines.append(f"system: {' | '.join(content)}".strip())
+            elif role in {"user", "assistant"}:
+                content = entry.get("content", "")
+                snippet = textwrap.shorten(content, width=180, placeholder=" …")
+                lines.append(f"{role}: {snippet}")
+            elif role == "tool":
+                name = entry.get("name")
+                payload = entry.get("content")
+                snippet = textwrap.shorten(str(payload), width=160, placeholder=" …")
+                lines.append(f"tool:{name}: {snippet}")
+        return "\n".join(lines)
 
     @staticmethod
-    def create_conversation(
-        db: Session,
+    def _call_ai(
+        messages: List[Dict[str, Any]],
         *,
-        customer_id: Optional[int],
         channel: str,
-        subject: Optional[str] = None,
-        metadata: Optional[dict] = None,
-    ) -> Conversation:
-        conversation = AnalyticsService.create_conversation(
-            db=db,
-            customer_id=customer_id,
-            channel=channel,
-            metadata=metadata,
+        ai_mode: str,
+        temperature: float,
+        max_tokens: int,
+        tool_choice: Any,
+        trace: Callable[..., None],
+    ) -> Any:
+        condensed = MessagingService._condense_messages_for_trace(messages)
+        trace(
+            "AI request -> channel=%s mode=%s temperature=%.2f max_tokens=%d tool_choice=%s\n%s",
+            channel,
+            ai_mode,
+            temperature,
+            max_tokens,
+            tool_choice,
+            condensed,
         )
-        if subject:
-            conversation.subject = subject
-            db.commit()
-            db.refresh(conversation)
-        return conversation
 
-    @staticmethod
-    def add_customer_message(
-        db: Session,
-        *,
-        conversation: Conversation,
-        content: str,
-        metadata: Optional[dict] = None,
-    ) -> CommunicationMessage:
-        message = AnalyticsService.add_message(
-            db=db,
-            conversation_id=conversation.id,
-            direction="inbound",
-            content=content,
-            sent_at=datetime.utcnow(),
-            metadata=metadata or {},
-        )
-        SlotSelectionManager.capture_selection(db, conversation, message)
-        return message
+        try:
+            if not s.OPENAI_API_KEY:
+                raise RuntimeError("OPENAI_API_KEY not configured")
 
-    @staticmethod
-    def add_assistant_message(
-        db: Session,
-        *,
-        conversation: Conversation,
-        content: str,
-        metadata: Optional[dict] = None,
-    ) -> CommunicationMessage:
-        message = AnalyticsService.add_message(
-            db=db,
-            conversation_id=conversation.id,
-            direction="outbound",
-            content=content,
-            sent_at=datetime.utcnow(),
-            metadata=metadata or {},
-        )
-        return message
+            response = openai_client.chat.completions.create(
+                model=s.OPENAI_MESSAGING_MODEL,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                tools=get_booking_tools(),
+                tool_choice=tool_choice,
+            )
+            trace("AI raw response: %s", response)
+            return response
+        except Exception as exc:  # noqa: BLE001 - fall back gracefully for local dev
+            trace("AI call failed: %s", exc)
+            fallback_message = (
+                "I'm running in a local environment without AI access."
+            )
+            return MessagingService._mock_completion(fallback_message)
 
     @staticmethod
     def generate_ai_response(
@@ -794,25 +1049,147 @@ class MessagingService:
 
         history = MessagingService._build_history(conversation, channel)
         max_tokens = 500 if channel == "sms" else 1000
+        metadata = SlotSelectionManager.conversation_metadata(conversation)
+        force_needed = MessagingService._requires_availability_enforcement(db, conversation)
 
-        try:
-            if not settings.OPENAI_API_KEY:
-                raise RuntimeError("OPENAI_API_KEY not configured")
+        trace = MessagingService._make_trace_logger(conversation)
+        calendar_service = MessagingService._get_calendar_service()
+        trace("=== TURN START: channel=%s mode=%s", channel, "ai")
 
-            response = openai_client.chat.completions.create(
-                model=settings.OPENAI_MESSAGING_MODEL,
-                messages=history,
-                temperature=0.3,
-                max_tokens=max_tokens,
-                tools=get_booking_tools(),
-                tool_choice="auto",
+        # DETERMINISTIC APPROACH: If we detect booking intent, call check_availability
+        # BEFORE asking the AI, then inject results into the conversation context.
+        # This avoids relying on the AI to call the tool (which it often refuses to do).
+        preemptive_availability_result = None
+        if force_needed:
+            logger.info(
+                "Booking intent detected for conversation %s. Calling check_availability preemptively.",
+                conversation_id,
             )
-            message = response.choices[0].message
-            text_content = (message.content or "").strip()
-            return text_content, message
-        except Exception as exc:  # noqa: BLE001 - fall back gracefully for local dev
-            logger.warning("Failed to generate AI response via OpenAI: %s", exc)
-            return MessagingService._fallback_response(channel), None
+
+            # Extract date and service from recent messages
+            date, service_type = MessagingService._extract_booking_params(conversation)
+
+            trace("Preemptively calling check_availability: date=%s, service=%s", date, service_type)
+
+            try:
+                output = handle_check_availability(
+                    calendar_service,
+                    date=date,
+                    service_type=service_type,
+                )
+
+                if output.get("success"):
+                    # Store the offers
+                    SlotSelectionManager.record_offers(
+                        db,
+                        conversation,
+                        tool_call_id="preemptive_call",
+                        arguments={"date": date, "service_type": service_type},
+                        output=output,
+                    )
+                    db.refresh(conversation)
+                    metadata = SlotSelectionManager.conversation_metadata(conversation)
+
+                    preemptive_availability_result = {
+                        "tool_call_id": "preemptive_call",
+                        "name": "check_availability",
+                        "arguments": {"date": date, "service_type": service_type},
+                        "output": output,
+                    }
+
+                    # Add tool result to history so AI knows about the availability
+                    history.append({
+                        "role": "assistant",
+                        "content": "",  # Empty string instead of None to avoid trace errors
+                        "tool_calls": [{
+                            "id": "preemptive_call",
+                            "type": "function",
+                            "function": {
+                                "name": "check_availability",
+                                "arguments": json.dumps({"date": date, "service_type": service_type})
+                            }
+                        }]
+                    })
+                    history.append({
+                        "role": "tool",
+                        "tool_call_id": "preemptive_call",
+                        "content": json.dumps(output)
+                    })
+
+                    metadata.update(
+                        {
+                            "pending_booking_intent": True,
+                            "pending_booking_date": date,
+                            "pending_booking_service": service_type,
+                        }
+                    )
+                    SlotSelectionManager.persist_conversation_metadata(db, conversation, metadata)
+
+                    trace("Preemptive check_availability succeeded. Injected results into context.")
+                else:
+                    logger.warning(
+                        "Preemptive check_availability failed for conversation %s: %s",
+                        conversation_id,
+                        output.get("error", "Unknown error")
+                    )
+            except Exception as exc:
+                logger.error(
+                    "Exception during preemptive check_availability for conversation %s: %s",
+                    conversation_id,
+                    exc,
+                    exc_info=True
+                )
+
+        # With preemptive tool calling, we don't need complex retry loops.
+        # Just call the AI once with the availability already in context.
+        ai_response = MessagingService._call_ai(
+            messages=history,
+            channel=channel,
+            ai_mode="ai",
+            temperature=0.3,
+            max_tokens=max_tokens,
+            tool_choice="auto",  # No forcing needed - context already has availability
+            trace=trace,
+        )
+
+        message = ai_response.choices[0].message
+        text_content = (message.content or "").strip()
+
+        # If we called check_availability preemptively and AI still tries to call it,
+        # that's fine - just let it proceed normally
+        trace("Assistant provisional reply: %s", text_content)
+        history.append({"role": "assistant", "content": text_content})
+
+        tool_calls = getattr(message, "tool_calls", None) or []
+        if tool_calls:
+            trace("AI requested %d tool call(s)", len(tool_calls))
+            tool_call_results = []
+            for tool_call in tool_calls:
+                call_id = getattr(tool_call, "id", None)
+                function_payload = getattr(tool_call, "function", None)
+                function_repr = {
+                    "name": getattr(function_payload, "name", None),
+                    "arguments": getattr(function_payload, "arguments", ""),
+                }
+                trace("-- ToolCall[%s]: %s", call_id, function_repr)
+                result = MessagingService._execute_tool_call(
+                    db=db,
+                    conversation=conversation,
+                    customer=conversation.customer,
+                    calendar_service=calendar_service,
+                    call=tool_call,
+                )
+                trace("-- ToolResult[%s]: %s", call_id, result.get("output"))
+                tool_call_results.append(result)
+
+            history.extend(MessagingService._tool_context_messages(message, tool_call_results))
+
+            # When tools are called, return empty text content
+            # The followup response will generate the actual message based on tool results
+            return "", message
+
+        # If no tool calls, return the text
+        return text_content, message
 
     @staticmethod
     def generate_followup_response(
@@ -835,9 +1212,16 @@ class MessagingService:
         history.extend(MessagingService._tool_context_messages(assistant_message, tool_results))
         max_tokens = 500 if channel == "sms" else 1000
 
+        if not s.OPENAI_API_KEY:
+            logger.info(
+                "OPENAI_API_KEY not configured; returning fallback follow-up response for conversation %s",
+                conversation_id,
+            )
+            return MessagingService._fallback_response(channel), None
+
         try:
             response = openai_client.chat.completions.create(
-                model=settings.OPENAI_MESSAGING_MODEL,
+                model=s.OPENAI_MESSAGING_MODEL,
                 messages=history,
                 temperature=0.3,
                 max_tokens=max_tokens,
@@ -852,10 +1236,16 @@ class MessagingService:
             return MessagingService._fallback_response(channel), None
 
     @staticmethod
+    def _mock_completion(content: str) -> TypingAny:
+        message = SimpleNamespace(content=content, tool_calls=[])
+        choice = SimpleNamespace(message=message)
+        return SimpleNamespace(choices=[choice])
+
+    @staticmethod
     def sms_metadata_for_customer(customer_phone: str) -> Dict[str, Any]:
         return {
             "from_number": customer_phone,
-            "to_number": settings.MED_SPA_PHONE,
+            "to_number": s.MED_SPA_PHONE,
             "provider_message_id": f"test-{uuid4()}",
             "delivery_status": "sent",
         }
@@ -863,7 +1253,7 @@ class MessagingService:
     @staticmethod
     def sms_metadata_for_assistant(customer_phone: str) -> Dict[str, Any]:
         return {
-            "from_number": settings.MED_SPA_PHONE,
+            "from_number": s.MED_SPA_PHONE,
             "to_number": customer_phone,
             "provider_message_id": f"test-{uuid4()}",
             "delivery_status": "sent",
@@ -874,7 +1264,7 @@ class MessagingService:
         return {
             "subject": subject or "Message from Luxury Med Spa",
             "from_address": customer_email,
-            "to_address": settings.MED_SPA_EMAIL,
+            "to_address": s.MED_SPA_EMAIL,
             "body_text": body_text,
         }
 
@@ -882,7 +1272,7 @@ class MessagingService:
     def email_metadata_for_assistant(customer_email: str, subject: Optional[str], body_text: str) -> Dict[str, Any]:
         return {
             "subject": subject or "Message from Luxury Med Spa",
-            "from_address": settings.MED_SPA_EMAIL,
+            "from_address": s.MED_SPA_EMAIL,
             "to_address": customer_email,
             "body_text": body_text,
         }

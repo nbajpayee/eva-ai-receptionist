@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from config import PROVIDERS, SERVICES
 from booking.time_utils import EASTERN_TZ, parse_iso_datetime, to_eastern
@@ -40,7 +40,7 @@ def normalize_date_to_future(value: str, *, reference: Optional[datetime] = None
     except ValueError as exc:  # noqa: BLE001
         raise ValueError(f"Invalid date format: {exc}") from exc
 
-    reference_dt = _to_eastern(reference) if reference else datetime.now(EASTERN_TZ)
+    reference_dt = to_eastern(reference) if reference else datetime.now(EASTERN_TZ)
     candidate_date = parsed_date
 
     for _ in range(366 * 3):  # safety guard (~3 years)
@@ -51,7 +51,156 @@ def normalize_date_to_future(value: str, *, reference: Optional[datetime] = None
     return candidate_date.strftime("%Y-%m-%d")
 
 
-def handle_check_availability(calendar_service, *, date: str, service_type: str, limit: int = 10) -> Dict[str, Any]:
+def _format_time_display(dt: datetime) -> str:
+    localized = to_eastern(dt)
+    formatted = localized.strftime("%I:%M %p").lstrip("0")
+    if formatted.endswith(":00 AM"):
+        formatted = formatted.replace(":00 AM", " AM")
+    elif formatted.endswith(":00 PM"):
+        formatted = formatted.replace(":00 PM", " PM")
+    return formatted
+
+
+def _build_availability_windows(slots: List[Dict[str, Any]]) -> Tuple[List[Tuple[datetime, datetime]], List[Dict[str, Any]]]:
+    if not slots:
+        return [], []
+
+    sorted_slots = sorted(
+        [slot for slot in slots if slot.get("start") and slot.get("end")],
+        key=lambda slot: slot.get("start"),
+    )
+
+    raw_windows: List[Tuple[datetime, datetime]] = []
+    current_start: Optional[datetime] = None
+    current_end: Optional[datetime] = None
+    gap_tolerance = timedelta(minutes=5)
+
+    for slot in sorted_slots:
+        try:
+            start_dt = to_eastern(parse_iso_datetime(str(slot["start"])))
+            end_dt = to_eastern(parse_iso_datetime(str(slot["end"])))
+        except (ValueError, TypeError):
+            continue
+
+        if current_start is None:
+            current_start = start_dt
+            current_end = end_dt
+            continue
+
+        assert current_end is not None  # for type checkers
+        if start_dt <= current_end + gap_tolerance:
+            if end_dt > current_end:
+                current_end = end_dt
+        else:
+            raw_windows.append((current_start, current_end))
+            current_start = start_dt
+            current_end = end_dt
+
+    if current_start is not None and current_end is not None:
+        raw_windows.append((current_start, current_end))
+
+    serialized_windows: List[Dict[str, Any]] = []
+    for start_dt, end_dt in raw_windows:
+        start_label = _format_time_display(start_dt)
+        end_label = _format_time_display(end_dt)
+        if start_label == end_label:
+            compact = start_label
+            spoken = start_label
+        else:
+            compact = f"{start_label}-{end_label}"
+            spoken = f"{start_label} to {end_label}"
+        serialized_windows.append(
+            {
+                "start": start_dt.isoformat(),
+                "end": end_dt.isoformat(),
+                "start_time": start_label,
+                "end_time": end_label,
+                "label": compact,
+                "spoken_label": spoken,
+            }
+        )
+
+    return raw_windows, serialized_windows
+
+
+def _availability_summary_text(windows: List[Dict[str, Any]]) -> str:
+    if not windows:
+        return "Were fully booked for that day."
+
+    segments = [window["spoken_label"] for window in windows]
+    if len(segments) == 1:
+        return f"We have availability from {segments[0]}."
+    if len(segments) == 2:
+        return f"We have availability from {segments[0]} and {segments[1]}."
+    joined = ", ".join(segments[:-1]) + f", and {segments[-1]}"
+    return f"We have availability from {joined}."
+
+
+def _suggested_slots(slots: List[Dict[str, Any]], raw_windows: List[Tuple[datetime, datetime]]) -> List[Dict[str, Any]]:
+    if not slots:
+        return []
+
+    def _compact(slot: Dict[str, Any]) -> Dict[str, Any]:
+        label = slot.get("start_time")
+        if not label and slot.get("start"):
+            try:
+                label = _format_time_display(parse_iso_datetime(str(slot["start"])))
+            except (ValueError, TypeError):
+                label = None
+        compact_slot = {
+            "start": slot.get("start"),
+            "end": slot.get("end"),
+            "start_time": label or slot.get("start_time"),
+            "end_time": slot.get("end_time"),
+        }
+        return compact_slot
+
+    seen_starts: set[str] = set()
+    selections: List[Dict[str, Any]] = []
+
+    first_slot = slots[0]
+    first_start = str(first_slot.get("start")) if first_slot.get("start") else None
+    if first_start:
+        seen_starts.add(first_start)
+    selections.append(_compact(first_slot))
+
+    if len(slots) == 1:
+        return selections
+
+    if len(raw_windows) > 1:
+        second_window_start = raw_windows[1][0]
+        for slot in slots:
+            start_value = slot.get("start")
+            if not start_value:
+                continue
+            try:
+                slot_start = to_eastern(parse_iso_datetime(str(start_value)))
+            except (ValueError, TypeError):
+                continue
+            if slot_start >= second_window_start:
+                if start_value not in seen_starts:
+                    seen_starts.add(start_value)
+                    selections.append(_compact(slot))
+                break
+    if len(selections) < 2:
+        mid_index = max(1, len(slots) // 2)
+        mid_slot = slots[mid_index]
+        start_value = mid_slot.get("start")
+        if not start_value or start_value not in seen_starts:
+            if start_value:
+                seen_starts.add(start_value)
+            selections.append(_compact(mid_slot))
+
+    return selections[:2]
+
+
+def handle_check_availability(
+    calendar_service,
+    *,
+    date: str,
+    service_type: str,
+    limit: Optional[int] = 10,
+) -> Dict[str, Any]:
     """Return available slots for the given date/service."""
     try:
         target_date = datetime.strptime(date, "%Y-%m-%d")
@@ -79,10 +228,27 @@ def handle_check_availability(calendar_service, *, date: str, service_type: str,
                 # If we can't parse the slot time, skip it
                 continue
 
+    future_slots = sorted(
+        future_slots,
+        key=lambda slot: slot.get("start") or slot.get("start_time") or "",
+    )
+
+    raw_windows, serialized_windows = _build_availability_windows(future_slots)
+    summary_text = _availability_summary_text(serialized_windows)
+    suggestions = _suggested_slots(future_slots, raw_windows)
+
+    limited_slots = future_slots
+    if limit is not None and limit > 0:
+        limited_slots = future_slots[:limit]
+
     service_config = SERVICES.get(service_type, {})
     return {
         "success": True,
-        "available_slots": future_slots[:limit],
+        "available_slots": limited_slots,
+        "all_slots": future_slots,
+        "availability_windows": serialized_windows,
+        "availability_summary": summary_text,
+        "suggested_slots": suggestions,
         "date": date,
         "service": service_config.get("name", service_type),
     }
@@ -120,7 +286,7 @@ def handle_book_appointment(
         calendar_service,
         date=start_dt.strftime("%Y-%m-%d"),
         service_type=service_type,
-        limit=10,
+        limit=None,
     )
     if not availability.get("success"):
         return {
@@ -129,7 +295,11 @@ def handle_book_appointment(
             "details": availability,
         }
 
-    available_slots = availability.get("available_slots") or []
+    available_slots = (
+        availability.get("all_slots")
+        or availability.get("available_slots")
+        or []
+    )
     requested_start_iso = start_dt.isoformat()
 
     def _slot_matches_request(slot_start: str, requested: datetime) -> bool:
@@ -147,12 +317,17 @@ def handle_book_appointment(
     if not any(
         _slot_matches_request(slot.get("start"), start_dt) for slot in available_slots
     ):
-        return {
+        error_payload = {
             "success": False,
             "error": f"Requested start time {requested_start_iso} is not available",
             "available_slots": available_slots[:3],
             "requested_start": requested_start_iso,
         }
+        if availability.get("availability_summary"):
+            error_payload["availability_summary"] = availability["availability_summary"]
+        if availability.get("availability_windows"):
+            error_payload["availability_windows"] = availability["availability_windows"]
+        return error_payload
 
     try:
         event_id = calendar_service.book_appointment(
@@ -171,7 +346,7 @@ def handle_book_appointment(
     if not event_id:
         return {"success": False, "error": "Calendar booking failed"}
 
-    return {
+    success_payload = {
         "success": True,
         "event_id": event_id,
         "start_time": start_dt.isoformat(),
@@ -183,6 +358,13 @@ def handle_book_appointment(
         "duration_minutes": duration,
         "notes": notes,
     }
+    if availability.get("availability_summary"):
+        success_payload["availability_summary"] = availability["availability_summary"]
+    if availability.get("availability_windows"):
+        success_payload["availability_windows"] = availability["availability_windows"]
+    if availability.get("suggested_slots"):
+        success_payload["suggested_slots"] = availability["suggested_slots"]
+    return success_payload
 
 
 def handle_reschedule_appointment(

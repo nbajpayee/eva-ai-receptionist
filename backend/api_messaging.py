@@ -202,6 +202,13 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
                     calendar_service=calendar_service,
                     call=call,
                 )
+
+                # CRITICAL: Refresh conversation and customer after each tool call to ensure
+                # metadata updates (like pending slot offers) and customer updates
+                # are visible to subsequent tool calls in the same request
+                db.refresh(conversation)
+                db.refresh(customer)
+
             except Exception as exc:  # noqa: BLE001 - continue capturing failure details
                 result = {
                     "tool_call_id": getattr(call, "id", None),
@@ -328,6 +335,7 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
     }
 
 
+@messaging_router.get("", include_in_schema=False)
 @messaging_router.get("/conversations")
 def list_conversations(
     channel: Optional[ChannelLiteral] = Query(None),
