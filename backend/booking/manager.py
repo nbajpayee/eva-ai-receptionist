@@ -1,4 +1,5 @@
 """Public façade for slot selection helpers."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -6,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session
 
 from database import CommunicationMessage, Conversation
+
 from .slot_selection import SlotSelectionCore, SlotSelectionError
 
 
@@ -65,7 +67,9 @@ class SlotSelectionManager:
         )
 
     @staticmethod
-    def pending_slot_summary(db: Session, conversation: Conversation) -> List[Dict[str, Any]]:
+    def pending_slot_summary(
+        db: Session, conversation: Conversation
+    ) -> List[Dict[str, Any]]:
         return SlotSelectionCore.pending_slot_summary(db, conversation)
 
     @staticmethod

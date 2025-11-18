@@ -7,16 +7,17 @@ These tests verify:
 - Cross-channel duplicate detection
 - Race condition handling
 """
+
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta
 from unittest.mock import patch
-import uuid
 
 import pytest
 
 from booking_handlers import handle_book_appointment
-from database import Customer, Appointment
+from database import Appointment, Customer
 
 
 @pytest.mark.integration
@@ -51,7 +52,11 @@ class TestDuplicateAppointments:
         # Should detect duplicate or slot unavailable
         if not result.get("success", False):
             error_msg = result.get("error", "").lower()
-            assert "already" in error_msg or "booked" in error_msg or "unavailable" in error_msg
+            assert (
+                "already" in error_msg
+                or "booked" in error_msg
+                or "unavailable" in error_msg
+            )
 
     def test_same_customer_overlapping_time(self, db_session, customer):
         """Test preventing overlapping appointments for same customer."""
@@ -59,7 +64,9 @@ class TestDuplicateAppointments:
         base_time = datetime.utcnow() + timedelta(days=7)
         appt1 = Appointment(
             customer_id=customer.id,
-            appointment_datetime=base_time.replace(hour=14, minute=0, second=0, microsecond=0),
+            appointment_datetime=base_time.replace(
+                hour=14, minute=0, second=0, microsecond=0
+            ),
             service_type="botox",
             duration_minutes=60,
             status="scheduled",
@@ -69,7 +76,9 @@ class TestDuplicateAppointments:
         db_session.commit()
 
         # Try to book 2:30pm (overlaps with existing)
-        overlapping_time = base_time.replace(hour=14, minute=30, second=0, microsecond=0).isoformat()
+        overlapping_time = base_time.replace(
+            hour=14, minute=30, second=0, microsecond=0
+        ).isoformat()
         result = handle_book_appointment(
             db_session,
             customer_name=customer.name,
@@ -82,9 +91,15 @@ class TestDuplicateAppointments:
         # Should prevent overlap or mark as unavailable
         if not result.get("success", False):
             error_msg = result.get("error", "").lower()
-            assert "overlap" in error_msg or "unavailable" in error_msg or "booked" in error_msg
+            assert (
+                "overlap" in error_msg
+                or "unavailable" in error_msg
+                or "booked" in error_msg
+            )
 
-    def test_same_slot_different_customers(self, db_session, customer, returning_customer):
+    def test_same_slot_different_customers(
+        self, db_session, customer, returning_customer
+    ):
         """Test same slot can be booked by different customers (if capacity allows)."""
         # Book first customer
         slot_time = datetime.utcnow() + timedelta(days=8, hours=15)
@@ -138,10 +153,14 @@ class TestDuplicateAppointments:
         )
 
         # Should detect existing appointment
-        existing_appts = db_session.query(Appointment).filter(
-            Appointment.customer_id == customer.id,
-            Appointment.status == "scheduled"
-        ).count()
+        existing_appts = (
+            db_session.query(Appointment)
+            .filter(
+                Appointment.customer_id == customer.id,
+                Appointment.status == "scheduled",
+            )
+            .count()
+        )
 
         assert existing_appts >= 1
 
@@ -182,10 +201,14 @@ class TestDuplicateAppointments:
         db_session.refresh(appt)
         assert appt.status == "rescheduled"
 
-        scheduled_count = db_session.query(Appointment).filter(
-            Appointment.customer_id == customer.id,
-            Appointment.status == "scheduled"
-        ).count()
+        scheduled_count = (
+            db_session.query(Appointment)
+            .filter(
+                Appointment.customer_id == customer.id,
+                Appointment.status == "scheduled",
+            )
+            .count()
+        )
 
         assert scheduled_count == 1
 
@@ -245,11 +268,15 @@ class TestDuplicateAppointments:
         assert appt.status == "scheduled"
 
         # Should not create duplicate
-        duplicate_count = db_session.query(Appointment).filter(
-            Appointment.customer_id == customer.id,
-            Appointment.appointment_datetime == appt_time,
-            Appointment.status == "scheduled"
-        ).count()
+        duplicate_count = (
+            db_session.query(Appointment)
+            .filter(
+                Appointment.customer_id == customer.id,
+                Appointment.appointment_datetime == appt_time,
+                Appointment.status == "scheduled",
+            )
+            .count()
+        )
 
         assert duplicate_count == 1
 
@@ -287,4 +314,6 @@ class TestDuplicateAppointments:
 
         # At most one should succeed (may all fail if mock not properly set)
         successes = [r for r in results if r.get("success", False)]
-        assert len(successes) <= 1, "Race condition not handled - multiple bookings succeeded"
+        assert (
+            len(successes) <= 1
+        ), "Race condition not handled - multiple bookings succeeded"

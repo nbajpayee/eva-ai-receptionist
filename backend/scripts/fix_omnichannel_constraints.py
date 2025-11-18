@@ -7,6 +7,7 @@ This script fixes two issues discovered during migration:
 Usage:
     python backend/scripts/fix_omnichannel_constraints.py
 """
+
 from __future__ import annotations
 
 import sys
@@ -36,21 +37,27 @@ def main():
     settings = get_settings()
 
     if settings.DATABASE_URL.startswith("sqlite"):
-        print("[ERROR] DATABASE_URL points to SQLite. This script requires Supabase/PostgreSQL.")
+        print(
+            "[ERROR] DATABASE_URL points to SQLite. This script requires Supabase/PostgreSQL."
+        )
         sys.exit(1)
 
     print("\n🔧 Fixing Omnichannel Schema Constraints")
     print("=" * 60)
-    print(f"Database: {settings.DATABASE_URL.split('@')[1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
+    print(
+        f"Database: {settings.DATABASE_URL.split('@')[1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}"
+    )
     print("=" * 60)
 
     with engine.connect() as conn:
         # Fix 1: Make customer_id nullable
         print("\n1️⃣  Making customer_id nullable in conversations...")
         try:
-            conn.execute(text(
-                "ALTER TABLE conversations ALTER COLUMN customer_id DROP NOT NULL;"
-            ))
+            conn.execute(
+                text(
+                    "ALTER TABLE conversations ALTER COLUMN customer_id DROP NOT NULL;"
+                )
+            )
             conn.commit()
             print("   ✅ customer_id is now nullable")
         except Exception as e:
@@ -62,9 +69,11 @@ def main():
         # Fix 2: Drop event_type check constraint
         print("\n2️⃣  Removing event_type check constraint...")
         try:
-            conn.execute(text(
-                "ALTER TABLE communication_events DROP CONSTRAINT IF EXISTS check_event_type;"
-            ))
+            conn.execute(
+                text(
+                    "ALTER TABLE communication_events DROP CONSTRAINT IF EXISTS check_event_type;"
+                )
+            )
             conn.commit()
             print("   ✅ event_type check constraint removed (allows any event type)")
         except Exception as e:
@@ -77,7 +86,9 @@ def main():
     print("  ✓ customer_id is now nullable (handles unidentified callers)")
     print("  ✓ event_type allows any string (legacy + future event types)")
     print("\nYou can now re-run the migration script:")
-    print("  python backend/scripts/migrate_call_sessions_to_conversations.py --limit 5")
+    print(
+        "  python backend/scripts/migrate_call_sessions_to_conversations.py --limit 5"
+    )
     print()
 
 

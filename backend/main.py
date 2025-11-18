@@ -1,24 +1,30 @@
 """
 Main FastAPI application for Med Spa Voice AI.
 """
-import uuid
+
 import asyncio
 import logging
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query, Request
-from starlette.websockets import WebSocketState
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
-from typing import Optional, Dict, List
+import uuid
 from datetime import datetime
-from config import get_settings
-from database import get_db, init_db, Customer, Appointment, CallSession, Conversation
-from realtime_client import RealtimeClient
+from typing import Dict, List, Optional
+
+from fastapi import (Depends, FastAPI, HTTPException, Query, Request,
+                     WebSocket, WebSocketDisconnect)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
+from starlette.websockets import WebSocketState
+
 from analytics import AnalyticsService
-from api_messaging import messaging_router
 from api_admin import router as admin_router
+from api_messaging import messaging_router
 from calendar_service import check_calendar_credentials
+from config import get_settings
+from database import (Appointment, CallSession, Conversation, Customer, get_db,
+                      init_db)
+from realtime_client import RealtimeClient
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -27,7 +33,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="AI-powered voice receptionist for medical spas"
+    description="AI-powered voice receptionist for medical spas",
 )
 
 # Register routers
@@ -68,7 +74,7 @@ async def root():
     return {
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "status": "running"
+        "status": "running",
     }
 
 
@@ -80,11 +86,10 @@ async def health_check():
 
 # ==================== Voice WebSocket Endpoint ====================
 
+
 @app.websocket("/ws/voice/{session_id}")
 async def voice_websocket(
-    websocket: WebSocket,
-    session_id: str,
-    db: Session = Depends(get_db)
+    websocket: WebSocket, session_id: str, db: Session = Depends(get_db)
 ):
     """
     WebSocket endpoint for voice communication with OpenAI Realtime API.
@@ -100,17 +105,18 @@ async def voice_websocket(
     # DUAL-WRITE: Create both legacy call_session and new conversation
     # Legacy schema (for backward compatibility during migration)
     call_session = AnalyticsService.create_call_session(
-        db=db,
-        session_id=session_id,
-        phone_number=None  # Will be updated if collected
+        db=db, session_id=session_id, phone_number=None  # Will be updated if collected
     )
 
     # New omnichannel schema
     conversation = AnalyticsService.create_conversation(
         db=db,
         customer_id=None,  # Will be updated if identified
-        channel='voice',
-        metadata={'session_id': session_id, 'legacy_call_session_id': str(call_session.id)}
+        channel="voice",
+        metadata={
+            "session_id": session_id,
+            "legacy_call_session_id": str(call_session.id),
+        },
     )
 
     # Initialize OpenAI Realtime client
@@ -134,8 +140,10 @@ async def voice_websocket(
             active_connections.pop(session_id, None)
 
             session_data = realtime_client.get_session_data()
-            transcript_entries = session_data.get('transcript', [])
-            print(f"🧾 Transcript entries captured for {session_id}: {len(transcript_entries)}")
+            transcript_entries = session_data.get("transcript", [])
+            print(
+                f"🧾 Transcript entries captured for {session_id}: {len(transcript_entries)}"
+            )
             if not transcript_entries:
                 print("🧾 Transcript data (empty or missing)")
             else:
@@ -146,26 +154,30 @@ async def voice_websocket(
                 # DUAL-WRITE: Update both legacy and new schemas
 
                 # Extract customer data once for reuse
-                customer_data = session_data.get('customer_data', {})
+                customer_data = session_data.get("customer_data", {})
 
                 # 1. Update legacy call_session (this also looks up/links customer)
                 updated_call_session = AnalyticsService.end_call_session(
                     db=db,
                     session_id=session_id,
-                    transcript=session_data.get('transcript', []),
-                    function_calls=session_data.get('function_calls', []),
-                    customer_data=customer_data
+                    transcript=session_data.get("transcript", []),
+                    function_calls=session_data.get("function_calls", []),
+                    customer_data=customer_data,
                 )
 
                 # 2. Update new conversation schema
                 # Extract customer ID from the updated call_session
                 # (end_call_session already looked up customer by phone)
-                customer_id = updated_call_session.customer_id if updated_call_session else None
+                customer_id = (
+                    updated_call_session.customer_id if updated_call_session else None
+                )
 
                 # Update conversation with customer ID if identified
                 if customer_id:
                     conversation.customer_id = customer_id
-                    print(f"🔗 Linked conversation {conversation.id} to customer {customer_id}")
+                    print(
+                        f"🔗 Linked conversation {conversation.id} to customer {customer_id}"
+                    )
                     db.commit()
                 else:
                     print(f"⚠️  No customer linked for session {session_id}")
@@ -173,34 +185,52 @@ async def voice_websocket(
                 # Add message with human-readable summary (not raw JSON)
                 # The actual transcript goes in voice_details.transcript_segments
                 import json
-                summary_text = f"Voice call - {len(transcript_entries)} transcript segments"
+
+                summary_text = (
+                    f"Voice call - {len(transcript_entries)} transcript segments"
+                )
                 if transcript_entries:
                     # Include first and last message for context
-                    first_msg = transcript_entries[0].get('text', '') if transcript_entries else ''
+                    first_msg = (
+                        transcript_entries[0].get("text", "")
+                        if transcript_entries
+                        else ""
+                    )
                     summary_text = f"Voice call starting with: {first_msg[:100]}..."
 
                 message = AnalyticsService.add_message(
                     db=db,
                     conversation_id=conversation.id,
-                    direction='inbound',
+                    direction="inbound",
                     content=summary_text,  # Human-readable summary, not JSON dump
                     sent_at=conversation.initiated_at,
                     metadata={
-                        'customer_interruptions': customer_data.get('interruptions', 0),
-                        'ai_clarifications_needed': 0,
-                        'transcript_entry_count': len(transcript_entries)
-                    }
+                        "customer_interruptions": customer_data.get("interruptions", 0),
+                        "ai_clarifications_needed": 0,
+                        "transcript_entry_count": len(transcript_entries),
+                    },
                 )
 
                 # Add voice call details
-                duration = int((datetime.utcnow() - conversation.initiated_at.replace(tzinfo=None)).total_seconds()) if conversation.initiated_at else 0
+                duration = (
+                    int(
+                        (
+                            datetime.utcnow()
+                            - conversation.initiated_at.replace(tzinfo=None)
+                        ).total_seconds()
+                    )
+                    if conversation.initiated_at
+                    else 0
+                )
                 AnalyticsService.add_voice_details(
                     db=db,
                     message_id=message.id,
                     duration_seconds=duration,
                     transcript_segments=transcript_entries,
-                    function_calls=session_data.get('function_calls', []),
-                    interruption_count=session_data.get('customer_data', {}).get('interruptions', 0)
+                    function_calls=session_data.get("function_calls", []),
+                    interruption_count=session_data.get("customer_data", {}).get(
+                        "interruptions", 0
+                    ),
                 )
 
                 # Complete conversation
@@ -219,7 +249,9 @@ async def voice_websocket(
                     try:
                         await realtime_client.disconnect()
                     except Exception as disconnect_exc:  # noqa: BLE001
-                        logger.warning("Failed to disconnect realtime client: %s", disconnect_exc)
+                        logger.warning(
+                            "Failed to disconnect realtime client: %s", disconnect_exc
+                        )
                 realtime_client.close()
 
     try:
@@ -234,30 +266,30 @@ async def voice_websocket(
             db=db,
             call_session_id=call_session.id,
             event_type="session_started",
-            data={"session_id": session_id}
+            data={"session_id": session_id},
         )
         # New schema
         AnalyticsService.add_communication_event(
             db=db,
             conversation_id=conversation.id,
             event_type="session_started",
-            details={"session_id": session_id}
+            details={"session_id": session_id},
         )
         print("✅ Session logged to both schemas, about to define audio_callback")
 
         # Define callback for audio output
         print("✅ Defining audio_callback function")
+
         async def audio_callback(audio_b64: str):
             """Send audio from OpenAI back to client."""
             if websocket.client_state != WebSocketState.CONNECTED:
                 print("📤 Skipping audio send; websocket no longer connected")
                 return
 
-            print(f"📤 Audio callback called, sending {len(audio_b64)} chars to browser")
-            await websocket.send_json({
-                "type": "audio",
-                "data": audio_b64
-            })
+            print(
+                f"📤 Audio callback called, sending {len(audio_b64)} chars to browser"
+            )
+            await websocket.send_json({"type": "audio", "data": audio_b64})
             print("📤 Audio sent to browser")
 
         print("✅ audio_callback defined, about to define handle_client_messages")
@@ -290,7 +322,9 @@ async def voice_websocket(
                         try:
                             await websocket.close(code=1000)
                         except Exception as close_err:
-                            print(f"📱 Error closing client websocket after end_session: {close_err}")
+                            print(
+                                f"📱 Error closing client websocket after end_session: {close_err}"
+                            )
                         break
 
                     elif msg_type == "ping":
@@ -310,11 +344,16 @@ async def voice_websocket(
             except Exception as e:
                 print(f"📱 Error in client handler: {e}")
                 import traceback
+
                 traceback.print_exc()
             finally:
-                print("📱 Client handler exiting; realtime client will be closed during finalization")
+                print(
+                    "📱 Client handler exiting; realtime client will be closed during finalization"
+                )
 
-        print("✅ handle_client_messages defined, about to define handle_openai_messages")
+        print(
+            "✅ handle_client_messages defined, about to define handle_openai_messages"
+        )
 
         async def handle_openai_messages():
             """Handle incoming messages from OpenAI."""
@@ -327,9 +366,12 @@ async def voice_websocket(
             except Exception as e:
                 print(f"🤖 Error in OpenAI handler: {e}")
                 import traceback
+
                 traceback.print_exc()
 
-        print("✅ handle_openai_messages defined, about to import asyncio and start handlers")
+        print(
+            "✅ handle_openai_messages defined, about to import asyncio and start handlers"
+        )
 
         try:
             client_task = asyncio.create_task(handle_client_messages())
@@ -348,10 +390,14 @@ async def voice_websocket(
                 grace_start = asyncio.get_event_loop().time()
                 grace_timeout = 3.0
                 while pending_tasks:
-                    remaining = grace_timeout - (asyncio.get_event_loop().time() - grace_start)
+                    remaining = grace_timeout - (
+                        asyncio.get_event_loop().time() - grace_start
+                    )
                     if remaining <= 0:
                         break
-                    done_extra, pending_tasks = await asyncio.wait(pending_tasks, timeout=min(0.5, remaining))
+                    done_extra, pending_tasks = await asyncio.wait(
+                        pending_tasks, timeout=min(0.5, remaining)
+                    )
                     done_tasks.update(done_extra)
 
             # Ensure OpenAI connection is torn down once either side completes
@@ -375,11 +421,13 @@ async def voice_websocket(
         except Exception as orchestration_error:
             print(f"❌ Error orchestrating realtime handlers: {orchestration_error}")
             import traceback
+
             traceback.print_exc()
             raise
     except Exception as orchestration_error:
         print(f"❌ Unhandled error in voice_websocket: {orchestration_error}")
         import traceback
+
         traceback.print_exc()
         await finalize_session("exception")
         raise
@@ -391,26 +439,23 @@ async def voice_websocket(
         except Exception as cleanup_err:
             print(f"⚠️  Error during realtime client cleanup: {cleanup_err}")
 
+
 # ==================== Customer Management Endpoints ====================
+
 
 @app.post("/api/customers")
 async def create_customer(
-    name: str,
-    phone: str,
-    email: Optional[str] = None,
-    db: Session = Depends(get_db)
+    name: str, phone: str, email: Optional[str] = None, db: Session = Depends(get_db)
 ):
     """Create a new customer."""
     # Check if customer exists
     existing = db.query(Customer).filter(Customer.phone == phone).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Customer with this phone already exists")
+        raise HTTPException(
+            status_code=400, detail="Customer with this phone already exists"
+        )
 
-    customer = Customer(
-        name=name,
-        phone=phone,
-        email=email
-    )
+    customer = Customer(name=name, phone=phone, email=email)
     db.add(customer)
     db.commit()
     db.refresh(customer)
@@ -435,27 +480,30 @@ async def get_customer_history(customer_id: int, db: Session = Depends(get_db)):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    appointments = db.query(Appointment).filter(
-        Appointment.customer_id == customer_id
-    ).order_by(Appointment.appointment_datetime.desc()).all()
+    appointments = (
+        db.query(Appointment)
+        .filter(Appointment.customer_id == customer_id)
+        .order_by(Appointment.appointment_datetime.desc())
+        .all()
+    )
 
-    calls = db.query(CallSession).filter(
-        CallSession.customer_id == customer_id
-    ).order_by(CallSession.started_at.desc()).all()
+    calls = (
+        db.query(CallSession)
+        .filter(CallSession.customer_id == customer_id)
+        .order_by(CallSession.started_at.desc())
+        .all()
+    )
 
-    return {
-        "customer": customer,
-        "appointments": appointments,
-        "calls": calls
-    }
+    return {"customer": customer, "appointments": appointments, "calls": calls}
 
 
 # ==================== Admin Dashboard Endpoints ====================
 
+
 @app.get("/api/admin/metrics/overview")
 async def get_metrics_overview(
     period: str = Query("today", regex="^(today|week|month)$"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get overview metrics for dashboard."""
     return AnalyticsService.get_dashboard_overview(db, period)
@@ -466,9 +514,11 @@ async def get_call_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     search: Optional[str] = None,
-    sort_by: str = Query("started_at", regex="^(started_at|duration_seconds|satisfaction_score)$"),
+    sort_by: str = Query(
+        "started_at", regex="^(started_at|duration_seconds|satisfaction_score)$"
+    ),
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get paginated call history."""
     return AnalyticsService.get_call_history(
@@ -477,7 +527,7 @@ async def get_call_history(
         page_size=page_size,
         search=search,
         sort_by=sort_by,
-        sort_order=sort_order
+        sort_order=sort_order,
     )
 
 
@@ -495,11 +545,16 @@ async def get_call_details(call_id: int, db: Session = Depends(get_db)):
 
     # Get call events
     from database import CallEvent
-    events = db.query(CallEvent).filter(
-        CallEvent.call_session_id == call_id
-    ).order_by(CallEvent.timestamp.asc()).all()
+
+    events = (
+        db.query(CallEvent)
+        .filter(CallEvent.call_session_id == call_id)
+        .order_by(CallEvent.timestamp.asc())
+        .all()
+    )
 
     import json
+
     transcript = json.loads(call.transcript) if call.transcript else []
 
     return {
@@ -514,11 +569,11 @@ async def get_call_details(call_id: int, db: Session = Depends(get_db)):
             "sentiment": call.sentiment,
             "outcome": call.outcome,
             "escalated": call.escalated,
-            "escalation_reason": call.escalation_reason
+            "escalation_reason": call.escalation_reason,
         },
         "customer": customer,
         "transcript": transcript,
-        "events": events
+        "events": events,
     }
 
 
@@ -530,28 +585,29 @@ async def get_call_transcript(call_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Call not found")
 
     import json
+
     transcript = json.loads(call.transcript) if call.transcript else []
 
-    return {
-        "call_id": call_id,
-        "transcript": transcript
-    }
+    return {"call_id": call_id, "transcript": transcript}
 
 
 @app.get("/api/admin/analytics/daily")
 async def get_daily_analytics(
-    days: int = Query(30, ge=1, le=90),
-    db: Session = Depends(get_db)
+    days: int = Query(30, ge=1, le=90), db: Session = Depends(get_db)
 ):
     """Get daily analytics for the specified number of days."""
-    from database import DailyMetric
     from datetime import timedelta
+
+    from database import DailyMetric
 
     start_date = datetime.utcnow().date() - timedelta(days=days)
 
-    metrics = db.query(DailyMetric).filter(
-        DailyMetric.date >= start_date
-    ).order_by(DailyMetric.date.asc()).all()
+    metrics = (
+        db.query(DailyMetric)
+        .filter(DailyMetric.date >= start_date)
+        .order_by(DailyMetric.date.asc())
+        .all()
+    )
 
     return {
         "metrics": [
@@ -561,7 +617,7 @@ async def get_daily_analytics(
                 "appointments_booked": m.appointments_booked,
                 "avg_satisfaction_score": m.avg_satisfaction_score,
                 "conversion_rate": m.conversion_rate,
-                "avg_call_duration_minutes": round(m.avg_call_duration_seconds / 60, 2)
+                "avg_call_duration_minutes": round(m.avg_call_duration_seconds / 60, 2),
             }
             for m in metrics
         ]
@@ -570,25 +626,26 @@ async def get_daily_analytics(
 
 # ==================== Appointments Endpoints ====================
 
+
 @app.get("/api/appointments")
 async def get_appointments(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get appointments with optional filters."""
     query = db.query(Appointment)
 
     if start_date:
         # Replace 'Z' with '+00:00' for Python 3.8 compatibility
-        start_date_normalized = start_date.replace('Z', '+00:00')
+        start_date_normalized = start_date.replace("Z", "+00:00")
         start = datetime.fromisoformat(start_date_normalized)
         query = query.filter(Appointment.appointment_datetime >= start)
 
     if end_date:
         # Replace 'Z' with '+00:00' for Python 3.8 compatibility
-        end_date_normalized = end_date.replace('Z', '+00:00')
+        end_date_normalized = end_date.replace("Z", "+00:00")
         end = datetime.fromisoformat(end_date_normalized)
         query = query.filter(Appointment.appointment_datetime <= end)
 
@@ -601,6 +658,7 @@ async def get_appointments(
 
 # ==================== Omnichannel Communications Endpoints (Phase 2) ====================
 
+
 @app.get("/api/admin/communications")
 async def get_communications(
     customer_id: Optional[int] = None,
@@ -608,13 +666,14 @@ async def get_communications(
     status: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Get conversations with filtering and pagination.
     Replaces /api/admin/calls for omnichannel support.
     """
     from sqlalchemy.orm import joinedload
+
     from database import Conversation, Customer
 
     query = db.query(Conversation).options(joinedload(Conversation.customer))
@@ -632,66 +691,77 @@ async def get_communications(
 
     # Apply pagination and sorting
     offset = (page - 1) * page_size
-    conversations = query.order_by(Conversation.last_activity_at.desc())\
-        .offset(offset)\
-        .limit(page_size)\
+    conversations = (
+        query.order_by(Conversation.last_activity_at.desc())
+        .offset(offset)
+        .limit(page_size)
         .all()
+    )
 
     # Serialize conversations
     serialized = []
     for conv in conversations:
-        serialized.append({
-            "id": str(conv.id),
-            "customer_id": conv.customer_id,
-            "customer_name": conv.customer.name if conv.customer else None,
-            "customer_phone": conv.customer.phone if conv.customer else None,
-            "channel": conv.channel,
-            "status": conv.status,
-            "initiated_at": conv.initiated_at.isoformat() if conv.initiated_at else None,
-            "last_activity_at": conv.last_activity_at.isoformat() if conv.last_activity_at else None,
-            "completed_at": conv.completed_at.isoformat() if conv.completed_at else None,
-            "satisfaction_score": conv.satisfaction_score,
-            "sentiment": conv.sentiment,
-            "outcome": conv.outcome,
-            "subject": conv.subject,
-            "ai_summary": conv.ai_summary,
-            "metadata": conv.custom_metadata,
-        })
+        serialized.append(
+            {
+                "id": str(conv.id),
+                "customer_id": conv.customer_id,
+                "customer_name": conv.customer.name if conv.customer else None,
+                "customer_phone": conv.customer.phone if conv.customer else None,
+                "channel": conv.channel,
+                "status": conv.status,
+                "initiated_at": (
+                    conv.initiated_at.isoformat() if conv.initiated_at else None
+                ),
+                "last_activity_at": (
+                    conv.last_activity_at.isoformat() if conv.last_activity_at else None
+                ),
+                "completed_at": (
+                    conv.completed_at.isoformat() if conv.completed_at else None
+                ),
+                "satisfaction_score": conv.satisfaction_score,
+                "sentiment": conv.sentiment,
+                "outcome": conv.outcome,
+                "subject": conv.subject,
+                "ai_summary": conv.ai_summary,
+                "metadata": conv.custom_metadata,
+            }
+        )
 
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
         "total_pages": (total + page_size - 1) // page_size,
-        "conversations": serialized
+        "conversations": serialized,
     }
 
 
 @app.get("/api/admin/communications/{conversation_id}")
-async def get_conversation_detail(
-    conversation_id: str,
-    db: Session = Depends(get_db)
-):
+async def get_conversation_detail(conversation_id: str, db: Session = Depends(get_db)):
     """
     Get full conversation with all messages, events, and channel-specific details.
     """
-    from sqlalchemy.orm import joinedload
-    from database import Conversation
     from uuid import UUID
+
+    from sqlalchemy.orm import joinedload
+
+    from database import Conversation
 
     try:
         conv_uuid = UUID(conversation_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid conversation ID format")
 
-    conversation = db.query(Conversation)\
+    conversation = (
+        db.query(Conversation)
         .options(
             joinedload(Conversation.messages),
             joinedload(Conversation.events),
-            joinedload(Conversation.customer)
-        )\
-        .filter(Conversation.id == conv_uuid)\
+            joinedload(Conversation.customer),
+        )
+        .filter(Conversation.id == conv_uuid)
         .first()
+    )
 
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -709,31 +779,39 @@ async def get_conversation_detail(
         }
 
         # Add channel-specific details
-        if conversation.channel == 'voice' and msg.voice_details:
-            msg_data['voice'] = {
-                'duration_seconds': msg.voice_details.duration_seconds,
-                'recording_url': msg.voice_details.recording_url,
-                'transcript_segments': msg.voice_details.transcript_segments,
-                'function_calls': msg.voice_details.function_calls,
-                'interruption_count': msg.voice_details.interruption_count,
+        if conversation.channel == "voice" and msg.voice_details:
+            msg_data["voice"] = {
+                "duration_seconds": msg.voice_details.duration_seconds,
+                "recording_url": msg.voice_details.recording_url,
+                "transcript_segments": msg.voice_details.transcript_segments,
+                "function_calls": msg.voice_details.function_calls,
+                "interruption_count": msg.voice_details.interruption_count,
             }
-        elif conversation.channel == 'sms' and msg.sms_details:
-            msg_data['sms'] = {
-                'from_number': msg.sms_details.from_number,
-                'to_number': msg.sms_details.to_number,
-                'provider_message_id': msg.sms_details.provider_message_id,
-                'delivery_status': msg.sms_details.delivery_status,
-                'segments': msg.sms_details.segments,
-                'delivered_at': msg.sms_details.delivered_at.isoformat() if msg.sms_details.delivered_at else None,
+        elif conversation.channel == "sms" and msg.sms_details:
+            msg_data["sms"] = {
+                "from_number": msg.sms_details.from_number,
+                "to_number": msg.sms_details.to_number,
+                "provider_message_id": msg.sms_details.provider_message_id,
+                "delivery_status": msg.sms_details.delivery_status,
+                "segments": msg.sms_details.segments,
+                "delivered_at": (
+                    msg.sms_details.delivered_at.isoformat()
+                    if msg.sms_details.delivered_at
+                    else None
+                ),
             }
-        elif conversation.channel == 'email' and msg.email_details:
-            msg_data['email'] = {
-                'subject': msg.email_details.subject,
-                'from_address': msg.email_details.from_address,
-                'to_address': msg.email_details.to_address,
-                'body_html': msg.email_details.body_html,
-                'attachments': msg.email_details.attachments,
-                'opened_at': msg.email_details.opened_at.isoformat() if msg.email_details.opened_at else None,
+        elif conversation.channel == "email" and msg.email_details:
+            msg_data["email"] = {
+                "subject": msg.email_details.subject,
+                "from_address": msg.email_details.from_address,
+                "to_address": msg.email_details.to_address,
+                "body_html": msg.email_details.body_html,
+                "attachments": msg.email_details.attachments,
+                "opened_at": (
+                    msg.email_details.opened_at.isoformat()
+                    if msg.email_details.opened_at
+                    else None
+                ),
             }
 
         messages.append(msg_data)
@@ -741,28 +819,46 @@ async def get_conversation_detail(
     # Serialize events
     events = []
     for event in sorted(conversation.events, key=lambda e: e.timestamp):
-        events.append({
-            "id": str(event.id),
-            "event_type": event.event_type,
-            "timestamp": event.timestamp.isoformat() if event.timestamp else None,
-            "details": event.details,
-            "message_id": str(event.message_id) if event.message_id else None,
-        })
+        events.append(
+            {
+                "id": str(event.id),
+                "event_type": event.event_type,
+                "timestamp": event.timestamp.isoformat() if event.timestamp else None,
+                "details": event.details,
+                "message_id": str(event.message_id) if event.message_id else None,
+            }
+        )
 
     return {
         "conversation": {
             "id": str(conversation.id),
-            "customer": {
-                "id": conversation.customer.id,
-                "name": conversation.customer.name,
-                "phone": conversation.customer.phone,
-                "email": conversation.customer.email,
-            } if conversation.customer else None,
+            "customer": (
+                {
+                    "id": conversation.customer.id,
+                    "name": conversation.customer.name,
+                    "phone": conversation.customer.phone,
+                    "email": conversation.customer.email,
+                }
+                if conversation.customer
+                else None
+            ),
             "channel": conversation.channel,
             "status": conversation.status,
-            "initiated_at": conversation.initiated_at.isoformat() if conversation.initiated_at else None,
-            "last_activity_at": conversation.last_activity_at.isoformat() if conversation.last_activity_at else None,
-            "completed_at": conversation.completed_at.isoformat() if conversation.completed_at else None,
+            "initiated_at": (
+                conversation.initiated_at.isoformat()
+                if conversation.initiated_at
+                else None
+            ),
+            "last_activity_at": (
+                conversation.last_activity_at.isoformat()
+                if conversation.last_activity_at
+                else None
+            ),
+            "completed_at": (
+                conversation.completed_at.isoformat()
+                if conversation.completed_at
+                else None
+            ),
             "satisfaction_score": conversation.satisfaction_score,
             "sentiment": conversation.sentiment,
             "outcome": conversation.outcome,
@@ -771,17 +867,15 @@ async def get_conversation_detail(
             "metadata": conversation.custom_metadata,
         },
         "messages": messages,
-        "events": events
+        "events": events,
     }
 
 
 # ==================== Webhook Endpoints (Phase 2) ====================
 
+
 @app.post("/api/webhooks/twilio/sms")
-async def handle_twilio_sms(
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
     """
     Twilio SMS webhook handler.
     Receives incoming SMS, finds or creates conversation, generates AI response.
@@ -806,10 +900,7 @@ async def handle_twilio_sms(
 
 
 @app.post("/api/webhooks/sendgrid/email")
-async def handle_sendgrid_email(
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db)):
     """
     SendGrid inbound email webhook handler.
     Receives incoming emails, finds or creates conversation, generates AI response.
@@ -829,9 +920,5 @@ async def handle_sendgrid_email(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.DEBUG
-    )
+
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=settings.DEBUG)

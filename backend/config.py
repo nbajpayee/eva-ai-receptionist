@@ -1,6 +1,7 @@
 """
 Configuration settings for the Med Spa Voice AI application.
 """
+
 from functools import lru_cache
 from typing import Optional
 
@@ -51,6 +52,7 @@ class Settings(BaseSettings):
     class Config:
         # Look for .env in parent directory (project root)
         import os
+
         env_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
         case_sensitive = True
 
@@ -69,7 +71,7 @@ SERVICES = {
         "price_range": "$300-$600",
         "description": "Botulinum toxin injections to reduce fine lines and wrinkles",
         "prep_instructions": "Avoid alcohol and blood thinners 24 hours before treatment",
-        "aftercare": "No rubbing the treated area for 24 hours, avoid lying down for 4 hours"
+        "aftercare": "No rubbing the treated area for 24 hours, avoid lying down for 4 hours",
     },
     "dermal_fillers": {
         "name": "Dermal Fillers",
@@ -77,7 +79,7 @@ SERVICES = {
         "price_range": "$600-$1200 per syringe",
         "description": "Injectable hyaluronic acid for volume restoration and enhancement",
         "prep_instructions": "Avoid alcohol and blood thinners 24-48 hours before",
-        "aftercare": "Avoid strenuous exercise for 24 hours, ice as needed for swelling"
+        "aftercare": "Avoid strenuous exercise for 24 hours, ice as needed for swelling",
     },
     "laser_hair_removal": {
         "name": "Laser Hair Removal",
@@ -85,7 +87,7 @@ SERVICES = {
         "price_range": "$100-$500 per session",
         "description": "Permanent hair reduction using advanced laser technology",
         "prep_instructions": "Shave area 24 hours before, avoid sun exposure for 2 weeks",
-        "aftercare": "Avoid sun exposure, use SPF 30+, no hot showers for 24 hours"
+        "aftercare": "Avoid sun exposure, use SPF 30+, no hot showers for 24 hours",
     },
     "hydrafacial": {
         "name": "HydraFacial",
@@ -93,7 +95,7 @@ SERVICES = {
         "price_range": "$200-$300",
         "description": "Deep cleansing, exfoliation, and hydration facial treatment",
         "prep_instructions": "Come with clean face, no makeup",
-        "aftercare": "Avoid sun exposure for 24 hours, use gentle skincare"
+        "aftercare": "Avoid sun exposure for 24 hours, use gentle skincare",
     },
     "chemical_peel": {
         "name": "Chemical Peel",
@@ -101,7 +103,7 @@ SERVICES = {
         "price_range": "$150-$400",
         "description": "Exfoliating treatment to improve skin texture and tone",
         "prep_instructions": "Discontinue retinoids 3 days before, avoid sun exposure",
-        "aftercare": "No picking at peeling skin, use gentle cleanser and moisturizer, SPF required"
+        "aftercare": "No picking at peeling skin, use gentle cleanser and moisturizer, SPF required",
     },
     "microneedling": {
         "name": "Microneedling",
@@ -109,7 +111,7 @@ SERVICES = {
         "price_range": "$300-$500",
         "description": "Collagen induction therapy for skin rejuvenation",
         "prep_instructions": "Come with clean face, avoid blood thinners",
-        "aftercare": "Avoid makeup for 24 hours, gentle skincare only, avoid sun"
+        "aftercare": "Avoid makeup for 24 hours, gentle skincare only, avoid sun",
     },
     "coolsculpting": {
         "name": "CoolSculpting",
@@ -117,7 +119,7 @@ SERVICES = {
         "price_range": "$750-$1500 per area",
         "description": "Non-invasive fat reduction through controlled cooling",
         "prep_instructions": "Wear comfortable clothing, eat normally",
-        "aftercare": "Massage treated area as directed, maintain healthy lifestyle"
+        "aftercare": "Massage treated area as directed, maintain healthy lifestyle",
     },
     "prp_facial": {
         "name": "PRP Facial (Vampire Facial)",
@@ -125,7 +127,7 @@ SERVICES = {
         "price_range": "$700-$1200",
         "description": "Platelet-rich plasma therapy for skin rejuvenation",
         "prep_instructions": "Hydrate well, avoid alcohol 24 hours before",
-        "aftercare": "No makeup for 24 hours, gentle skincare, avoid sun exposure"
+        "aftercare": "No makeup for 24 hours, gentle skincare, avoid sun exposure",
     },
     "consultation": {
         "name": "Consultation",
@@ -133,8 +135,8 @@ SERVICES = {
         "price_range": "Complimentary",
         "description": "Free consultation with our expert providers",
         "prep_instructions": "Bring list of current medications and skincare products",
-        "aftercare": "N/A"
-    }
+        "aftercare": "N/A",
+    },
 }
 
 # Providers
@@ -143,20 +145,20 @@ PROVIDERS = {
         "name": "Dr. Sarah Smith",
         "title": "Medical Director",
         "specialties": ["Botox", "Dermal Fillers", "PRP Facial"],
-        "credentials": "MD, Board Certified Dermatologist"
+        "credentials": "MD, Board Certified Dermatologist",
     },
     "nurse_johnson": {
         "name": "Nurse Emily Johnson",
         "title": "Nurse Injector",
         "specialties": ["Botox", "Dermal Fillers", "Microneedling"],
-        "credentials": "RN, Certified Aesthetic Nurse"
+        "credentials": "RN, Certified Aesthetic Nurse",
     },
     "esthetician_lee": {
         "name": "Lisa Lee",
         "title": "Lead Esthetician",
         "specialties": ["HydraFacial", "Chemical Peel", "Laser Hair Removal"],
-        "credentials": "Licensed Esthetician, Laser Certified"
-    }
+        "credentials": "Licensed Esthetician, Laser Certified",
+    },
 }
 
 # Conversation prompts and templates

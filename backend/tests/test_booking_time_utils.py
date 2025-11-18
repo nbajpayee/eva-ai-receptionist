@@ -1,12 +1,9 @@
-import pytz
 from datetime import datetime
 
-from booking.time_utils import (
-    EASTERN_TZ,
-    format_for_display,
-    parse_iso_datetime,
-    to_eastern,
-)
+import pytz
+
+from booking.time_utils import (EASTERN_TZ, format_for_display,
+                                parse_iso_datetime, to_eastern)
 
 
 def test_parse_iso_datetime_handles_z_suffix():

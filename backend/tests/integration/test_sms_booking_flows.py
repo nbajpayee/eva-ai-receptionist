@@ -7,23 +7,21 @@ These tests verify end-to-end SMS booking scenarios including:
 - SMS confirmations
 - Rescheduling via SMS
 """
+
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
-import uuid
 
 import pytest
 
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionManager
-from database import Customer, Appointment
+from database import Appointment, Customer
 from messaging_service import MessagingService
-from tests.conftest import (
-    build_availability_response,
-    build_booking_response,
-    mock_ai_response_with_text,
-)
+from tests.conftest import (build_availability_response,
+                            build_booking_response, mock_ai_response_with_text)
 
 
 @pytest.mark.integration
@@ -110,9 +108,14 @@ class TestSMSBookingFlow:
         )
 
         # Verify multi-message conversation
-        messages = db_session.query(AnalyticsService.CommunicationMessage).filter(
-            AnalyticsService.CommunicationMessage.conversation_id == sms_conversation.id
-        ).count()
+        messages = (
+            db_session.query(AnalyticsService.CommunicationMessage)
+            .filter(
+                AnalyticsService.CommunicationMessage.conversation_id
+                == sms_conversation.id
+            )
+            .count()
+        )
         assert messages >= 6  # 3 user + 3 AI messages
 
     @patch("messaging_service.handle_check_availability")
@@ -293,7 +296,9 @@ class TestSMSBookingFlow:
             metadata={"from": customer.phone},
         )
 
-        availability = build_availability_response("2025-11-27", num_slots=8, service_type="hydrafacial")
+        availability = build_availability_response(
+            "2025-11-27", num_slots=8, service_type="hydrafacial"
+        )
         mock_check_avail.return_value = availability
 
         mock_openai.return_value = mock_ai_response_with_text(
@@ -438,16 +443,22 @@ class TestSMSBookingFlow:
 
         # Verify conversations are separate
         assert conv1.id != conv2.id
-        assert conv1.custom_metadata.get("thread_id") != conv2.custom_metadata.get("thread_id")
+        assert conv1.custom_metadata.get("thread_id") != conv2.custom_metadata.get(
+            "thread_id"
+        )
 
         # Verify messages are in correct conversations
-        conv1_msgs = db_session.query(AnalyticsService.CommunicationMessage).filter(
-            AnalyticsService.CommunicationMessage.conversation_id == conv1.id
-        ).count()
+        conv1_msgs = (
+            db_session.query(AnalyticsService.CommunicationMessage)
+            .filter(AnalyticsService.CommunicationMessage.conversation_id == conv1.id)
+            .count()
+        )
 
-        conv2_msgs = db_session.query(AnalyticsService.CommunicationMessage).filter(
-            AnalyticsService.CommunicationMessage.conversation_id == conv2.id
-        ).count()
+        conv2_msgs = (
+            db_session.query(AnalyticsService.CommunicationMessage)
+            .filter(AnalyticsService.CommunicationMessage.conversation_id == conv2.id)
+            .count()
+        )
 
         assert conv1_msgs > 0
         assert conv2_msgs > 0

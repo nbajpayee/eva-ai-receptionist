@@ -1,4 +1,5 @@
 """Prompt helpers shared across communication channels."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta

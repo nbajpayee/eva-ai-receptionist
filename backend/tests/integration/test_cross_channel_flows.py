@@ -8,23 +8,21 @@ These tests verify seamless transitions and data continuity across:
 - Unified customer timeline
 - Cross-channel booking persistence
 """
+
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
-import uuid
 
 import pytest
 
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionManager
-from database import Customer, Appointment, Conversation
+from database import Appointment, Conversation, Customer
 from messaging_service import MessagingService
-from tests.conftest import (
-    build_availability_response,
-    build_booking_response,
-    mock_ai_response_with_text,
-)
+from tests.conftest import (build_availability_response,
+                            build_booking_response, mock_ai_response_with_text)
 
 
 @pytest.mark.integration
@@ -103,9 +101,11 @@ class TestCrossChannelBooking:
         )
 
         # Verify customer history accessible across channels
-        all_conversations = db_session.query(Conversation).filter(
-            Conversation.customer_id == customer.id
-        ).all()
+        all_conversations = (
+            db_session.query(Conversation)
+            .filter(Conversation.customer_id == customer.id)
+            .all()
+        )
         assert len(all_conversations) == 2
         assert any(c.channel == "voice" for c in all_conversations)
         assert any(c.channel == "sms" for c in all_conversations)
@@ -415,9 +415,11 @@ class TestCrossChannelBooking:
         db_session.commit()
 
         # Verify SMS conversation can access customer history
-        all_customer_convs = db_session.query(Conversation).filter(
-            Conversation.customer_id == customer.id
-        ).all()
+        all_customer_convs = (
+            db_session.query(Conversation)
+            .filter(Conversation.customer_id == customer.id)
+            .all()
+        )
 
         # Collect all customer notes
         all_notes = []
@@ -459,10 +461,14 @@ class TestCrossChannelBooking:
         )
 
         # Check for existing appointments
-        existing = db_session.query(Appointment).filter(
-            Appointment.customer_id == customer.id,
-            Appointment.status == "scheduled",
-        ).first()
+        existing = (
+            db_session.query(Appointment)
+            .filter(
+                Appointment.customer_id == customer.id,
+                Appointment.status == "scheduled",
+            )
+            .first()
+        )
 
         assert existing is not None
         # System should prevent duplicate booking

@@ -8,6 +8,7 @@ These tests verify end-to-end voice booking scenarios including:
 - Slot selection
 - Confirmation flow
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -18,14 +19,11 @@ import pytest
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionManager
 from booking.time_utils import to_eastern
-from database import Customer, Appointment
+from database import Appointment, Customer
 from messaging_service import MessagingService
-from tests.conftest import (
-    build_availability_response,
-    build_booking_response,
-    mock_ai_response_with_text,
-    mock_ai_response_with_tool_call,
-)
+from tests.conftest import (build_availability_response,
+                            build_booking_response, mock_ai_response_with_text,
+                            mock_ai_response_with_tool_call)
 
 
 @pytest.mark.integration
@@ -185,10 +183,14 @@ class TestVoiceBookingFlow:
 
         # Verify customer history is accessible
         assert returning_customer.is_new_client is False
-        past_appointments = db_session.query(Appointment).filter(
-            Appointment.customer_id == returning_customer.id,
-            Appointment.status == "completed"
-        ).count()
+        past_appointments = (
+            db_session.query(Appointment)
+            .filter(
+                Appointment.customer_id == returning_customer.id,
+                Appointment.status == "completed",
+            )
+            .count()
+        )
         assert past_appointments > 0
 
     @patch("messaging_service.handle_check_availability")
@@ -232,7 +234,9 @@ class TestVoiceBookingFlow:
             metadata={"source": "voice_transcript"},
         )
 
-        availability = build_availability_response("2025-11-22", num_slots=5, service_type="hydrafacial")
+        availability = build_availability_response(
+            "2025-11-22", num_slots=5, service_type="hydrafacial"
+        )
         mock_check_avail.return_value = availability
 
         mock_openai.return_value = mock_ai_response_with_text(
@@ -288,7 +292,9 @@ class TestVoiceBookingFlow:
         )
 
         db_session.refresh(voice_conversation)
-        assert voice_conversation.custom_metadata.get("preferred_provider") == "Dr. Smith"
+        assert (
+            voice_conversation.custom_metadata.get("preferred_provider") == "Dr. Smith"
+        )
 
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
@@ -330,7 +336,10 @@ class TestVoiceBookingFlow:
         )
 
         db_session.refresh(voice_conversation)
-        assert "numbing cream" in voice_conversation.custom_metadata.get("special_requests", "").lower()
+        assert (
+            "numbing cream"
+            in voice_conversation.custom_metadata.get("special_requests", "").lower()
+        )
 
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
@@ -634,4 +643,8 @@ class TestVoiceBookingFlow:
         )
 
         # Verify system offers alternative within business hours
-        assert "6 PM" in content or "6pm" in content.lower() or "business hours" in content.lower()
+        assert (
+            "6 PM" in content
+            or "6pm" in content.lower()
+            or "business hours" in content.lower()
+        )

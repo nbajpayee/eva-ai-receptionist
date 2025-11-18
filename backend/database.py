@@ -1,16 +1,18 @@
 """
 Database models and session management for the Med Spa Voice AI application.
 """
+
+import uuid
 from datetime import datetime
 from typing import Optional
-import uuid
-from sqlalchemy import (
-    create_engine, Column, Integer, String, Float, DateTime,
-    Text, ForeignKey, Boolean, JSON, CheckConstraint, TypeDecorator
-)
+
+from sqlalchemy import (JSON, Boolean, CheckConstraint, Column, DateTime,
+                        Float, ForeignKey, Integer, String, Text,
+                        TypeDecorator, create_engine)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker, Session
+from sqlalchemy.orm import Session, relationship, sessionmaker
+
 try:  # Prefer package-style import when available
     from backend.config import get_settings
 except ModuleNotFoundError:  # Fallback for direct execution contexts
@@ -27,10 +29,7 @@ engine_kwargs = {
 if settings.DATABASE_URL.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 
-engine = create_engine(
-    settings.DATABASE_URL,
-    **engine_kwargs
-)
+engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -45,11 +44,12 @@ class GUID(TypeDecorator):
 
     Uses PostgreSQL's UUID type when available, otherwise uses String(36).
     """
+
     impl = String
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
-        if dialect.name == 'postgresql':
+        if dialect.name == "postgresql":
             return dialect.type_descriptor(GUID())
         else:
             return dialect.type_descriptor(String(36))
@@ -57,7 +57,7 @@ class GUID(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is None:
             return value
-        elif dialect.name == 'postgresql':
+        elif dialect.name == "postgresql":
             return value
         else:
             if isinstance(value, uuid.UUID):
@@ -85,6 +85,7 @@ def get_db():
 # Models
 class Customer(Base):
     """Customer model for storing patient information."""
+
     __tablename__ = "customers"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -108,11 +109,14 @@ class Customer(Base):
 
 class Appointment(Base):
     """Appointment model for tracking bookings."""
+
     __tablename__ = "appointments"
 
     id = Column(Integer, primary_key=True, index=True)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
-    calendar_event_id = Column(String(255), unique=True, index=True)  # Google Calendar ID
+    calendar_event_id = Column(
+        String(255), unique=True, index=True
+    )  # Google Calendar ID
 
     # Appointment details
     appointment_datetime = Column(DateTime, nullable=False, index=True)
@@ -124,7 +128,7 @@ class Appointment(Base):
     status = Column(
         String(50),
         default="scheduled",  # scheduled, completed, cancelled, no_show, rescheduled
-        index=True
+        index=True,
     )
 
     # Booking metadata
@@ -143,10 +147,13 @@ class Appointment(Base):
 
 class CallSession(Base):
     """Call session model for tracking voice interactions."""
+
     __tablename__ = "call_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)  # Null if not identified
+    customer_id = Column(
+        Integer, ForeignKey("customers.id"), nullable=True
+    )  # Null if not identified
 
     # Call metadata
     session_id = Column(String(255), unique=True, index=True, nullable=False)
@@ -166,7 +173,7 @@ class CallSession(Base):
     sentiment = Column(String(50), nullable=True)  # positive, neutral, negative, mixed
     outcome = Column(
         String(50),
-        nullable=True  # booked, rescheduled, cancelled, info_only, escalated, abandoned
+        nullable=True,  # booked, rescheduled, cancelled, info_only, escalated, abandoned
     )
 
     # Engagement metrics
@@ -180,11 +187,14 @@ class CallSession(Base):
 
     # Relationships
     customer = relationship("Customer", back_populates="call_sessions")
-    events = relationship("CallEvent", back_populates="call_session", cascade="all, delete-orphan")
+    events = relationship(
+        "CallEvent", back_populates="call_session", cascade="all, delete-orphan"
+    )
 
 
 class CallEvent(Base):
     """Individual events within a call session."""
+
     __tablename__ = "call_events"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -194,7 +204,7 @@ class CallEvent(Base):
     event_type = Column(
         String(100),
         nullable=False,
-        index=True
+        index=True,
         # Types: intent_detected, function_called, appointment_booked,
         # escalation_triggered, sentiment_change, error_occurred
     )
@@ -207,6 +217,7 @@ class CallEvent(Base):
 
 class DailyMetric(Base):
     """Aggregated daily metrics for dashboard analytics."""
+
     __tablename__ = "daily_metrics"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -225,7 +236,9 @@ class DailyMetric(Base):
     # Quality metrics
     avg_satisfaction_score = Column(Float, default=0.0)
     calls_escalated = Column(Integer, default=0)
-    conversion_rate = Column(Float, default=0.0)  # Percentage of calls that resulted in booking
+    conversion_rate = Column(
+        Float, default=0.0
+    )  # Percentage of calls that resulted in booking
 
     # Updated timestamp
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -233,15 +246,19 @@ class DailyMetric(Base):
 
 # ==================== Omnichannel Communications Models (Phase 2) ====================
 
+
 class Conversation(Base):
     """
     Omnichannel conversation model supporting voice, SMS, and email.
     Top-level container for any communication thread.
     """
+
     __tablename__ = "conversations"
 
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
-    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)  # Nullable - some calls may not identify customer
+    customer_id = Column(
+        Integer, ForeignKey("customers.id"), nullable=True, index=True
+    )  # Nullable - some calls may not identify customer
 
     channel = Column(String(20), nullable=False, index=True)
     status = Column(String(20), nullable=False, index=True)
@@ -261,21 +278,37 @@ class Conversation(Base):
     ai_summary = Column(Text, nullable=True)
 
     # Flexible metadata (use custom_metadata to avoid SQLAlchemy reserved name)
-    custom_metadata = Column('metadata', JSON, nullable=True, default={})
+    custom_metadata = Column("metadata", JSON, nullable=True, default={})
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     customer = relationship("Customer", back_populates="conversations")
-    messages = relationship("CommunicationMessage", back_populates="conversation", cascade="all, delete-orphan")
-    events = relationship("CommunicationEvent", back_populates="conversation", cascade="all, delete-orphan")
+    messages = relationship(
+        "CommunicationMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
+    events = relationship(
+        "CommunicationEvent",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
-        CheckConstraint("channel IN ('voice', 'sms', 'email')", name='check_channel'),
-        CheckConstraint("status IN ('active', 'completed', 'failed')", name='check_status'),
-        CheckConstraint("satisfaction_score IS NULL OR (satisfaction_score >= 1 AND satisfaction_score <= 10)", name='check_satisfaction_score'),
-        CheckConstraint("sentiment IS NULL OR sentiment IN ('positive', 'neutral', 'negative', 'mixed')", name='check_sentiment'),
+        CheckConstraint("channel IN ('voice', 'sms', 'email')", name="check_channel"),
+        CheckConstraint(
+            "status IN ('active', 'completed', 'failed')", name="check_status"
+        ),
+        CheckConstraint(
+            "satisfaction_score IS NULL OR (satisfaction_score >= 1 AND satisfaction_score <= 10)",
+            name="check_satisfaction_score",
+        ),
+        CheckConstraint(
+            "sentiment IS NULL OR sentiment IN ('positive', 'neutral', 'negative', 'mixed')",
+            name="check_sentiment",
+        ),
     )
 
 
@@ -284,10 +317,16 @@ class CommunicationMessage(Base):
     Individual messages within a conversation.
     Voice calls have 1 message (entire call), SMS/email have N messages (threading).
     """
+
     __tablename__ = "communication_messages"
 
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
-    conversation_id = Column(GUID(), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id = Column(
+        GUID(),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     direction = Column(String(20), nullable=False, index=True)
     content = Column(Text, nullable=False)
@@ -297,25 +336,45 @@ class CommunicationMessage(Base):
     processed = Column(Boolean, default=False)
     processing_error = Column(Text, nullable=True)
 
-    custom_metadata = Column('metadata', JSON, nullable=True, default={})
+    custom_metadata = Column("metadata", JSON, nullable=True, default={})
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
     conversation = relationship("Conversation", back_populates="messages")
-    voice_details = relationship("VoiceCallDetails", uselist=False, back_populates="message", cascade="all, delete-orphan")
-    email_details = relationship("EmailDetails", uselist=False, back_populates="message", cascade="all, delete-orphan")
-    sms_details = relationship("SMSDetails", uselist=False, back_populates="message", cascade="all, delete-orphan")
+    voice_details = relationship(
+        "VoiceCallDetails",
+        uselist=False,
+        back_populates="message",
+        cascade="all, delete-orphan",
+    )
+    email_details = relationship(
+        "EmailDetails",
+        uselist=False,
+        back_populates="message",
+        cascade="all, delete-orphan",
+    )
+    sms_details = relationship(
+        "SMSDetails",
+        uselist=False,
+        back_populates="message",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
-        CheckConstraint("direction IN ('inbound', 'outbound')", name='check_direction'),
+        CheckConstraint("direction IN ('inbound', 'outbound')", name="check_direction"),
     )
 
 
 class VoiceCallDetails(Base):
     """Voice-specific metadata for call messages."""
+
     __tablename__ = "voice_call_details"
 
-    message_id = Column(GUID(), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
+    message_id = Column(
+        GUID(),
+        ForeignKey("communication_messages.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
 
     recording_url = Column(String(500), nullable=True)
     duration_seconds = Column(Integer, nullable=False)
@@ -338,9 +397,14 @@ class VoiceCallDetails(Base):
 
 class EmailDetails(Base):
     """Email-specific metadata for email messages."""
+
     __tablename__ = "email_details"
 
-    message_id = Column(GUID(), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
+    message_id = Column(
+        GUID(),
+        ForeignKey("communication_messages.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
 
     subject = Column(String(500), nullable=False)
     body_html = Column(Text, nullable=True)
@@ -371,9 +435,14 @@ class EmailDetails(Base):
 
 class SMSDetails(Base):
     """SMS-specific metadata for text messages."""
+
     __tablename__ = "sms_details"
 
-    message_id = Column(GUID(), ForeignKey("communication_messages.id", ondelete="CASCADE"), primary_key=True)
+    message_id = Column(
+        GUID(),
+        ForeignKey("communication_messages.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
 
     from_number = Column(String(20), nullable=False)
     to_number = Column(String(20), nullable=False)
@@ -395,7 +464,10 @@ class SMSDetails(Base):
     message = relationship("CommunicationMessage", back_populates="sms_details")
 
     __table_args__ = (
-        CheckConstraint("delivery_status IS NULL OR delivery_status IN ('queued', 'sent', 'delivered', 'failed', 'undelivered')", name='check_delivery_status'),
+        CheckConstraint(
+            "delivery_status IS NULL OR delivery_status IN ('queued', 'sent', 'delivered', 'failed', 'undelivered')",
+            name="check_delivery_status",
+        ),
     )
 
 
@@ -404,11 +476,22 @@ class CommunicationEvent(Base):
     Generalized event tracking for all communication channels.
     Replaces CallEvent with support for voice, SMS, and email.
     """
+
     __tablename__ = "communication_events"
 
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
-    conversation_id = Column(GUID(), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
-    message_id = Column(GUID(), ForeignKey("communication_messages.id", ondelete="CASCADE"), nullable=True, index=True)
+    conversation_id = Column(
+        GUID(),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    message_id = Column(
+        GUID(),
+        ForeignKey("communication_messages.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
 
     event_type = Column(String(50), nullable=False, index=True)
     timestamp = Column(DateTime, nullable=False, index=True)

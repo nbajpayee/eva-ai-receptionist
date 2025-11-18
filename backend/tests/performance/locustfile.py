@@ -3,11 +3,13 @@ Load testing configuration using Locust.
 
 Run with: locust --headless --users 50 --spawn-rate 10 --run-time 5m
 """
+
 from __future__ import annotations
 
-from locust import HttpUser, task, between, events
-import random
 import json
+import random
+
+from locust import HttpUser, between, events, task
 
 
 class VoiceSessionUser(HttpUser):

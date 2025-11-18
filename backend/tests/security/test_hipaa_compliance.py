@@ -7,12 +7,14 @@ These tests verify:
 - Data retention
 - Audit trails
 """
+
 from __future__ import annotations
 
-import pytest
 import logging
 
-from database import Customer, Appointment, Conversation
+import pytest
+
+from database import Appointment, Conversation, Customer
 
 
 @pytest.mark.security
@@ -95,7 +97,8 @@ class TestHIPAACompliance:
         # Create old appointment
         old_appointment = Appointment(
             customer_id=customer.id,
-            appointment_datetime=datetime.utcnow() - timedelta(days=8*365),  # 8 years old
+            appointment_datetime=datetime.utcnow()
+            - timedelta(days=8 * 365),  # 8 years old
             service_type="botox",
             status="completed",
         )
@@ -103,9 +106,11 @@ class TestHIPAACompliance:
         db_session.commit()
 
         # Verify appointment exists
-        found = db_session.query(Appointment).filter(
-            Appointment.id == old_appointment.id
-        ).first()
+        found = (
+            db_session.query(Appointment)
+            .filter(Appointment.id == old_appointment.id)
+            .first()
+        )
 
         assert found is not None
         # In production, implement automated archival after 7 years (HIPAA requirement)
@@ -128,9 +133,9 @@ class TestHIPAACompliance:
         db_session.commit()
 
         # Verify deletion
-        found_customer = db_session.query(Customer).filter(
-            Customer.id == customer_id
-        ).first()
+        found_customer = (
+            db_session.query(Customer).filter(Customer.id == customer_id).first()
+        )
 
         assert found_customer is None
 

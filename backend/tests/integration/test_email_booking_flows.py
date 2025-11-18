@@ -7,23 +7,21 @@ These tests verify end-to-end email booking scenarios including:
 - Email threading
 - Confirmation emails
 """
+
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
-import uuid
 
 import pytest
 
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionManager
-from database import Customer, Appointment
+from database import Appointment, Customer
 from messaging_service import MessagingService
-from tests.conftest import (
-    build_availability_response,
-    build_booking_response,
-    mock_ai_response_with_text,
-)
+from tests.conftest import (build_availability_response,
+                            build_booking_response, mock_ai_response_with_text)
 
 
 @pytest.mark.integration
@@ -54,7 +52,9 @@ class TestEmailBookingFlow:
 
         Best regards,
         {}
-        """.format(customer.name)
+        """.format(
+            customer.name
+        )
 
         user_message = AnalyticsService.add_message(
             db=db_session,
@@ -106,9 +106,7 @@ class TestEmailBookingFlow:
             metadata={
                 "from": customer.email,
                 "subject": "New Patient Intake Form",
-                "attachments": [
-                    {"filename": "medical_history.pdf", "size": 102400}
-                ],
+                "attachments": [{"filename": "medical_history.pdf", "size": 102400}],
             },
         )
 
@@ -201,7 +199,9 @@ class TestEmailBookingFlow:
             },
         )
 
-        availability = build_availability_response("2025-11-29", num_slots=6, service_type="hydrafacial")
+        availability = build_availability_response(
+            "2025-11-29", num_slots=6, service_type="hydrafacial"
+        )
         mock_check_avail.return_value = availability
 
         mock_openai.return_value = mock_ai_response_with_text(

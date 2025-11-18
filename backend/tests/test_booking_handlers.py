@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 import pytz
 
-from booking_handlers import handle_book_appointment, handle_check_availability
 from booking.time_utils import EASTERN_TZ
+from booking_handlers import handle_book_appointment, handle_check_availability
 
 
 class _FakeCalendarService:
@@ -13,7 +13,9 @@ class _FakeCalendarService:
         self._slots = slots
         self.book_calls: list[dict] = []
 
-    def get_available_slots(self, date, service_type):  # noqa: ARG002 - signature parity
+    def get_available_slots(
+        self, date, service_type
+    ):  # noqa: ARG002 - signature parity
         return self._slots
 
     def book_appointment(  # noqa: D401
@@ -54,7 +56,9 @@ def _make_slot(start_dt: datetime, duration_minutes: int = 30) -> dict[str, str]
 
 
 def test_check_availability_returns_summary_and_suggestions():
-    tomorrow_base = datetime.now(EASTERN_TZ).replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    tomorrow_base = datetime.now(EASTERN_TZ).replace(
+        hour=9, minute=0, second=0, microsecond=0
+    ) + timedelta(days=1)
     slots = [
         _make_slot(tomorrow_base + timedelta(minutes=offset))
         for offset in (0, 30, 60, 420, 450)
@@ -86,12 +90,13 @@ def test_check_availability_returns_summary_and_suggestions():
 
 
 def test_book_appointment_uses_full_slot_list_for_validation():
-    tomorrow = datetime.now(pytz.UTC).astimezone(EASTERN_TZ).replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    tomorrow = datetime.now(pytz.UTC).astimezone(EASTERN_TZ).replace(
+        hour=9, minute=0, second=0, microsecond=0
+    ) + timedelta(days=1)
     requested_start = tomorrow + timedelta(hours=7)
 
     slots = [
-        _make_slot(tomorrow + timedelta(minutes=offset))
-        for offset in (0, 30, 60, 420)
+        _make_slot(tomorrow + timedelta(minutes=offset)) for offset in (0, 30, 60, 420)
     ]
     fake_calendar = _FakeCalendarService(slots)
 
@@ -112,7 +117,9 @@ def test_book_appointment_uses_full_slot_list_for_validation():
 
 
 def test_book_appointment_returns_summary_on_mismatch():
-    tomorrow = datetime.now(EASTERN_TZ).replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    tomorrow = datetime.now(EASTERN_TZ).replace(
+        hour=9, minute=0, second=0, microsecond=0
+    ) + timedelta(days=1)
     slots = [_make_slot(tomorrow + timedelta(minutes=offset)) for offset in (0, 30, 60)]
     fake_calendar = _FakeCalendarService(slots)
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
-
 import pytz
 
 from booking.slot_selection import SlotSelectionCore, SlotSelectionError
@@ -70,7 +69,11 @@ def test_record_offers_replaces_pending_when_empty(db_session):
         conversation,
         tool_call_id="tool1",
         arguments={"date": "2025-11-16"},
-        output={"available_slots": slots, "date": "2025-11-16", "service_type": "hydrafacial"},
+        output={
+            "available_slots": slots,
+            "date": "2025-11-16",
+            "service_type": "hydrafacial",
+        },
     )
 
     db_session.refresh(conversation)
@@ -142,7 +145,9 @@ def test_enforce_booking_matches_requested_slot(db_session):
     )
 
     args = {"start_time": offered_slot["start"], "service_type": "hydrafacial"}
-    normalized, adjustments = SlotSelectionCore.enforce_booking(db_session, conversation, args)
+    normalized, adjustments = SlotSelectionCore.enforce_booking(
+        db_session, conversation, args
+    )
 
     assert normalized["start_time"] == offered_slot["start"]
     assert normalized["service_type"] == "hydrafacial"
@@ -170,7 +175,9 @@ def test_enforce_booking_raises_for_mismatch(db_session):
 
 
 def test_get_pending_slot_offers_expiry(db_session):
-    past_ts = (datetime.utcnow().replace(tzinfo=pytz.utc) - timedelta(hours=1)).isoformat()
+    past_ts = (
+        datetime.utcnow().replace(tzinfo=pytz.utc) - timedelta(hours=1)
+    ).isoformat()
     conversation = _make_conversation(
         db_session,
         metadata={
@@ -239,7 +246,9 @@ def test_slot_matches_request_parses_strings():
 
 
 def test_get_pending_slot_offers_returns_value_when_not_expired(db_session):
-    future_ts = (datetime.utcnow().replace(tzinfo=pytz.utc) + timedelta(hours=1)).isoformat()
+    future_ts = (
+        datetime.utcnow().replace(tzinfo=pytz.utc) + timedelta(hours=1)
+    ).isoformat()
     conversation = _make_conversation(
         db_session,
         metadata={

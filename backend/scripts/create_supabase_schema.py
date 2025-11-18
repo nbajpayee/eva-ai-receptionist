@@ -7,6 +7,7 @@ This script loads environment variables, verifies the DATABASE_URL points to
 Supabase (non-SQLite), and executes Base.metadata.create_all against the
 configured engine. It is idempotent and safe to rerun.
 """
+
 from __future__ import annotations
 
 import sys

@@ -10,6 +10,7 @@ Usage:
 The script is idempotent: running it multiple times will keep the same
 calendar event identifiers but refresh appointment details and timestamps.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -135,7 +136,9 @@ def seed_demo_data(session) -> Tuple[int, int]:
     appointments_seeded = 0
 
     for scenario in demo_scenarios:
-        start_naive = datetime.combine(tomorrow, datetime.min.time().replace(hour=scenario["hour"], minute=0))
+        start_naive = datetime.combine(
+            tomorrow, datetime.min.time().replace(hour=scenario["hour"], minute=0)
+        )
         start_time = PACIFIC.localize(start_naive)
 
         customer_info = scenario["customer"]

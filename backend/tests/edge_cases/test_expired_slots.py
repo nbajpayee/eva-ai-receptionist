@@ -7,18 +7,19 @@ These tests verify:
 - Provider availability changes
 - Slot timeout logic
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from unittest.mock import patch, Mock
 import uuid
+from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
 
 import pytest
 
-from booking_handlers import handle_check_availability, handle_book_appointment
-from booking.manager import SlotSelectionManager
 from analytics import AnalyticsService
-from database import Customer, Conversation
+from booking.manager import SlotSelectionManager
+from booking_handlers import handle_book_appointment, handle_check_availability
+from database import Conversation, Customer
 
 
 @pytest.mark.integration
@@ -34,12 +35,14 @@ class TestExpiredSlots:
         """Test handling when offered slot is no longer available."""
         # Initial availability check shows slot
         slot_time = datetime.utcnow() + timedelta(days=3, hours=14)
-        initial_slots = [{
-            "start": slot_time.isoformat(),
-            "end": (slot_time + timedelta(hours=1)).isoformat(),
-            "start_time": "02:00 PM",
-            "end_time": "03:00 PM",
-        }]
+        initial_slots = [
+            {
+                "start": slot_time.isoformat(),
+                "end": (slot_time + timedelta(hours=1)).isoformat(),
+                "start_time": "02:00 PM",
+                "end_time": "03:00 PM",
+            }
+        ]
 
         mock_check.return_value = {
             "success": True,
@@ -84,12 +87,14 @@ class TestExpiredSlots:
         afternoon_slot = datetime.utcnow() + timedelta(days=2, hours=17)  # 5 PM
         mock_check.return_value = {
             "success": True,
-            "available_slots": [{
-                "start": afternoon_slot.isoformat(),
-                "end": (afternoon_slot + timedelta(hours=1)).isoformat(),
-                "start_time": "05:00 PM",
-                "end_time": "06:00 PM",
-            }],
+            "available_slots": [
+                {
+                    "start": afternoon_slot.isoformat(),
+                    "end": (afternoon_slot + timedelta(hours=1)).isoformat(),
+                    "start_time": "05:00 PM",
+                    "end_time": "06:00 PM",
+                }
+            ],
         }
 
         result1 = handle_check_availability(
@@ -126,10 +131,12 @@ class TestExpiredSlots:
         # First check: available
         mock_check.return_value = {
             "success": True,
-            "available_slots": [{
-                "start": slot_time.isoformat(),
-                "end": (slot_time + timedelta(hours=1)).isoformat(),
-            }],
+            "available_slots": [
+                {
+                    "start": slot_time.isoformat(),
+                    "end": (slot_time + timedelta(hours=1)).isoformat(),
+                }
+            ],
         }
 
         result1 = handle_check_availability(
@@ -165,11 +172,13 @@ class TestExpiredSlots:
         # Initially available
         mock_check.return_value = {
             "success": True,
-            "available_slots": [{
-                "start": slot_time.isoformat(),
-                "end": (slot_time + timedelta(hours=1)).isoformat(),
-                "provider": "Dr. Smith",
-            }],
+            "available_slots": [
+                {
+                    "start": slot_time.isoformat(),
+                    "end": (slot_time + timedelta(hours=1)).isoformat(),
+                    "provider": "Dr. Smith",
+                }
+            ],
         }
 
         result1 = handle_check_availability(
@@ -195,7 +204,9 @@ class TestExpiredSlots:
 
         assert len(result2.get("available_slots", [])) == 0
 
-    def test_slot_timeout_after_30_minutes(self, db_session, customer, voice_conversation):
+    def test_slot_timeout_after_30_minutes(
+        self, db_session, customer, voice_conversation
+    ):
         """Test slot offers expire after timeout period."""
         # Record slot offers
         old_time = datetime.utcnow() - timedelta(minutes=35)  # 35 minutes ago
@@ -219,7 +230,9 @@ class TestExpiredSlots:
         if offers:
             offered_at = datetime.fromisoformat(offers["offered_at"])
             timeout_minutes = offers.get("timeout_minutes", 30)
-            expired = (datetime.utcnow() - offered_at).total_seconds() / 60 > timeout_minutes
+            expired = (
+                datetime.utcnow() - offered_at
+            ).total_seconds() / 60 > timeout_minutes
 
             # Should be expired
             assert expired is True

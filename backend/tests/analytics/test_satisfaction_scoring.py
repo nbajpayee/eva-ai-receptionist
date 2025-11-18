@@ -7,10 +7,13 @@ These tests verify:
 - Outcome classification
 - GPT-4 integration
 """
+
 from __future__ import annotations
 
+import json
 from datetime import datetime
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
+
 import pytest
 
 from analytics import AnalyticsService
@@ -23,7 +26,9 @@ class TestSatisfactionScoring:
     """Test AI-powered satisfaction scoring."""
 
     @patch("analytics.openai_client.chat.completions.create")
-    def test_satisfaction_score_positive(self, mock_openai, db_session, voice_conversation):
+    def test_satisfaction_score_positive(
+        self, mock_openai, db_session, voice_conversation
+    ):
         """Test positive satisfaction scoring."""
         # Add positive transcript
         AnalyticsService.add_message(
@@ -37,12 +42,14 @@ class TestSatisfactionScoring:
         # Mock GPT-4 response
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "satisfaction_score": 9,
-            "sentiment": "positive",
-            "outcome": "booked",
-            "summary": "Customer very satisfied with booking process",
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "satisfaction_score": 9,
+                "sentiment": "positive",
+                "outcome": "booked",
+                "summary": "Customer very satisfied with booking process",
+            }
+        )
         mock_openai.return_value = mock_response
 
         # Score conversation
@@ -55,7 +62,9 @@ class TestSatisfactionScoring:
         assert result.get("sentiment") == "positive"
 
     @patch("analytics.openai_client.chat.completions.create")
-    def test_satisfaction_score_negative(self, mock_openai, db_session, voice_conversation):
+    def test_satisfaction_score_negative(
+        self, mock_openai, db_session, voice_conversation
+    ):
         """Test negative satisfaction scoring."""
         import json
 
@@ -71,12 +80,14 @@ class TestSatisfactionScoring:
         # Mock GPT-4 response
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "satisfaction_score": 3,
-            "sentiment": "negative",
-            "outcome": "abandoned",
-            "summary": "Customer frustrated, unable to book",
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "satisfaction_score": 3,
+                "sentiment": "negative",
+                "outcome": "abandoned",
+                "summary": "Customer frustrated, unable to book",
+            }
+        )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
@@ -88,7 +99,9 @@ class TestSatisfactionScoring:
         assert result.get("sentiment") == "negative"
 
     @patch("analytics.openai_client.chat.completions.create")
-    def test_satisfaction_score_neutral(self, mock_openai, db_session, sms_conversation):
+    def test_satisfaction_score_neutral(
+        self, mock_openai, db_session, sms_conversation
+    ):
         """Test neutral satisfaction scoring."""
         import json
 
@@ -110,12 +123,14 @@ class TestSatisfactionScoring:
 
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "satisfaction_score": 6,
-            "sentiment": "neutral",
-            "outcome": "info_only",
-            "summary": "Simple inquiry, no booking",
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "satisfaction_score": 6,
+                "sentiment": "neutral",
+                "outcome": "info_only",
+                "summary": "Simple inquiry, no booking",
+            }
+        )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
@@ -127,7 +142,9 @@ class TestSatisfactionScoring:
         assert result.get("sentiment") == "neutral"
 
     @patch("analytics.openai_client.chat.completions.create")
-    def test_sentiment_detection_frustrated(self, mock_openai, db_session, voice_conversation):
+    def test_sentiment_detection_frustrated(
+        self, mock_openai, db_session, voice_conversation
+    ):
         """Test detection of customer frustration."""
         import json
 
@@ -141,12 +158,14 @@ class TestSatisfactionScoring:
 
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "satisfaction_score": 2,
-            "sentiment": "frustrated",
-            "outcome": "escalated",
-            "frustration_indicators": ["waiting", "ridiculous"],
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "satisfaction_score": 2,
+                "sentiment": "frustrated",
+                "outcome": "escalated",
+                "frustration_indicators": ["waiting", "ridiculous"],
+            }
+        )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
@@ -172,12 +191,14 @@ class TestSatisfactionScoring:
 
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "satisfaction_score": 10,
-            "sentiment": "very_positive",
-            "outcome": "booked",
-            "positive_indicators": ["perfect", "helpful"],
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "satisfaction_score": 10,
+                "sentiment": "very_positive",
+                "outcome": "booked",
+                "positive_indicators": ["perfect", "helpful"],
+            }
+        )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
@@ -189,7 +210,9 @@ class TestSatisfactionScoring:
         assert "positive" in result.get("sentiment", "").lower()
 
     @patch("analytics.openai_client.chat.completions.create")
-    def test_sentiment_mixed_emotions(self, mock_openai, db_session, voice_conversation):
+    def test_sentiment_mixed_emotions(
+        self, mock_openai, db_session, voice_conversation
+    ):
         """Test detection of mixed emotions."""
         import json
 
@@ -203,11 +226,13 @@ class TestSatisfactionScoring:
 
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "satisfaction_score": 7,
-            "sentiment": "mixed",
-            "outcome": "resolved",
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "satisfaction_score": 7,
+                "sentiment": "mixed",
+                "outcome": "resolved",
+            }
+        )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
@@ -218,7 +243,9 @@ class TestSatisfactionScoring:
         assert result.get("sentiment") == "mixed"
 
     @patch("analytics.openai_client.chat.completions.create")
-    def test_outcome_detection_booked(self, mock_openai, db_session, voice_conversation):
+    def test_outcome_detection_booked(
+        self, mock_openai, db_session, voice_conversation
+    ):
         """Test detection of successful booking outcome."""
         import json
 
@@ -232,11 +259,13 @@ class TestSatisfactionScoring:
 
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "satisfaction_score": 9,
-            "sentiment": "positive",
-            "outcome": "booked",
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "satisfaction_score": 9,
+                "sentiment": "positive",
+                "outcome": "booked",
+            }
+        )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
@@ -247,7 +276,9 @@ class TestSatisfactionScoring:
         assert result.get("outcome") == "booked"
 
     @patch("analytics.openai_client.chat.completions.create")
-    def test_outcome_detection_info_only(self, mock_openai, db_session, sms_conversation):
+    def test_outcome_detection_info_only(
+        self, mock_openai, db_session, sms_conversation
+    ):
         """Test detection of information-only outcome."""
         import json
 
@@ -261,11 +292,13 @@ class TestSatisfactionScoring:
 
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "satisfaction_score": 7,
-            "sentiment": "neutral",
-            "outcome": "info_only",
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "satisfaction_score": 7,
+                "sentiment": "neutral",
+                "outcome": "info_only",
+            }
+        )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
@@ -276,7 +309,9 @@ class TestSatisfactionScoring:
         assert result.get("outcome") == "info_only"
 
     @patch("analytics.openai_client.chat.completions.create")
-    def test_outcome_detection_escalated(self, mock_openai, db_session, voice_conversation):
+    def test_outcome_detection_escalated(
+        self, mock_openai, db_session, voice_conversation
+    ):
         """Test detection of escalation outcome."""
         import json
 
@@ -290,11 +325,13 @@ class TestSatisfactionScoring:
 
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "satisfaction_score": 4,
-            "sentiment": "negative",
-            "outcome": "escalated",
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "satisfaction_score": 4,
+                "sentiment": "negative",
+                "outcome": "escalated",
+            }
+        )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
@@ -305,17 +342,21 @@ class TestSatisfactionScoring:
         assert result.get("outcome") == "escalated"
 
     @patch("analytics.openai_client.chat.completions.create")
-    def test_gpt4_satisfaction_call_count(self, mock_openai, db_session, voice_conversation):
+    def test_gpt4_satisfaction_call_count(
+        self, mock_openai, db_session, voice_conversation
+    ):
         """Test GPT-4 is called exactly once per scoring."""
         import json
 
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "satisfaction_score": 8,
-            "sentiment": "positive",
-            "outcome": "booked",
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "satisfaction_score": 8,
+                "sentiment": "positive",
+                "outcome": "booked",
+            }
+        )
         mock_openai.return_value = mock_response
 
         AnalyticsService.score_conversation_satisfaction(

@@ -7,18 +7,19 @@ These tests verify proper error handling for:
 - Database errors
 - Concurrent booking conflicts
 """
+
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
-import uuid
 
 import pytest
-from requests.exceptions import Timeout, HTTPError, ConnectionError
+from requests.exceptions import ConnectionError, HTTPError, Timeout
 from sqlalchemy.exc import OperationalError
 
 from booking_handlers import handle_book_appointment, handle_check_availability
-from database import Customer, Appointment
+from database import Appointment, Customer
 
 
 @pytest.mark.integration
@@ -31,10 +32,16 @@ class TestBookingFailures:
         mock_calendar = Mock()
         # Mock get_available_slots to return a valid slot
         mock_calendar.get_available_slots.return_value = [
-            {"start": "2025-11-20T14:00:00-05:00", "end": "2025-11-20T15:00:00-05:00", "available": True}
+            {
+                "start": "2025-11-20T14:00:00-05:00",
+                "end": "2025-11-20T15:00:00-05:00",
+                "available": True,
+            }
         ]
         # Mock book_appointment to raise Timeout
-        mock_calendar.book_appointment.side_effect = Timeout("Request timed out after 30 seconds")
+        mock_calendar.book_appointment.side_effect = Timeout(
+            "Request timed out after 30 seconds"
+        )
 
         result = handle_book_appointment(
             mock_calendar,
@@ -46,7 +53,10 @@ class TestBookingFailures:
         )
 
         assert result["success"] is False
-        assert "timeout" in result.get("error", "").lower() or "failed" in result.get("error", "").lower()
+        assert (
+            "timeout" in result.get("error", "").lower()
+            or "failed" in result.get("error", "").lower()
+        )
 
     def test_calendar_api_unauthorized(self, db_session, customer):
         """Test handling of Calendar API authentication failure."""
@@ -95,7 +105,10 @@ class TestBookingFailures:
         )
 
         assert result["success"] is False
-        assert "service" in result.get("error", "").lower() or "invalid" in result.get("error", "").lower()
+        assert (
+            "service" in result.get("error", "").lower()
+            or "invalid" in result.get("error", "").lower()
+        )
 
     def test_invalid_datetime_format(self, db_session, customer):
         """Test rejection of malformed datetime."""
@@ -117,7 +130,9 @@ class TestBookingFailures:
                 service_type="botox",
             )
 
-            assert result["success"] is False, f"Should reject invalid datetime: {invalid_dt}"
+            assert (
+                result["success"] is False
+            ), f"Should reject invalid datetime: {invalid_dt}"
 
     def test_booking_outside_business_hours(self, db_session, customer):
         """Test rejection of booking outside business hours."""
@@ -136,7 +151,11 @@ class TestBookingFailures:
 
     def test_booking_past_date(self, db_session, customer):
         """Test rejection of booking in the past."""
-        past_date = (datetime.utcnow() - timedelta(days=30)).replace(hour=14, minute=0).isoformat()
+        past_date = (
+            (datetime.utcnow() - timedelta(days=30))
+            .replace(hour=14, minute=0)
+            .isoformat()
+        )
 
         result = handle_book_appointment(
             db_session,
@@ -148,7 +167,10 @@ class TestBookingFailures:
         )
 
         assert result["success"] is False
-        assert "past" in result.get("error", "").lower() or "invalid" in result.get("error", "").lower()
+        assert (
+            "past" in result.get("error", "").lower()
+            or "invalid" in result.get("error", "").lower()
+        )
 
     def test_incomplete_customer_details(self, db_session):
         """Test handling of missing required customer information."""
@@ -183,16 +205,21 @@ class TestBookingFailures:
         )
 
         # At least one should fail (depending on requirements)
-        failures = [r for r in [result1, result2, result3] if not r.get("success", False)]
+        failures = [
+            r for r in [result1, result2, result3] if not r.get("success", False)
+        ]
         assert len(failures) > 0
 
-    @pytest.mark.parametrize("invalid_phone", [
-        "123",  # Too short
-        "not-a-phone-number",
-        "",  # Empty
-        "1234567890123456789",  # Too long
-        "555-CALL-NOW",  # Letters
-    ])
+    @pytest.mark.parametrize(
+        "invalid_phone",
+        [
+            "123",  # Too short
+            "not-a-phone-number",
+            "",  # Empty
+            "1234567890123456789",  # Too long
+            "555-CALL-NOW",  # Letters
+        ],
+    )
     def test_invalid_phone_number_format(self, db_session, customer, invalid_phone):
         """Test validation of phone number formats."""
         result = handle_book_appointment(
@@ -206,15 +233,21 @@ class TestBookingFailures:
 
         # Should either fail validation or normalize the number
         if not result.get("success", False):
-            assert "phone" in result.get("error", "").lower() or "invalid" in result.get("error", "").lower()
+            assert (
+                "phone" in result.get("error", "").lower()
+                or "invalid" in result.get("error", "").lower()
+            )
 
-    @pytest.mark.parametrize("invalid_email", [
-        "not-an-email",
-        "missing@domain",
-        "@nodomain.com",
-        "spaces in@email.com",
-        "",
-    ])
+    @pytest.mark.parametrize(
+        "invalid_email",
+        [
+            "not-an-email",
+            "missing@domain",
+            "@nodomain.com",
+            "spaces in@email.com",
+            "",
+        ],
+    )
     def test_invalid_email_format(self, db_session, customer, invalid_email):
         """Test validation of email formats."""
         result = handle_book_appointment(
@@ -228,12 +261,17 @@ class TestBookingFailures:
 
         # Should fail validation
         if not result.get("success", False):
-            assert "email" in result.get("error", "").lower() or "invalid" in result.get("error", "").lower()
+            assert (
+                "email" in result.get("error", "").lower()
+                or "invalid" in result.get("error", "").lower()
+            )
 
     def test_database_connection_failure(self, db_session, customer):
         """Test handling of database connection errors."""
         with patch("database.SessionLocal") as mock_session:
-            mock_session.side_effect = OperationalError("Database connection failed", None, None)
+            mock_session.side_effect = OperationalError(
+                "Database connection failed", None, None
+            )
 
             # Should handle gracefully
             try:
@@ -271,4 +309,7 @@ class TestBookingFailures:
         )
 
         assert result["success"] is False
-        assert "no longer available" in result.get("error", "").lower() or "conflict" in result.get("error", "").lower()
+        assert (
+            "no longer available" in result.get("error", "").lower()
+            or "conflict" in result.get("error", "").lower()
+        )

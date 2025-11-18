@@ -10,6 +10,7 @@ Usage examples:
     # Force re-import even if target already has rows
     python backend/scripts/migrate_sqlite_to_supabase.py --force
 """
+
 from __future__ import annotations
 
 import argparse
@@ -38,9 +39,11 @@ if ENV_PATH.exists():
 else:
     load_dotenv()
 
-from config import get_settings  # noqa: E402
-from database import Base, Customer, Appointment, CallSession, CallEvent, DailyMetric, engine  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
+
+from config import get_settings  # noqa: E402
+from database import (Appointment, Base, CallEvent, CallSession,  # noqa: E402
+                      Customer, DailyMetric, engine)
 
 MODELS_IN_ORDER: Tuple[Type[Base], ...] = (
     Customer,
@@ -77,7 +80,9 @@ def count_rows(session: Session, model: Type[Base]) -> int:
     return session.execute(func.count(model.id)).scalar_one()
 
 
-def fetch_batches(session: Session, model: Type[Base], batch_size: int) -> Iterable[List[Base]]:
+def fetch_batches(
+    session: Session, model: Type[Base], batch_size: int
+) -> Iterable[List[Base]]:
     total = count_rows(session, model)
     if total == 0:
         return
@@ -151,9 +156,15 @@ def migrate_table(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Migrate data from SQLite to Supabase")
-    parser.add_argument("--sqlite-path", type=str, help="Path to source SQLite database")
-    parser.add_argument("--dry-run", action="store_true", help="Show counts without writing")
-    parser.add_argument("--force", action="store_true", help="Overwrite existing target data")
+    parser.add_argument(
+        "--sqlite-path", type=str, help="Path to source SQLite database"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show counts without writing"
+    )
+    parser.add_argument(
+        "--force", action="store_true", help="Overwrite existing target data"
+    )
     args = parser.parse_args()
 
     sqlite_path = resolve_sqlite_path(args.sqlite_path)

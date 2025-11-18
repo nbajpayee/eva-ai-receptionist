@@ -8,11 +8,12 @@ These tests verify:
 - Event conflicts
 - Timezone mismatches
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from unittest.mock import patch, Mock
 import uuid
+from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
 
 import pytest
 from google.auth.exceptions import RefreshError
@@ -70,7 +71,7 @@ class TestCalendarFailures:
         error_response.status = 404
         error_response.reason = "Not Found"
 
-        mock_events.list.side_effect = HttpError(error_response, b'Calendar not found')
+        mock_events.list.side_effect = HttpError(error_response, b"Calendar not found")
 
         # Should handle gracefully
         try:
@@ -102,7 +103,10 @@ class TestCalendarFailures:
         )
 
         assert result["success"] is False
-        assert "failed" in result.get("error", "").lower() or "error" in result.get("error", "").lower()
+        assert (
+            "failed" in result.get("error", "").lower()
+            or "error" in result.get("error", "").lower()
+        )
 
     @patch("calendar_service.GoogleCalendarService.events")
     def test_event_update_conflict(self, mock_events, db_session, customer):
@@ -112,7 +116,9 @@ class TestCalendarFailures:
         error_response.status = 409
         error_response.reason = "Conflict"
 
-        mock_events.update.side_effect = HttpError(error_response, b'Event has been modified')
+        mock_events.update.side_effect = HttpError(
+            error_response, b"Event has been modified"
+        )
 
         # Should detect conflict
         try:
@@ -128,7 +134,11 @@ class TestCalendarFailures:
 
             if not result.get("success", False):
                 error_msg = result.get("error", "").lower()
-                assert "conflict" in error_msg or "modified" in error_msg or "error" in error_msg
+                assert (
+                    "conflict" in error_msg
+                    or "modified" in error_msg
+                    or "error" in error_msg
+                )
         except HttpError:
             # Acceptable if error propagates
             pass
@@ -141,11 +151,13 @@ class TestCalendarFailures:
 
         mock_check.return_value = {
             "success": True,
-            "available_slots": [{
-                "start": wrong_tz_slot,
-                "end": "2025-11-20T15:00:00+00:00",
-                "start_time": "02:00 PM",
-            }],
+            "available_slots": [
+                {
+                    "start": wrong_tz_slot,
+                    "end": "2025-11-20T15:00:00+00:00",
+                    "start_time": "02:00 PM",
+                }
+            ],
         }
 
         result = handle_check_availability(

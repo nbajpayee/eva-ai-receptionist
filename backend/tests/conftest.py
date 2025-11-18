@@ -1,6 +1,7 @@
 """
 Shared pytest fixtures for all tests.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,13 +16,15 @@ from faker import Faker
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from database import Base, Customer, Appointment, Conversation, CommunicationMessage
 from config import get_settings
+from database import (Appointment, Base, CommunicationMessage, Conversation,
+                      Customer)
 
 fake = Faker()
 
 
 # ==================== Database Fixtures ====================
+
 
 @pytest.fixture(scope="session")
 def test_engine():
@@ -29,9 +32,7 @@ def test_engine():
     # Use SQLite for testing to avoid Supabase dependencies
     test_db_url = "sqlite:///test.db"
     engine = create_engine(
-        test_db_url,
-        connect_args={"check_same_thread": False},
-        echo=False
+        test_db_url, connect_args={"check_same_thread": False}, echo=False
     )
 
     # Create all tables
@@ -53,11 +54,7 @@ def test_engine():
 @pytest.fixture
 def db_session(test_engine) -> Generator[Session, None, None]:
     """Create a database session for each test."""
-    TestSessionLocal = sessionmaker(
-        autocommit=False,
-        autoflush=False,
-        bind=test_engine
-    )
+    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     session = TestSessionLocal()
 
     try:
@@ -71,6 +68,7 @@ def db_session(test_engine) -> Generator[Session, None, None]:
 
 
 # ==================== Customer Fixtures ====================
+
 
 @pytest.fixture
 def customer(db_session) -> Customer:
@@ -159,6 +157,7 @@ def returning_customer(db_session) -> Customer:
 
 # ==================== Conversation Fixtures ====================
 
+
 @pytest.fixture
 def voice_conversation(db_session, customer) -> Conversation:
     """Create a voice conversation."""
@@ -221,6 +220,7 @@ def email_conversation(db_session, customer) -> Conversation:
 
 # ==================== Mock Fixtures ====================
 
+
 @pytest.fixture
 def mock_openai_client():
     """Mock OpenAI client."""
@@ -272,7 +272,10 @@ def mock_sendgrid_client():
 
 # ==================== Test Data Builders ====================
 
-def build_availability_response(date: str = "2025-11-20", num_slots: int = 10, service_type: str = "botox"):
+
+def build_availability_response(
+    date: str = "2025-11-20", num_slots: int = 10, service_type: str = "botox"
+):
     """Build a realistic availability response."""
     from booking.time_utils import to_eastern
 
@@ -282,12 +285,14 @@ def build_availability_response(date: str = "2025-11-20", num_slots: int = 10, s
     for i in range(num_slots):
         start = base_time + timedelta(hours=i)
         end = start + timedelta(minutes=60)
-        slots.append({
-            "start": start.isoformat(),
-            "end": end.isoformat(),
-            "start_time": start.strftime("%I:%M %p"),
-            "end_time": end.strftime("%I:%M %p"),
-        })
+        slots.append(
+            {
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "start_time": start.strftime("%I:%M %p"),
+                "end_time": end.strftime("%I:%M %p"),
+            }
+        )
 
     return {
         "success": True,
@@ -353,6 +358,7 @@ def mock_ai_response_with_tool_call(tool_name: str, arguments: dict) -> Mock:
 
 
 # ==================== Event Loop Fixture ====================
+
 
 @pytest.fixture(scope="session")
 def event_loop():

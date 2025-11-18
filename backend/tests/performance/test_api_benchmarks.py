@@ -3,14 +3,16 @@ API response time benchmarks using pytest-benchmark.
 
 Run with: pytest -m performance --benchmark-only
 """
+
 from __future__ import annotations
 
 from datetime import datetime
 from unittest.mock import patch
+
 import pytest
 
-from booking_handlers import handle_check_availability, handle_book_appointment
 from analytics import AnalyticsService
+from booking_handlers import handle_book_appointment, handle_check_availability
 
 
 @pytest.mark.performance
@@ -91,17 +93,20 @@ class TestAPIBenchmarks:
         from database import Customer
 
         def lookup():
-            return db_session.query(Customer).filter(
-                Customer.phone == customer.phone
-            ).first()
+            return (
+                db_session.query(Customer)
+                .filter(Customer.phone == customer.phone)
+                .first()
+            )
 
         result = benchmark(lookup)
         assert result is not None
 
     def test_appointment_query_performance(self, benchmark, db_session, customer):
         """Benchmark appointment queries."""
-        from database import Appointment
         from datetime import datetime, timedelta
+
+        from database import Appointment
 
         # Create test appointments
         for i in range(10):
@@ -114,14 +119,18 @@ class TestAPIBenchmarks:
         db_session.commit()
 
         def query_appointments():
-            return db_session.query(Appointment).filter(
-                Appointment.customer_id == customer.id
-            ).all()
+            return (
+                db_session.query(Appointment)
+                .filter(Appointment.customer_id == customer.id)
+                .all()
+            )
 
         result = benchmark(query_appointments)
         assert len(result) >= 10
 
-    def test_conversation_history_performance(self, benchmark, db_session, voice_conversation):
+    def test_conversation_history_performance(
+        self, benchmark, db_session, voice_conversation
+    ):
         """Benchmark conversation history retrieval."""
         from database import CommunicationMessage
 
@@ -136,9 +145,11 @@ class TestAPIBenchmarks:
             )
 
         def get_history():
-            return db_session.query(CommunicationMessage).filter(
-                CommunicationMessage.conversation_id == voice_conversation.id
-            ).all()
+            return (
+                db_session.query(CommunicationMessage)
+                .filter(CommunicationMessage.conversation_id == voice_conversation.id)
+                .all()
+            )
 
         result = benchmark(get_history)
         assert len(result) >= 50
