@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CustomerTimeline, type TimelineItem } from "@/components/customer-timeline";
+import { EditCustomerDialog } from "@/components/edit-customer-dialog";
 import { formatDistanceToNow, format } from "date-fns";
 
 type CustomerData = {
@@ -76,6 +77,7 @@ export default function CustomerDetailPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [timelinePage, setTimelinePage] = useState(1);
   const [timelineHasMore, setTimelineHasMore] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchCustomerData();
@@ -217,7 +219,10 @@ export default function CustomerDetailPage() {
 
             {/* Quick Actions */}
             <div className="flex flex-col gap-2">
-              <Button variant="outline" disabled>
+              <Button
+                variant="outline"
+                onClick={() => setEditDialogOpen(true)}
+              >
                 Edit Profile
               </Button>
               <Button variant="outline" disabled>
@@ -543,6 +548,19 @@ export default function CustomerDetailPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Customer Dialog */}
+      {customer && (
+        <EditCustomerDialog
+          customer={customer.customer}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          onSuccess={() => {
+            fetchCustomerData();
+            fetchStats();
+          }}
+        />
+      )}
     </div>
   );
 }

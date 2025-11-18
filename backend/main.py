@@ -448,6 +448,171 @@ async def get_customer_history(customer_id: int, db: Session = Depends(get_db)):
     }
 
 
+@app.put("/api/admin/customers/{customer_id}")
+async def update_customer(
+    customer_id: int,
+    name: Optional[str] = None,
+    phone: Optional[str] = None,
+    email: Optional[str] = None,
+    is_new_client: Optional[bool] = None,
+    has_allergies: Optional[bool] = None,
+    is_pregnant: Optional[bool] = None,
+    notes: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Update customer information."""
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    # Check if phone is being changed and if it's already in use
+    if phone and phone != customer.phone:
+        existing = db.query(Customer).filter(
+            Customer.phone == phone,
+            Customer.id != customer_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Phone number already in use by another customer")
+
+    # Check if email is being changed and if it's already in use
+    if email and email != customer.email:
+        existing = db.query(Customer).filter(
+            Customer.email == email,
+            Customer.id != customer_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already in use by another customer")
+
+    # Update fields that were provided
+    if name is not None:
+        customer.name = name
+    if phone is not None:
+        customer.phone = phone
+    if email is not None:
+        customer.email = email
+    if is_new_client is not None:
+        customer.is_new_client = is_new_client
+    if has_allergies is not None:
+        customer.has_allergies = has_allergies
+    if is_pregnant is not None:
+        customer.is_pregnant = is_pregnant
+    if notes is not None:
+        customer.notes = notes
+
+    customer.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(customer)
+
+    return {
+        "customer": {
+            "id": customer.id,
+            "name": customer.name,
+            "phone": customer.phone,
+            "email": customer.email,
+            "is_new_client": customer.is_new_client,
+            "has_allergies": customer.has_allergies,
+            "is_pregnant": customer.is_pregnant,
+            "notes": customer.notes,
+            "created_at": customer.created_at.isoformat() if customer.created_at else None,
+            "updated_at": customer.updated_at.isoformat() if customer.updated_at else None
+        }
+    }
+
+
+# ==================== Configuration Endpoints ====================
+
+@app.get("/api/config/services")
+async def get_services():
+    """Get available med spa services."""
+    from config import SERVICES
+    return {"services": SERVICES}
+
+
+@app.get("/api/config/providers")
+async def get_providers():
+    """Get available providers."""
+    from config import PROVIDERS
+    return {"providers": PROVIDERS}
+
+
+# ==================== Appointment Booking Endpoint ====================
+
+@app.post("/api/admin/appointments")
+async def create_appointment(
+    customer_id: int,
+    service_type: str,
+    appointment_datetime: str,
+    provider: Optional[str] = None,
+    special_requests: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Create a new appointment for a customer."""
+    from calendar_service import CalendarService
+    from config import SERVICES
+
+    # Verify customer exists
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    # Verify service exists
+    if service_type not in SERVICES:
+        raise HTTPException(status_code=400, detail=f"Invalid service type: {service_type}")
+
+    # Parse datetime
+    try:
+        appt_dt = datetime.fromisoformat(appointment_datetime.replace('Z', '+00:00'))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid datetime format")
+
+    # Get service duration
+    service_info = SERVICES[service_type]
+    duration = service_info.get("duration_minutes", 60)
+
+    # Create calendar event
+    calendar_service = CalendarService()
+    try:
+        calendar_event = calendar_service.create_event(
+            summary=f"{service_info['name']} - {customer.name}",
+            description=f"Service: {service_info['name']}\nCustomer: {customer.name}\nPhone: {customer.phone}\nProvider: {provider or 'TBD'}\n{special_requests or ''}",
+            start_time=appt_dt,
+            duration_minutes=duration
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create calendar event: {str(e)}")
+
+    # Create appointment in database
+    appointment = Appointment(
+        customer_id=customer_id,
+        calendar_event_id=calendar_event.get("id"),
+        appointment_datetime=appt_dt,
+        service_type=service_type,
+        provider=provider,
+        duration_minutes=duration,
+        status="scheduled",
+        booked_by="staff",
+        special_requests=special_requests
+    )
+
+    db.add(appointment)
+    db.commit()
+    db.refresh(appointment)
+
+    return {
+        "appointment": {
+            "id": appointment.id,
+            "customer_id": appointment.customer_id,
+            "service_type": appointment.service_type,
+            "appointment_datetime": appointment.appointment_datetime.isoformat(),
+            "provider": appointment.provider,
+            "duration_minutes": appointment.duration_minutes,
+            "status": appointment.status,
+            "special_requests": appointment.special_requests
+        }
+    }
+
+
 # ==================== Admin Dashboard Endpoints ====================
 
 @app.get("/api/admin/metrics/overview")
