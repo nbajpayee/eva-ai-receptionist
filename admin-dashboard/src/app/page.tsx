@@ -1,13 +1,18 @@
-import { ArrowUpRight, Clock3, MessageSquare, Smile, Users, ArrowRight } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { ArrowUpRight, Clock3, MessageSquare, Smile, Users, Download, Calendar } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { SplitStatCard } from "@/components/split-stat-card";
 import {
   CallLogTable,
   type CallRecord,
 } from "@/components/call-log-table";
-import { TrendsSection } from "@/components/TrendsSection";
+import { LiveStatus } from "@/components/dashboard/live-status";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
 
 type MetricsResponse = {
   period: string;
@@ -54,27 +59,6 @@ function getAppOrigin(): string {
 function resolveInternalUrl(path: string): string {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   return `${getAppOrigin()}${basePath}${path}`;
-}
-
-async function fetchMetrics(period: string = "today"): Promise<MetricsResponse> {
-  try {
-    const url = resolveInternalUrl(`/api/admin/metrics/overview?period=${period}`);
-
-    const response = await fetch(url, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      console.warn("Failed to fetch metrics", response.statusText);
-      return defaultMetrics;
-    }
-
-    const data = (await response.json()) as MetricsResponse;
-    return data;
-  } catch (error) {
-    console.error("Error fetching metrics", error);
-    return defaultMetrics;
-  }
 }
 
 async function fetchCallHistory(): Promise<CallRecord[]> {
@@ -150,14 +134,135 @@ const numberFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
-export default async function Home() {
-  const [metrics, calls] = await Promise.all([
-    fetchMetrics(),
-    fetchCallHistory(),
-  ]);
+const PERIODS = [
+  { label: "Today", value: "today" },
+  { label: "Week", value: "week" },
+  { label: "Month", value: "month" },
+] as const;
+
+export default function Home() {
+  const [metrics, setMetrics] = useState<MetricsResponse>(defaultMetrics);
+  const [calls, setCalls] = useState<CallRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("today");
+
+  // Call log filters
+  const [outcomeFilter, setOutcomeFilter] = useState<CallRecord["outcome"] | "all">("all");
+  const [channelFilter, setChannelFilter] = useState<CallRecord["channel"] | "all">("all");
+  const [satisfactionFilter, setSatisfactionFilter] = useState<"all" | "high" | "medium" | "low">("all");
+
+  useEffect(() => {
+    const loadMetrics = async () => {
+      try {
+        const response = await fetch(`/api/admin/metrics/overview?period=${selectedPeriod}`, {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          console.warn("Failed to fetch metrics", response.statusText);
+          setMetrics(defaultMetrics);
+          return;
+        }
+
+        const data = (await response.json()) as MetricsResponse;
+        setMetrics(data);
+      } catch (error) {
+        console.error("Error fetching metrics", error);
+        setMetrics(defaultMetrics);
+      }
+    };
+
+    loadMetrics();
+  }, [selectedPeriod]);
+
+  useEffect(() => {
+    const loadCalls = async () => {
+      const callsData = await fetchCallHistory();
+      setCalls(callsData);
+      setIsLoading(false);
+    };
+
+    loadCalls();
+  }, []);
+
+  // Filter calls based on selected filters
+  const filteredCalls = calls.filter((call) => {
+    // Outcome filter
+    if (outcomeFilter !== "all" && call.outcome !== outcomeFilter) {
+      return false;
+    }
+
+    // Channel filter
+    if (channelFilter !== "all") {
+      const callChannel = call.channel || "voice";
+      if (callChannel !== channelFilter) {
+        return false;
+      }
+    }
+
+    // Satisfaction filter
+    if (satisfactionFilter !== "all" && call.satisfactionScore != null) {
+      if (satisfactionFilter === "high" && call.satisfactionScore < 8) return false;
+      if (satisfactionFilter === "medium" && (call.satisfactionScore < 5 || call.satisfactionScore >= 8)) return false;
+      if (satisfactionFilter === "low" && call.satisfactionScore >= 5) return false;
+    }
+
+    return true;
+  });
+
+  const handleExportCalls = () => {
+    const exportData = filteredCalls.map((call) => ({
+      ID: call.id,
+      "Started At": new Date(call.startedAt).toISOString(),
+      "Duration (seconds)": call.durationSeconds || 0,
+      Outcome: call.outcome || "",
+      Phone: call.phoneNumber || "",
+      "Customer Name": call.customerName || "",
+      Channel: call.channel || "voice",
+      "Satisfaction Score": call.satisfactionScore || "",
+      Escalated: call.escalated ? "Yes" : "No",
+    }));
+
+    exportToCSV(exportData, generateExportFilename("calls"));
+  };
+
+  const selectedPeriodLabel = PERIODS.find((p) => p.value === selectedPeriod)?.label || "Today";
 
   return (
     <div className="space-y-10">
+      {/* Header with Period Selector */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-900">Dashboard</h1>
+          <p className="text-sm text-zinc-500 mt-1">
+            Overview of key metrics and recent activity
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-zinc-500" />
+          <ToggleGroup
+            type="single"
+            value={selectedPeriod}
+            onValueChange={(value) => {
+              if (value) setSelectedPeriod(value);
+            }}
+          >
+            {PERIODS.map((period) => (
+              <ToggleGroupItem
+                key={period.value}
+                value={period.value}
+                aria-label={`View ${period.label}`}
+              >
+                {period.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
+      </div>
+
+      {/* Live Status Indicator */}
+      <LiveStatus />
+
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         {/* Card 1: Appointments Booked */}
         <StatCard
@@ -211,22 +316,81 @@ export default async function Home() {
         />
       </section>
 
-      <TrendsSection />
-
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-2">
-            <h2 className="text-lg font-semibold text-zinc-900">Operational feed</h2>
-            <p className="text-sm text-zinc-500">Monitoring today's customer traffic.</p>
+            <h2 className="text-lg font-semibold text-zinc-900">Recent Communications</h2>
+            <p className="text-sm text-zinc-500">Latest customer interactions across all channels.</p>
           </div>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/customers">
-              View All Customers
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
+          <Button variant="outline" size="sm" onClick={handleExportCalls} disabled={filteredCalls.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Export Calls
           </Button>
         </div>
-        <CallLogTable calls={calls} />
+
+        {/* Call Log Filters */}
+        <div className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+          <span className="text-sm font-medium text-zinc-700">Filter:</span>
+
+          <Select value={outcomeFilter} onValueChange={(value) => setOutcomeFilter(value as CallRecord["outcome"] | "all")}>
+            <SelectTrigger className="w-[140px] bg-white">
+              <SelectValue placeholder="Outcome" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Outcomes</SelectItem>
+              <SelectItem value="booked">Booked</SelectItem>
+              <SelectItem value="info_only">Info Only</SelectItem>
+              <SelectItem value="escalated">Escalated</SelectItem>
+              <SelectItem value="abandoned">Abandoned</SelectItem>
+              <SelectItem value="rescheduled">Rescheduled</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={channelFilter} onValueChange={(value) => setChannelFilter(value as CallRecord["channel"] | "all")}>
+            <SelectTrigger className="w-[130px] bg-white">
+              <SelectValue placeholder="Channel" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Channels</SelectItem>
+              <SelectItem value="voice">Voice</SelectItem>
+              <SelectItem value="sms">SMS</SelectItem>
+              <SelectItem value="mobile_text">Mobile Text</SelectItem>
+              <SelectItem value="email">Email</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={satisfactionFilter} onValueChange={(value) => setSatisfactionFilter(value as "all" | "high" | "medium" | "low")}>
+            <SelectTrigger className="w-[150px] bg-white">
+              <SelectValue placeholder="Satisfaction" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Scores</SelectItem>
+              <SelectItem value="high">High (8-10)</SelectItem>
+              <SelectItem value="medium">Medium (5-7)</SelectItem>
+              <SelectItem value="low">Low (&lt;5)</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {(outcomeFilter !== "all" || channelFilter !== "all" || satisfactionFilter !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setOutcomeFilter("all");
+                setChannelFilter("all");
+                setSatisfactionFilter("all");
+              }}
+            >
+              Clear Filters
+            </Button>
+          )}
+
+          <span className="ml-auto text-sm text-zinc-500">
+            Showing {filteredCalls.length} of {calls.length} calls
+          </span>
+        </div>
+
+        <CallLogTable calls={filteredCalls} />
       </section>
     </div>
   );

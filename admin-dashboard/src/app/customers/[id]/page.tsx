@@ -1,617 +1,484 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import {
-  ArrowLeft,
-  Mail,
-  Phone,
-  Calendar,
-  MessageSquare,
-  AlertTriangle,
-  TrendingUp,
-  Clock,
-  Star,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CustomerTimeline, type TimelineItem } from "@/components/customer-timeline";
-import { EditCustomerDialog } from "@/components/edit-customer-dialog";
-import { BookAppointmentDialog } from "@/components/book-appointment-dialog";
-import { SendMessageDialog } from "@/components/send-message-dialog";
-import { formatDistanceToNow, format } from "date-fns";
+import { ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, AlertTriangle, Baby, Calendar, MessageSquare, Headphones } from "lucide-react";
+import { format } from "date-fns";
+import Link from "next/link";
 
-type CustomerData = {
-  customer: {
-    id: number;
-    name: string;
-    phone: string;
-    email: string | null;
-    is_new_client: boolean;
-    has_allergies: boolean;
-    is_pregnant: boolean;
-    notes: string | null;
-    created_at: string | null;
-    updated_at: string | null;
-  };
-  stats: {
-    total_appointments: number;
-    total_conversations: number;
-    avg_satisfaction_score: number | null;
-    last_activity_at: string | null;
-    preferred_channel: string;
-  };
-};
+interface Customer {
+  id: number;
+  name: string;
+  phone: string;
+  email?: string;
+  is_new_client: boolean;
+  has_allergies: boolean;
+  is_pregnant: boolean;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+  appointment_count?: number;
+  call_count?: number;
+  conversation_count?: number;
+}
 
-type CustomerStats = {
-  appointment_stats: {
-    total: number;
-    scheduled: number;
-    completed: number;
-    cancelled: number;
-    no_show: number;
-    rescheduled: number;
-  };
-  favorite_services: Array<{
-    service: string;
-    count: number;
-  }>;
-  communication_stats: {
-    total_conversations: number;
-    by_channel: Record<string, number>;
-    avg_satisfaction_by_channel: Record<string, number>;
-    outcomes: Record<string, number>;
-  };
-};
+interface Appointment {
+  id: number;
+  appointment_datetime: string;
+  service_type: string;
+  provider?: string;
+  status: string;
+  booked_by: string;
+  special_requests?: string;
+  created_at?: string;
+}
 
-export default function CustomerDetailPage() {
-  const params = useParams();
+interface Call {
+  id: number;
+  session_id: string;
+  started_at?: string;
+  duration_seconds?: number;
+  satisfaction_score?: number;
+  sentiment?: string;
+  outcome?: string;
+  escalated: boolean;
+}
+
+interface Conversation {
+  id: string;
+  channel: string;
+  initiated_at?: string;
+  status?: string;
+  outcome?: string;
+  satisfaction_score?: number;
+}
+
+interface CustomerHistory {
+  customer: Customer;
+  appointments: Appointment[];
+  calls: Call[];
+  conversations: Conversation[];
+}
+
+export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
   const router = useRouter();
-  const customerId = params.id as string;
-
-  const [customer, setCustomer] = useState<CustomerData | null>(null);
-  const [stats, setStats] = useState<CustomerStats | null>(null);
-  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview");
-  const [timelinePage, setTimelinePage] = useState(1);
-  const [timelineHasMore, setTimelineHasMore] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [bookAppointmentDialogOpen, setBookAppointmentDialogOpen] = useState(false);
-  const [sendMessageDialogOpen, setSendMessageDialogOpen] = useState(false);
+  const [data, setData] = useState<CustomerHistory | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Customer>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    fetchCustomerData();
-    fetchStats();
-  }, [customerId]);
+    const fetchData = async () => {
+      try {
+        const response = await fetch(`/api/admin/customers/${resolvedParams.id}/history`);
 
-  useEffect(() => {
-    if (activeTab === "timeline") {
-      fetchTimeline(1);
-    }
-  }, [activeTab]);
-
-  const fetchCustomerData = async () => {
-    try {
-      const response = await fetch(`/api/admin/customers/${customerId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setCustomer(data);
-      } else if (response.status === 404) {
-        router.push("/customers");
-      }
-    } catch (error) {
-      console.error("Error fetching customer:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchStats = async () => {
-    try {
-      const response = await fetch(`/api/admin/customers/${customerId}/stats`);
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
-      }
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    }
-  };
-
-  const fetchTimeline = async (page: number) => {
-    try {
-      const response = await fetch(
-        `/api/admin/customers/${customerId}/timeline?page=${page}&page_size=20`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        if (page === 1) {
-          setTimeline(data.timeline);
-        } else {
-          setTimeline((prev) => [...prev, ...data.timeline]);
+        if (!response.ok) {
+          throw new Error("Failed to fetch customer");
         }
-        setTimelinePage(page);
-        setTimelineHasMore(page < data.total_pages);
+
+        const historyData = await response.json();
+        setData(historyData);
+        setEditForm(historyData.customer);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Error fetching timeline:", error);
+    };
+
+    fetchData();
+  }, [resolvedParams.id]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+
+    try {
+      const response = await fetch(`/api/admin/customers/${resolvedParams.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(editForm),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update customer");
+      }
+
+      const updatedCustomer = await response.json();
+      setData((prev) => prev ? { ...prev, customer: updatedCustomer } : null);
+      setIsEditing(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleLoadMore = () => {
-    fetchTimeline(timelinePage + 1);
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this customer? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/admin/customers/${resolvedParams.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details?.detail || "Failed to delete customer");
+      }
+
+      router.push("/customers");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
+    }
   };
 
-  if (loading || !customer) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-sm text-zinc-500">Loading customer...</p>
+      <div className="space-y-6">
+        <p className="text-sm text-zinc-500">Loading...</p>
       </div>
     );
   }
 
-  const numberFormatter = new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 1,
-  });
+  if (error || !data) {
+    return (
+      <div className="space-y-6">
+        <p className="text-sm text-red-600">Error: {error || "Customer not found"}</p>
+        <Link href="/customers">
+          <Button variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Customers
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
+  const customer = data.customer;
 
   return (
     <div className="space-y-6">
-      {/* Back Button */}
-      <Button variant="ghost" asChild>
-        <Link href="/customers">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Customers
-        </Link>
-      </Button>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/customers">
+            <Button variant="outline" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold text-zinc-900">
+              {customer.name}
+              {customer.is_new_client && (
+                <Badge variant="secondary" className="ml-2">
+                  New Client
+                </Badge>
+              )}
+            </h1>
+            <p className="text-sm text-zinc-500">Customer ID: {customer.id}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isEditing && (
+            <>
+              <Button variant="outline" onClick={() => setIsEditing(true)}>
+                <Edit2 className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
+              <Button variant="destructive" onClick={handleDelete}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            </>
+          )}
+          {isEditing && (
+            <>
+              <Button variant="outline" onClick={() => {
+                setIsEditing(false);
+                setEditForm(customer);
+              }}>
+                <X className="mr-2 h-4 w-4" />
+                Cancel
+              </Button>
+              <Button onClick={handleSave} disabled={isSaving}>
+                <Save className="mr-2 h-4 w-4" />
+                {isSaving ? "Saving..." : "Save"}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
 
-      {/* Customer Header Card */}
-      <Card className="border-zinc-200">
-        <CardContent className="p-6">
-          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-            {/* Customer Info */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold text-zinc-900">
-                  {customer.customer.name}
-                </h1>
-                {customer.customer.is_new_client && (
-                  <Badge variant="outline" className="bg-sky-50 text-sky-700 border-sky-200">
-                    New Client
-                  </Badge>
-                )}
-                {(customer.customer.has_allergies || customer.customer.is_pregnant) && (
-                  <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                    <AlertTriangle className="mr-1 h-3 w-3" />
-                    Medical Flags
-                  </Badge>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2 text-zinc-600">
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  <span>{customer.customer.phone}</span>
+      {/* Customer Information Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Customer Information</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!isEditing ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium text-zinc-500">Phone</label>
+                  <p className="flex items-center gap-2 text-zinc-900">
+                    <Phone className="h-4 w-4" />
+                    {customer.phone}
+                  </p>
                 </div>
-                {customer.customer.email && (
-                  <div className="flex items-center gap-2">
+                <div>
+                  <label className="text-sm font-medium text-zinc-500">Email</label>
+                  <p className="flex items-center gap-2 text-zinc-900">
                     <Mail className="h-4 w-4" />
-                    <span>{customer.customer.email}</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  <span>
-                    Customer since{" "}
-                    {customer.customer.created_at
-                      ? format(new Date(customer.customer.created_at), "MMM d, yyyy")
-                      : "Unknown"}
-                  </span>
+                    {customer.email || "Not provided"}
+                  </p>
                 </div>
               </div>
 
-              {customer.customer.notes && (
-                <div className="rounded-lg bg-zinc-50 p-3 text-sm">
-                  <p className="font-medium text-zinc-900">Notes:</p>
-                  <p className="text-zinc-700">{customer.customer.notes}</p>
+              <div>
+                <label className="text-sm font-medium text-zinc-500">Medical Screening</label>
+                <div className="flex items-center gap-2 mt-1">
+                  {customer.has_allergies && (
+                    <Badge variant="destructive">
+                      <AlertTriangle className="mr-1 h-3 w-3" />
+                      Has Allergies
+                    </Badge>
+                  )}
+                  {customer.is_pregnant && (
+                    <Badge className="bg-pink-600">
+                      <Baby className="mr-1 h-3 w-3" />
+                      Pregnant
+                    </Badge>
+                  )}
+                  {!customer.has_allergies && !customer.is_pregnant && (
+                    <span className="text-sm text-zinc-500">No flags</span>
+                  )}
+                </div>
+              </div>
+
+              {customer.notes && (
+                <div>
+                  <label className="text-sm font-medium text-zinc-500">Notes</label>
+                  <p className="text-zinc-900 whitespace-pre-wrap">{customer.notes}</p>
                 </div>
               )}
-            </div>
 
-            {/* Quick Actions */}
-            <div className="flex flex-col gap-2">
-              <Button
-                variant="default"
-                onClick={() => setBookAppointmentDialogOpen(true)}
-              >
-                <Calendar className="mr-2 h-4 w-4" />
-                Book Appointment
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setEditDialogOpen(true)}
-              >
-                Edit Profile
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setSendMessageDialogOpen(true)}
-              >
-                <MessageSquare className="mr-2 h-4 w-4" />
-                Send Message
-              </Button>
+              <div className="text-xs text-zinc-500 pt-2 border-t">
+                Added {customer.created_at ? format(new Date(customer.created_at), "PPP") : "Unknown"}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium">Name</label>
+                  <input
+                    type="text"
+                    value={editForm.name || ""}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Phone</label>
+                  <input
+                    type="tel"
+                    value={editForm.phone || ""}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <input
+                  type="email"
+                  value={editForm.email || ""}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.has_allergies || false}
+                    onChange={(e) => setEditForm({ ...editForm, has_allergies: e.target.checked })}
+                    className="rounded"
+                  />
+                  <span className="text-sm">Has allergies</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.is_pregnant || false}
+                    onChange={(e) => setEditForm({ ...editForm, is_pregnant: e.target.checked })}
+                    className="rounded"
+                  />
+                  <span className="text-sm">Is pregnant</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.is_new_client !== undefined ? !editForm.is_new_client : false}
+                    onChange={(e) => setEditForm({ ...editForm, is_new_client: !e.target.checked })}
+                    className="rounded"
+                  />
+                  <span className="text-sm">Mark as existing client</span>
+                </label>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Notes</label>
+                <textarea
+                  value={editForm.notes || ""}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                  placeholder="Add any notes about this customer..."
+                />
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Quick Stats Row */}
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="border-zinc-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-zinc-500">Total Appointments</p>
-                <p className="text-2xl font-bold text-zinc-900">
-                  {customer.stats.total_appointments}
-                </p>
-              </div>
-              <Calendar className="h-8 w-8 text-sky-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-zinc-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-zinc-500">Conversations</p>
-                <p className="text-2xl font-bold text-zinc-900">
-                  {customer.stats.total_conversations}
-                </p>
-              </div>
-              <MessageSquare className="h-8 w-8 text-emerald-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-zinc-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-zinc-500">Satisfaction</p>
-                <p className="text-2xl font-bold text-zinc-900">
-                  {customer.stats.avg_satisfaction_score
-                    ? `${customer.stats.avg_satisfaction_score}/10`
-                    : "N/A"}
-                </p>
-              </div>
-              <Star className="h-8 w-8 text-amber-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-zinc-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-zinc-500">Last Activity</p>
-                <p className="text-sm font-medium text-zinc-900">
-                  {customer.stats.last_activity_at
-                    ? formatDistanceToNow(new Date(customer.stats.last_activity_at), {
-                        addSuffix: true,
-                      })
-                    : "Never"}
-                </p>
-              </div>
-              <Clock className="h-8 w-8 text-violet-500" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="appointments">Appointments</TabsTrigger>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
+      {/* Activity Tabs */}
+      <Tabs defaultValue="appointments" className="w-full">
+        <TabsList>
+          <TabsTrigger value="appointments">
+            <Calendar className="mr-2 h-4 w-4" />
+            Appointments ({data.appointments.length})
+          </TabsTrigger>
+          <TabsTrigger value="calls">
+            <Headphones className="mr-2 h-4 w-4" />
+            Calls ({data.calls.length})
+          </TabsTrigger>
+          <TabsTrigger value="messages">
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Messages ({data.conversations.length})
+          </TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Activity Summary */}
-            <Card className="border-zinc-200">
-              <CardHeader>
-                <CardTitle>Activity Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-zinc-600">Preferred Channel</span>
-                  <Badge variant="outline" className="capitalize">
-                    {customer.stats.preferred_channel}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-zinc-600">Total Interactions</span>
-                  <span className="font-medium">
-                    {customer.stats.total_conversations + customer.stats.total_appointments}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-zinc-600">Average Satisfaction</span>
-                  <span
-                    className={`font-medium ${
-                      customer.stats.avg_satisfaction_score
-                        ? customer.stats.avg_satisfaction_score >= 8
-                          ? "text-emerald-600"
-                          : customer.stats.avg_satisfaction_score >= 5
-                          ? "text-amber-600"
-                          : "text-rose-600"
-                        : "text-zinc-400"
-                    }`}
-                  >
-                    {customer.stats.avg_satisfaction_score
-                      ? `${customer.stats.avg_satisfaction_score}/10`
-                      : "N/A"}
-                  </span>
-                </div>
+        <TabsContent value="appointments" className="space-y-4">
+          {data.appointments.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-zinc-500">
+                No appointments yet
               </CardContent>
             </Card>
-
-            {/* Appointment Insights */}
-            {stats && (
-              <Card className="border-zinc-200">
+          ) : (
+            data.appointments.map((apt) => (
+              <Card key={apt.id}>
                 <CardHeader>
-                  <CardTitle>Appointment Insights</CardTitle>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{apt.service_type}</CardTitle>
+                      <CardDescription>
+                        {format(new Date(apt.appointment_datetime), "PPP 'at' p")}
+                      </CardDescription>
+                    </div>
+                    <Badge variant={apt.status === "completed" ? "default" : apt.status === "cancelled" ? "destructive" : "secondary"}>
+                      {apt.status}
+                    </Badge>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-zinc-600">Completed</span>
-                    <span className="font-medium text-emerald-600">
-                      {stats.appointment_stats.completed}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-zinc-600">Scheduled</span>
-                    <span className="font-medium text-sky-600">
-                      {stats.appointment_stats.scheduled}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-zinc-600">Cancelled</span>
-                    <span className="font-medium text-rose-600">
-                      {stats.appointment_stats.cancelled}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-zinc-600">No Shows</span>
-                    <span className="font-medium text-amber-600">
-                      {stats.appointment_stats.no_show}
-                    </span>
-                  </div>
+                <CardContent className="text-sm">
+                  {apt.provider && <p className="text-zinc-500">Provider: {apt.provider}</p>}
+                  {apt.special_requests && <p className="mt-2 text-zinc-700">{apt.special_requests}</p>}
+                  <p className="text-xs text-zinc-400 mt-2">Booked by {apt.booked_by}</p>
                 </CardContent>
               </Card>
-            )}
-          </div>
+            ))
+          )}
+        </TabsContent>
 
-          {/* Favorite Services */}
-          {stats && stats.favorite_services.length > 0 && (
-            <Card className="border-zinc-200">
-              <CardHeader>
-                <CardTitle>Favorite Services</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {stats.favorite_services.map((service, index) => (
-                    <div
-                      key={service.service}
-                      className="flex items-center justify-between rounded-lg border border-zinc-200 p-3"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sm font-medium text-sky-700">
-                          {index + 1}
-                        </div>
-                        <span className="font-medium">{service.service}</span>
-                      </div>
-                      <Badge variant="outline">{service.count} bookings</Badge>
+        <TabsContent value="calls" className="space-y-4">
+          {data.calls.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-zinc-500">
+                No calls yet
+              </CardContent>
+            </Card>
+          ) : (
+            data.calls.map((call) => (
+              <Card key={call.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">Voice Call</CardTitle>
+                      <CardDescription>
+                        {call.started_at ? format(new Date(call.started_at), "PPP 'at' p") : "Unknown"}
+                      </CardDescription>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Medical Flags */}
-          {(customer.customer.has_allergies || customer.customer.is_pregnant) && (
-            <Card className="border-amber-200 bg-amber-50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-amber-900">
-                  <AlertTriangle className="h-5 w-5" />
-                  Medical Flags
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-amber-900">
-                {customer.customer.has_allergies && (
-                  <p>• Patient has reported allergies</p>
-                )}
-                {customer.customer.is_pregnant && <p>• Patient is pregnant</p>}
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* Timeline Tab */}
-        <TabsContent value="timeline">
-          <CustomerTimeline
-            items={timeline}
-            loading={loading}
-            onLoadMore={handleLoadMore}
-            hasMore={timelineHasMore}
-          />
-        </TabsContent>
-
-        {/* Appointments Tab */}
-        <TabsContent value="appointments">
-          <Card className="border-zinc-200">
-            <CardHeader>
-              <CardTitle>Appointment History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-zinc-500">
-                Detailed appointment view coming soon...
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Profile Tab */}
-        <TabsContent value="profile">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="border-zinc-200">
-              <CardHeader>
-                <CardTitle>Personal Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <label className="text-sm font-medium text-zinc-500">Name</label>
-                  <p className="text-zinc-900">{customer.customer.name}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-500">Phone</label>
-                  <p className="text-zinc-900">{customer.customer.phone}</p>
-                </div>
-                {customer.customer.email && (
-                  <div>
-                    <label className="text-sm font-medium text-zinc-500">Email</label>
-                    <p className="text-zinc-900">{customer.customer.email}</p>
+                    <div className="flex items-center gap-2">
+                      {call.outcome && <Badge variant="secondary">{call.outcome}</Badge>}
+                      {call.escalated && <Badge variant="destructive">Escalated</Badge>}
+                    </div>
                   </div>
+                </CardHeader>
+                <CardContent className="text-sm space-y-1">
+                  {call.duration_seconds && (
+                    <p className="text-zinc-500">Duration: {Math.floor(call.duration_seconds / 60)}m {call.duration_seconds % 60}s</p>
+                  )}
+                  {call.satisfaction_score !== undefined && call.satisfaction_score !== null && (
+                    <p className="text-zinc-500">Satisfaction: {call.satisfaction_score}/10</p>
+                  )}
+                  {call.sentiment && (
+                    <p className="text-zinc-500">Sentiment: {call.sentiment}</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="messages" className="space-y-4">
+          {data.conversations.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-zinc-500">
+                No messages yet
+              </CardContent>
+            </Card>
+          ) : (
+            data.conversations.map((conv) => (
+              <Card key={conv.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg capitalize">{conv.channel} Conversation</CardTitle>
+                      <CardDescription>
+                        {conv.initiated_at ? format(new Date(conv.initiated_at), "PPP 'at' p") : "Unknown"}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {conv.status && <Badge variant="secondary">{conv.status}</Badge>}
+                      {conv.outcome && <Badge>{conv.outcome}</Badge>}
+                    </div>
+                  </div>
+                </CardHeader>
+                {conv.satisfaction_score !== undefined && conv.satisfaction_score !== null && (
+                  <CardContent className="text-sm">
+                    <p className="text-zinc-500">Satisfaction: {conv.satisfaction_score}/10</p>
+                  </CardContent>
                 )}
-                <div>
-                  <label className="text-sm font-medium text-zinc-500">
-                    Client Type
-                  </label>
-                  <p className="text-zinc-900">
-                    {customer.customer.is_new_client ? "New Client" : "Returning Client"}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-zinc-200">
-              <CardHeader>
-                <CardTitle>Medical Screening</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-600">Has Allergies</span>
-                  <Badge
-                    variant="outline"
-                    className={
-                      customer.customer.has_allergies
-                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                        : "bg-zinc-50 text-zinc-600"
-                    }
-                  >
-                    {customer.customer.has_allergies ? "Yes" : "No"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-600">Is Pregnant</span>
-                  <Badge
-                    variant="outline"
-                    className={
-                      customer.customer.is_pregnant
-                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                        : "bg-zinc-50 text-zinc-600"
-                    }
-                  >
-                    {customer.customer.is_pregnant ? "Yes" : "No"}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-zinc-200 md:col-span-2">
-              <CardHeader>
-                <CardTitle>Account Activity</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-600">Created</span>
-                  <span className="text-zinc-900">
-                    {customer.customer.created_at
-                      ? format(new Date(customer.customer.created_at), "PPpp")
-                      : "Unknown"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-600">Last Updated</span>
-                  <span className="text-zinc-900">
-                    {customer.customer.updated_at
-                      ? format(new Date(customer.customer.updated_at), "PPpp")
-                      : "Unknown"}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              </Card>
+            ))
+          )}
         </TabsContent>
       </Tabs>
-
-      {/* Edit Customer Dialog */}
-      {customer && (
-        <EditCustomerDialog
-          customer={customer.customer}
-          open={editDialogOpen}
-          onOpenChange={setEditDialogOpen}
-          onSuccess={() => {
-            fetchCustomerData();
-            fetchStats();
-          }}
-        />
-      )}
-
-      {/* Book Appointment Dialog */}
-      {customer && (
-        <BookAppointmentDialog
-          customerId={customer.customer.id}
-          customerName={customer.customer.name}
-          open={bookAppointmentDialogOpen}
-          onOpenChange={setBookAppointmentDialogOpen}
-          onSuccess={() => {
-            fetchCustomerData();
-            fetchStats();
-            if (activeTab === "timeline") {
-              fetchTimeline(1);
-            }
-          }}
-        />
-      )}
-
-      {/* Send Message Dialog */}
-      {customer && (
-        <SendMessageDialog
-          customerId={customer.customer.id}
-          customerName={customer.customer.name}
-          customerPhone={customer.customer.phone}
-          customerEmail={customer.customer.email}
-          open={sendMessageDialogOpen}
-          onOpenChange={setSendMessageDialogOpen}
-          onSuccess={() => {
-            fetchCustomerData();
-            fetchStats();
-            if (activeTab === "timeline") {
-              fetchTimeline(1);
-            }
-          }}
-        />
-      )}
     </div>
   );
 }
