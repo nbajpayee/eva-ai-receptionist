@@ -17,6 +17,7 @@ from database import get_db, init_db, Customer, Appointment, CallSession, Conver
 from realtime_client import RealtimeClient
 from analytics import AnalyticsService
 from api_messaging import messaging_router
+from api_research import router as research_router
 from calendar_service import check_calendar_credentials
 
 settings = get_settings()
@@ -31,6 +32,7 @@ app = FastAPI(
 
 # Register routers
 app.include_router(messaging_router)
+app.include_router(research_router)
 
 # CORS middleware
 app.add_middleware(

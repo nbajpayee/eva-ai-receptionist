@@ -213,6 +213,10 @@ class Conversation(Base):
     channel = Column(String(20), nullable=False, index=True)
     status = Column(String(20), nullable=False, index=True)
 
+    # Research/Outbound campaigns support
+    conversation_type = Column(String(50), nullable=False, default="inbound_service", index=True)  # inbound_service, research, outbound_sales
+    campaign_id = Column(UUID(as_uuid=True), ForeignKey("research_campaigns.id", ondelete="SET NULL"), nullable=True, index=True)
+
     # Timestamps
     initiated_at = Column(DateTime, nullable=False, index=True)
     last_activity_at = Column(DateTime, nullable=False, index=True)
@@ -237,12 +241,15 @@ class Conversation(Base):
     customer = relationship("Customer", back_populates="conversations")
     messages = relationship("CommunicationMessage", back_populates="conversation", cascade="all, delete-orphan")
     events = relationship("CommunicationEvent", back_populates="conversation", cascade="all, delete-orphan")
+    campaign = relationship("ResearchCampaign", back_populates="conversations")
+    manual_call_log = relationship("ManualCallLog", uselist=False, back_populates="conversation", cascade="all, delete-orphan")
 
     __table_args__ = (
         CheckConstraint("channel IN ('voice', 'sms', 'email')", name='check_channel'),
         CheckConstraint("status IN ('active', 'completed', 'failed')", name='check_status'),
         CheckConstraint("satisfaction_score IS NULL OR (satisfaction_score >= 1 AND satisfaction_score <= 10)", name='check_satisfaction_score'),
         CheckConstraint("sentiment IS NULL OR sentiment IN ('positive', 'neutral', 'negative', 'mixed')", name='check_sentiment'),
+        CheckConstraint("conversation_type IN ('inbound_service', 'research', 'outbound_sales')", name='check_conversation_type'),
     )
 
 
@@ -389,6 +396,102 @@ class CommunicationEvent(Base):
     # Note: We don't use a check constraint on event_type to allow flexibility for legacy and future event types
     # Common types: intent_detected, function_called, escalation_requested, error, customer_sentiment_shift,
     # appointment_action, appointment_booked, appointment_rescheduled, appointment_cancelled
+
+
+# ==================== Research & Outbound Campaign Models ====================
+
+class ResearchCampaign(Base):
+    """
+    Research and outbound sales campaign model.
+    Defines customer segments and agent configurations for outbound communications.
+    """
+    __tablename__ = "research_campaigns"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    campaign_type = Column(String(50), nullable=False, index=True)  # research, outbound_sales
+
+    # Segment criteria (stores filter conditions as JSON)
+    segment_criteria = Column(JSONB, nullable=False, default={})
+
+    # Agent configuration (prompt, questions, voice settings)
+    agent_config = Column(JSONB, nullable=False, default={})
+
+    # Channel selection
+    channel = Column(String(20), nullable=False)  # sms, email, voice, multi
+
+    # Campaign status
+    status = Column(String(50), nullable=False, default="draft", index=True)  # draft, active, paused, completed
+
+    # Execution tracking
+    total_targeted = Column(Integer, default=0)
+    total_contacted = Column(Integer, default=0)
+    total_responded = Column(Integer, default=0)
+
+    # Timestamps
+    launched_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Future: admin user who created this
+    created_by = Column(String(255), nullable=True)
+
+    # Relationships
+    conversations = relationship("Conversation", back_populates="campaign")
+
+    __table_args__ = (
+        CheckConstraint("campaign_type IN ('research', 'outbound_sales')", name='check_campaign_type'),
+        CheckConstraint("channel IN ('sms', 'email', 'voice', 'multi')", name='check_campaign_channel'),
+        CheckConstraint("status IN ('draft', 'active', 'paused', 'completed')", name='check_campaign_status'),
+    )
+
+
+class CustomerSegment(Base):
+    """
+    Reusable customer segment definitions.
+    Allows saving and reusing segment criteria across multiple campaigns.
+    """
+    __tablename__ = "customer_segments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+
+    # Segment criteria (same structure as campaign segment_criteria)
+    criteria = Column(JSONB, nullable=False, default={})
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ManualCallLog(Base):
+    """
+    Manual call logs for staff-initiated calls.
+    Links to conversation for transcription and AI analysis.
+    """
+    __tablename__ = "manual_call_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Staff info
+    staff_name = Column(String(255), nullable=True)
+
+    # Pre-transcription notes
+    call_notes = Column(Text, nullable=True)
+
+    # Transcription status
+    transcription_status = Column(String(50), nullable=False, default="pending", index=True)  # pending, completed, failed
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationship
+    conversation = relationship("Conversation", back_populates="manual_call_log")
+
+    __table_args__ = (
+        CheckConstraint("transcription_status IN ('pending', 'completed', 'failed')", name='check_transcription_status'),
+    )
 
 
 # Database initialization
