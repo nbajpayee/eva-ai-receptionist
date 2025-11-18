@@ -1622,6 +1622,610 @@ async def handle_sendgrid_email(
     return {"status": "received", "message": "Email webhook handler coming soon"}
 
 
+# ==================== Provider Analytics Endpoints ====================
+
+from consultation_service import ConsultationService
+from ai_insights_service import AIInsightsService
+from provider_analytics_service import ProviderAnalyticsService
+from database import Provider, InPersonConsultation, AIInsight
+from fastapi import UploadFile, File, Form
+from pydantic import BaseModel
+from typing import List as TypingList
+
+
+# Request/Response models
+class ConsultationCreateRequest(BaseModel):
+    provider_id: str
+    customer_id: Optional[int] = None
+    service_type: Optional[str] = None
+
+
+class ConsultationEndRequest(BaseModel):
+    outcome: str
+    appointment_id: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class ProviderCreateRequest(BaseModel):
+    name: str
+    email: str
+    phone: Optional[str] = None
+    specialties: Optional[TypingList[str]] = None
+    bio: Optional[str] = None
+
+
+# ===== Consultation Endpoints =====
+
+@app.post("/api/consultations")
+async def create_consultation(
+    request: ConsultationCreateRequest,
+    db: Session = Depends(get_db)
+):
+    """Create a new consultation session."""
+    service = ConsultationService(db)
+    consultation = service.create_consultation(
+        provider_id=request.provider_id,
+        customer_id=request.customer_id,
+        service_type=request.service_type
+    )
+    return {
+        "id": str(consultation.id),
+        "provider_id": str(consultation.provider_id),
+        "customer_id": consultation.customer_id,
+        "service_type": consultation.service_type,
+        "created_at": consultation.created_at.isoformat()
+    }
+
+
+@app.post("/api/consultations/{consultation_id}/upload-audio")
+async def upload_consultation_audio(
+    consultation_id: str,
+    audio: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Upload audio recording for a consultation."""
+    service = ConsultationService(db)
+
+    # Upload file
+    file_path = service.upload_audio(
+        consultation_id=consultation_id,
+        audio_file=audio.file,
+        filename=audio.filename or "recording.wav"
+    )
+
+    # Update consultation record
+    consultation = service.get_consultation(consultation_id)
+    if not consultation:
+        raise HTTPException(status_code=404, detail="Consultation not found")
+
+    consultation.recording_url = file_path
+    db.commit()
+
+    return {
+        "consultation_id": consultation_id,
+        "recording_url": file_path,
+        "status": "uploaded"
+    }
+
+
+@app.post("/api/consultations/{consultation_id}/end")
+async def end_consultation(
+    consultation_id: str,
+    request: ConsultationEndRequest,
+    db: Session = Depends(get_db)
+):
+    """End a consultation and trigger AI analysis."""
+    service = ConsultationService(db)
+    consultation = service.end_consultation(
+        consultation_id=consultation_id,
+        outcome=request.outcome,
+        appointment_id=request.appointment_id,
+        notes=request.notes
+    )
+
+    # Trigger AI analysis
+    insights_service = AIInsightsService(db)
+    insights = insights_service.analyze_consultation(consultation_id)
+
+    return {
+        "id": str(consultation.id),
+        "ended_at": consultation.ended_at.isoformat() if consultation.ended_at else None,
+        "duration_seconds": consultation.duration_seconds,
+        "outcome": consultation.outcome,
+        "transcript_length": len(consultation.transcript) if consultation.transcript else 0,
+        "insights_generated": len(insights),
+        "satisfaction_score": consultation.satisfaction_score,
+        "sentiment": consultation.sentiment
+    }
+
+
+@app.get("/api/consultations")
+async def list_consultations(
+    provider_id: Optional[str] = None,
+    customer_id: Optional[int] = None,
+    outcome: Optional[str] = None,
+    service_type: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """List consultations with filters."""
+    service = ConsultationService(db)
+    offset = (page - 1) * page_size
+
+    consultations, total = service.list_consultations(
+        provider_id=provider_id,
+        customer_id=customer_id,
+        outcome=outcome,
+        service_type=service_type,
+        limit=page_size,
+        offset=offset
+    )
+
+    return {
+        "consultations": [
+            {
+                "id": str(c.id),
+                "provider_id": str(c.provider_id),
+                "customer_id": c.customer_id,
+                "service_type": c.service_type,
+                "outcome": c.outcome,
+                "duration_seconds": c.duration_seconds,
+                "satisfaction_score": c.satisfaction_score,
+                "sentiment": c.sentiment,
+                "created_at": c.created_at.isoformat(),
+                "ended_at": c.ended_at.isoformat() if c.ended_at else None,
+            }
+            for c in consultations
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size
+    }
+
+
+@app.get("/api/consultations/{consultation_id}")
+async def get_consultation_details(
+    consultation_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get detailed consultation information."""
+    consultation = db.query(InPersonConsultation).filter(
+        InPersonConsultation.id == uuid.UUID(consultation_id)
+    ).first()
+
+    if not consultation:
+        raise HTTPException(status_code=404, detail="Consultation not found")
+
+    # Get provider
+    provider = db.query(Provider).filter(
+        Provider.id == consultation.provider_id
+    ).first()
+
+    # Get customer
+    customer = None
+    if consultation.customer_id:
+        customer = db.query(Customer).filter(
+            Customer.id == consultation.customer_id
+        ).first()
+
+    # Get insights
+    insights = db.query(AIInsight).filter(
+        AIInsight.consultation_id == consultation.id
+    ).all()
+
+    return {
+        "id": str(consultation.id),
+        "provider": {
+            "id": str(provider.id),
+            "name": provider.name,
+            "email": provider.email
+        } if provider else None,
+        "customer": {
+            "id": customer.id,
+            "name": customer.name,
+            "phone": customer.phone
+        } if customer else None,
+        "service_type": consultation.service_type,
+        "outcome": consultation.outcome,
+        "duration_seconds": consultation.duration_seconds,
+        "transcript": consultation.transcript,
+        "notes": consultation.notes,
+        "satisfaction_score": consultation.satisfaction_score,
+        "sentiment": consultation.sentiment,
+        "ai_summary": consultation.ai_summary,
+        "created_at": consultation.created_at.isoformat(),
+        "ended_at": consultation.ended_at.isoformat() if consultation.ended_at else None,
+        "insights": [
+            {
+                "id": str(i.id),
+                "type": i.insight_type,
+                "title": i.title,
+                "insight_text": i.insight_text,
+                "supporting_quote": i.supporting_quote,
+                "recommendation": i.recommendation,
+                "confidence_score": i.confidence_score,
+                "is_positive": i.is_positive
+            }
+            for i in insights
+        ]
+    }
+
+
+# ===== Provider Endpoints =====
+
+@app.post("/api/providers")
+async def create_provider(
+    request: ProviderCreateRequest,
+    db: Session = Depends(get_db)
+):
+    """Create a new provider."""
+    provider = Provider(
+        id=uuid.uuid4(),
+        name=request.name,
+        email=request.email,
+        phone=request.phone,
+        specialties=request.specialties,
+        bio=request.bio,
+        is_active=True
+    )
+    db.add(provider)
+    db.commit()
+    db.refresh(provider)
+
+    return {
+        "id": str(provider.id),
+        "name": provider.name,
+        "email": provider.email,
+        "specialties": provider.specialties or []
+    }
+
+
+@app.get("/api/providers")
+async def list_providers(
+    active_only: bool = True,
+    db: Session = Depends(get_db)
+):
+    """List all providers."""
+    query = db.query(Provider)
+    if active_only:
+        query = query.filter(Provider.is_active == True)
+
+    providers = query.order_by(Provider.name).all()
+
+    return {
+        "providers": [
+            {
+                "id": str(p.id),
+                "name": p.name,
+                "email": p.email,
+                "phone": p.phone,
+                "specialties": p.specialties or [],
+                "avatar_url": p.avatar_url,
+                "is_active": p.is_active
+            }
+            for p in providers
+        ]
+    }
+
+
+@app.get("/api/providers/summary")
+async def get_providers_summary(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db)
+):
+    """Get performance summary for all providers."""
+    from datetime import timedelta
+    service = ProviderAnalyticsService(db)
+
+    start_date = datetime.utcnow() - timedelta(days=days)
+    summaries = service.get_all_providers_summary(
+        start_date=start_date,
+        end_date=datetime.utcnow()
+    )
+
+    return {"providers": summaries, "period_days": days}
+
+
+@app.get("/api/providers/{provider_id}")
+async def get_provider_details(
+    provider_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get detailed provider information."""
+    provider = db.query(Provider).filter(
+        Provider.id == uuid.UUID(provider_id)
+    ).first()
+
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    return {
+        "id": str(provider.id),
+        "name": provider.name,
+        "email": provider.email,
+        "phone": provider.phone,
+        "specialties": provider.specialties or [],
+        "hire_date": provider.hire_date.isoformat() if provider.hire_date else None,
+        "avatar_url": provider.avatar_url,
+        "bio": provider.bio,
+        "is_active": provider.is_active,
+        "created_at": provider.created_at.isoformat(),
+        "updated_at": provider.updated_at.isoformat()
+    }
+
+
+@app.get("/api/providers/{provider_id}/metrics")
+async def get_provider_metrics(
+    provider_id: str,
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db)
+):
+    """Get performance metrics for a provider."""
+    from datetime import timedelta
+    service = ProviderAnalyticsService(db)
+
+    # Get summary metrics
+    start_date = datetime.utcnow() - timedelta(days=days)
+    summaries = service.get_all_providers_summary(
+        start_date=start_date,
+        end_date=datetime.utcnow()
+    )
+
+    provider_summary = next(
+        (s for s in summaries if s["provider_id"] == provider_id),
+        None
+    )
+
+    if not provider_summary:
+        raise HTTPException(status_code=404, detail="Provider not found or no data")
+
+    # Get trend data
+    conversion_trend = service.get_provider_performance_trend(
+        provider_id=provider_id,
+        metric="conversion_rate",
+        days=days
+    )
+
+    revenue_trend = service.get_provider_performance_trend(
+        provider_id=provider_id,
+        metric="revenue",
+        days=days
+    )
+
+    # Get outcomes breakdown
+    outcomes = service.get_consultation_outcomes_breakdown(
+        provider_id=provider_id,
+        days=days
+    )
+
+    # Get service performance
+    service_performance = service.get_service_performance(
+        provider_id=provider_id,
+        days=days
+    )
+
+    return {
+        "summary": provider_summary,
+        "trends": {
+            "conversion_rate": conversion_trend,
+            "revenue": revenue_trend
+        },
+        "outcomes": outcomes,
+        "service_performance": service_performance,
+        "period_days": days
+    }
+
+
+@app.get("/api/providers/{provider_id}/insights")
+async def get_provider_insights(
+    provider_id: str,
+    insight_type: Optional[str] = None,
+    is_positive: Optional[bool] = None,
+    limit: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """Get AI insights for a provider."""
+    service = AIInsightsService(db)
+
+    insights = service.get_provider_insights(
+        provider_id=provider_id,
+        insight_type=insight_type,
+        is_positive=is_positive,
+        limit=limit
+    )
+
+    return {
+        "provider_id": provider_id,
+        "insights": [
+            {
+                "id": str(i.id),
+                "type": i.insight_type,
+                "title": i.title,
+                "insight_text": i.insight_text,
+                "supporting_quote": i.supporting_quote,
+                "recommendation": i.recommendation,
+                "confidence_score": i.confidence_score,
+                "is_positive": i.is_positive,
+                "is_reviewed": i.is_reviewed,
+                "created_at": i.created_at.isoformat()
+            }
+            for i in insights
+        ]
+    }
+
+
+@app.get("/api/providers/{provider_id}/consultations")
+async def get_provider_consultations(
+    provider_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """Get recent consultations for a provider."""
+    service = ConsultationService(db)
+
+    consultations = service.get_provider_consultations(
+        provider_id=provider_id,
+        limit=limit
+    )
+
+    return {
+        "provider_id": provider_id,
+        "consultations": [
+            {
+                "id": str(c.id),
+                "customer_id": c.customer_id,
+                "service_type": c.service_type,
+                "outcome": c.outcome,
+                "duration_seconds": c.duration_seconds,
+                "satisfaction_score": c.satisfaction_score,
+                "sentiment": c.sentiment,
+                "ai_summary": c.ai_summary,
+                "created_at": c.created_at.isoformat(),
+                "ended_at": c.ended_at.isoformat() if c.ended_at else None
+            }
+            for c in consultations
+        ]
+    }
+
+
+# ===== AI Insights Endpoints =====
+
+@app.post("/api/insights/analyze/{consultation_id}")
+async def analyze_consultation_endpoint(
+    consultation_id: str,
+    db: Session = Depends(get_db)
+):
+    """Trigger AI analysis for a consultation."""
+    service = AIInsightsService(db)
+    insights = service.analyze_consultation(consultation_id)
+
+    return {
+        "consultation_id": consultation_id,
+        "insights_generated": len(insights),
+        "insights": [
+            {
+                "id": str(i.id),
+                "type": i.insight_type,
+                "title": i.title,
+                "is_positive": i.is_positive,
+                "confidence_score": i.confidence_score
+            }
+            for i in insights
+        ]
+    }
+
+
+@app.post("/api/insights/compare-providers")
+async def compare_providers_endpoint(
+    target_provider_id: str = Query(...),
+    reference_provider_id: str = Query(...),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db)
+):
+    """Compare two providers and generate insights."""
+    service = AIInsightsService(db)
+
+    insights = service.compare_providers(
+        target_provider_id=target_provider_id,
+        reference_provider_id=reference_provider_id,
+        days=days
+    )
+
+    return {
+        "target_provider_id": target_provider_id,
+        "reference_provider_id": reference_provider_id,
+        "insights_generated": len(insights),
+        "insights": [
+            {
+                "id": str(i.id),
+                "title": i.title,
+                "insight_text": i.insight_text,
+                "recommendation": i.recommendation,
+                "confidence_score": i.confidence_score
+            }
+            for i in insights
+        ]
+    }
+
+
+@app.post("/api/insights/best-practices")
+async def extract_best_practices_endpoint(
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db)
+):
+    """Extract best practices from successful consultations."""
+    service = AIInsightsService(db)
+
+    insights = service.extract_best_practices(days=days, limit=limit)
+
+    return {
+        "best_practices_count": len(insights),
+        "period_days": days,
+        "best_practices": [
+            {
+                "id": str(i.id),
+                "title": i.title,
+                "insight_text": i.insight_text,
+                "supporting_quote": i.supporting_quote,
+                "recommendation": i.recommendation,
+                "confidence_score": i.confidence_score
+            }
+            for i in insights
+        ]
+    }
+
+
+@app.put("/api/insights/{insight_id}/review")
+async def mark_insight_reviewed(
+    insight_id: str,
+    db: Session = Depends(get_db)
+):
+    """Mark an insight as reviewed."""
+    service = AIInsightsService(db)
+    insight = service.mark_insight_reviewed(insight_id)
+
+    if not insight:
+        raise HTTPException(status_code=404, detail="Insight not found")
+
+    return {
+        "id": str(insight.id),
+        "is_reviewed": insight.is_reviewed,
+        "reviewed_at": insight.reviewed_at.isoformat() if insight.reviewed_at else None
+    }
+
+
+@app.get("/api/insights/best-practices")
+async def get_best_practices(
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """Get all best practice insights."""
+    insights = db.query(AIInsight).filter(
+        AIInsight.insight_type == 'best_practice'
+    ).order_by(
+        desc(AIInsight.confidence_score),
+        desc(AIInsight.created_at)
+    ).limit(limit).all()
+
+    return {
+        "best_practices": [
+            {
+                "id": str(i.id),
+                "title": i.title,
+                "insight_text": i.insight_text,
+                "supporting_quote": i.supporting_quote,
+                "recommendation": i.recommendation,
+                "confidence_score": i.confidence_score,
+                "created_at": i.created_at.isoformat()
+            }
+            for i in insights
+        ]
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
