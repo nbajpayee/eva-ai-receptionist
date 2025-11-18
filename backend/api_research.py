@@ -287,18 +287,35 @@ def update_campaign(
 @router.post("/campaigns/{campaign_id}/launch")
 def launch_campaign(
     campaign_id: str,
+    limit: Optional[int] = Query(None, description="Limit number of customers (for testing)"),
     db: Session = Depends(get_db)
 ):
-    """Launch a campaign."""
+    """Launch a campaign and begin outbound execution."""
     try:
+        from research.outbound_service import OutboundService
+        from database import SessionLocal
+
+        # Launch campaign (changes status to active)
         campaign = CampaignService.launch_campaign(db, campaign_id)
+
+        # Automatically execute outbound communications
+        outbound_service = OutboundService(db_session_factory=SessionLocal)
+        execution_results = outbound_service.execute_campaign(
+            db=db,
+            campaign_id=campaign.id,
+            limit=limit
+        )
+
         return {
             "success": True,
             "campaign": serialize_campaign(campaign),
-            "message": "Campaign launched successfully"
+            "execution": execution_results,
+            "message": f"Campaign launched and {execution_results['successful']} customers contacted"
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Launch failed: {str(e)}")
 
 
 @router.post("/campaigns/{campaign_id}/pause")
@@ -350,6 +367,40 @@ def complete_campaign(
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/campaigns/{campaign_id}/execute")
+def execute_campaign(
+    campaign_id: str,
+    limit: Optional[int] = Query(None, description="Limit number of customers (for testing)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Execute campaign outbound communications.
+    Sends messages to all customers in the campaign segment.
+    """
+    try:
+        from research.outbound_service import OutboundService
+        from database import SessionLocal
+
+        # Create outbound service
+        outbound_service = OutboundService(db_session_factory=SessionLocal)
+
+        # Execute campaign
+        results = outbound_service.execute_campaign(
+            db=db,
+            campaign_id=campaign_id,
+            limit=limit
+        )
+
+        return {
+            "success": True,
+            **results
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Execution failed: {str(e)}")
 
 
 @router.delete("/campaigns/{campaign_id}")
