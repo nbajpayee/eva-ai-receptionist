@@ -16,11 +16,11 @@ import { buttonVariants } from "@/components/ui/button";
 
 const ICONS = {
   dashboard: LayoutDashboard,
+  customers: Users,
   appointments: CalendarDays,
+  messaging: MessageSquare,
   voice: Waves,
   reports: FileBarChart2,
-  messaging: MessageSquare,
-  users: Users,
 } satisfies Record<string, LucideIcon>;
 
 export type SidebarNavIconKey = keyof typeof ICONS;

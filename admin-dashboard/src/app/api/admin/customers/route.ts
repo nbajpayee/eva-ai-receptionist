@@ -10,17 +10,16 @@ export async function GET(request: Request) {
     );
   }
 
-  const { searchParams } = new URL(request.url);
+  const incomingUrl = new URL(request.url);
   const proxyUrl = new URL("/api/admin/customers", baseUrl);
 
-  // Forward all query parameters
-  searchParams.forEach((value, key) => {
+  // Forward query parameters (page, page_size, search, sort_by, sort_order, filters)
+  incomingUrl.searchParams.forEach((value, key) => {
     proxyUrl.searchParams.set(key, value);
   });
 
   try {
     const response = await fetch(proxyUrl.toString(), {
-      method: "GET",
       headers: {
         "Content-Type": "application/json",
       },

@@ -22,14 +22,14 @@ const NAV_ITEMS: SidebarNavItem[] = [
     icon: "dashboard",
   },
   {
-    title: "Customers",
-    href: "/customers",
-    icon: "users",
+    title: "Analytics",
+    href: "/analytics",
+    icon: "reports",
   },
   {
-    title: "Messaging",
-    href: "/messaging",
-    icon: "messaging",
+    title: "Customers",
+    href: "/customers",
+    icon: "customers",
   },
   {
     title: "Appointments",
@@ -37,13 +37,33 @@ const NAV_ITEMS: SidebarNavItem[] = [
     icon: "appointments",
   },
   {
+    title: "Messaging",
+    href: "/messaging",
+    icon: "messaging",
+  },
+  {
     title: "Voice",
     href: "/voice",
     icon: "voice",
   },
   {
-    title: "Analytics",
-    href: "/analytics",
+    title: "Research",
+    href: "/research",
+    icon: "reports",
+  },
+  {
+    title: "Consultation",
+    href: "/consultation",
+    icon: "mic",
+  },
+  {
+    title: "Providers",
+    href: "/providers",
+    icon: "users",
+  },
+  {
+    title: "Console Reports",
+    href: "/reports",
     icon: "reports",
   },
 ];

@@ -27,7 +27,13 @@ except Exception as exc:  # noqa: BLE001 - capture environment issues early
 
 import pytz
 
-from config import get_settings, SERVICES
+from config import get_settings
+
+# Import SERVICES as fallback for backward compatibility
+try:
+    from config import SERVICES as FALLBACK_SERVICES
+except ImportError:
+    FALLBACK_SERVICES = {}
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -109,15 +115,17 @@ class GoogleCalendarService:
         self,
         date: datetime,
         service_type: str,
-        duration_minutes: Optional[int] = None
+        duration_minutes: Optional[int] = None,
+        services_dict: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
         Get available time slots for a specific date and service.
 
         Args:
             date: The date to check availability
-            service_type: Type of service (key from SERVICES config)
+            service_type: Type of service (key from services_dict)
             duration_minutes: Duration override, uses service default if not provided
+            services_dict: Optional services dictionary (uses FALLBACK_SERVICES if not provided)
 
         Returns:
             List of available time slots with start and end times
@@ -133,7 +141,8 @@ class GoogleCalendarService:
         try:
             # Get service duration
             if duration_minutes is None:
-                service = SERVICES.get(service_type)
+                services = services_dict if services_dict is not None else FALLBACK_SERVICES
+                service = services.get(service_type)
                 if not service:
                     raise ValueError(f"Unknown service type: {service_type}")
                 duration_minutes = service["duration_minutes"]
@@ -210,7 +219,8 @@ class GoogleCalendarService:
         customer_phone: str,
         service_type: str,
         provider: Optional[str] = None,
-        notes: Optional[str] = None
+        notes: Optional[str] = None,
+        services_dict: Optional[Dict[str, Any]] = None
     ) -> Optional[str]:
         """
         Book an appointment in Google Calendar.
@@ -224,12 +234,14 @@ class GoogleCalendarService:
             service_type: Type of service
             provider: Provider name (optional)
             notes: Special requests or notes
+            services_dict: Optional services dictionary (uses FALLBACK_SERVICES if not provided)
 
         Returns:
             Google Calendar event ID if successful, None otherwise
         """
         try:
-            service_info = SERVICES.get(service_type, {})
+            services = services_dict if services_dict is not None else FALLBACK_SERVICES
+            service_info = services.get(service_type, {})
             service_name = service_info.get('name', service_type)
 
             # Create event
