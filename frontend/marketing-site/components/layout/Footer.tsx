@@ -48,7 +48,7 @@ export default function Footer() {
                 </span>
               </div>
               <p className="text-sm text-gray-400 mb-6 max-w-xs">
-                The AI receptionist that never misses a call. Transform your medical spa's front desk with intelligent automation.
+                The AI receptionist that never misses a call. Transform your medical spa&apos;s front desk with intelligent automation.
               </p>
               <div className="flex space-x-4">
                 <a

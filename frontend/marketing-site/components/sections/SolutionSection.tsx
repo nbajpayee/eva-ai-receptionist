@@ -34,7 +34,7 @@ export default function SolutionSection() {
             Meet Eva: Your Intelligent Front Desk
           </h2>
           <p className="text-xl text-gray-600">
-            Eva doesn't just answer calls—she understands, engages, and converts every conversation into a positive patient experience.
+            Eva doesn&apos;t just answer calls—she understands, engages, and converts every conversation into a positive patient experience.
           </p>
         </FadeInUp>
 

@@ -76,7 +76,7 @@ export default function VoiceDemoPage() {
                   </h3>
 
                   <p className="text-gray-400 mb-8">
-                    Try saying: "I'd like to book a Botox appointment for next Tuesday"
+                    Try saying: &quot;I&apos;d like to book a Botox appointment for next Tuesday&quot;
                   </p>
 
                   <div className="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-sm px-6 py-3 rounded-full border border-white/20">
@@ -160,7 +160,7 @@ export default function VoiceDemoPage() {
         <div className="container-narrow">
           <FadeInUp className="text-center mb-12">
             <h2 className="heading-md text-gray-900 mb-4">
-              How Eva's Voice AI Works
+              How Eva&apos;s Voice AI Works
             </h2>
           </FadeInUp>
 
@@ -175,7 +175,7 @@ export default function VoiceDemoPage() {
                     Real-Time Speech Recognition
                   </h3>
                   <p className="text-gray-600">
-                    Powered by OpenAI's Realtime API, Eva converts speech to text instantly with 120ms latency for natural conversation flow.
+                    Powered by OpenAI&apos;s Realtime API, Eva converts speech to text instantly with 120ms latency for natural conversation flow.
                   </p>
                 </div>
               </div>

@@ -12,8 +12,38 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log error to console (in production, send to error tracking service)
+    // Log error to console in development
     console.error('Application error:', error);
+
+    // TODO: Integrate error tracking service in production
+    // Uncomment one of the following based on your chosen service:
+
+    // Sentry (recommended):
+    // import * as Sentry from "@sentry/nextjs";
+    // Sentry.captureException(error);
+
+    // LogRocket:
+    // import LogRocket from 'logrocket';
+    // LogRocket.captureException(error);
+
+    // Bugsnag:
+    // import Bugsnag from '@bugsnag/js';
+    // Bugsnag.notify(error);
+
+    // For now, log to console (not suitable for production monitoring)
+    if (process.env.NODE_ENV === 'production') {
+      // In production, you might want to send to your backend
+      fetch('/api/log-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: error.message,
+          stack: error.stack,
+          digest: error.digest,
+          timestamp: new Date().toISOString(),
+        }),
+      }).catch(console.error);
+    }
   }, [error]);
 
   return (

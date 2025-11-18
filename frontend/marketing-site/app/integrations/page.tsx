@@ -161,10 +161,10 @@ fetch('https://api.eva-ai.com/v1/bookings', {
           <FadeInUp className="text-center">
             <div className="bg-gradient-to-br from-primary-50 to-white rounded-2xl border border-primary-100 p-12">
               <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                Don't See Your Platform?
+                Don&apos;t See Your Platform?
               </h2>
               <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
-                We're constantly adding new integrations based on customer feedback. Let us know what you need.
+                We&apos;re constantly adding new integrations based on customer feedback. Let us know what you need.
               </p>
               <a
                 href="/contact"

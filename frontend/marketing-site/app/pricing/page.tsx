@@ -104,7 +104,7 @@ export default function PricingPage() {
               Compare Plans
             </h2>
             <p className="text-xl text-gray-600">
-              See exactly what's included in each plan
+              See exactly what&apos;s included in each plan
             </p>
           </FadeInUp>
 
@@ -187,7 +187,7 @@ export default function PricingPage() {
               See Your Potential Savings
             </h2>
             <p className="text-xl text-gray-600">
-              Calculate how much revenue you're leaving on the table with missed calls
+              Calculate how much revenue you&apos;re leaving on the table with missed calls
             </p>
           </FadeInUp>
 

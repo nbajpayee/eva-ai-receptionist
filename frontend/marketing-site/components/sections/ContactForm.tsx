@@ -10,7 +10,10 @@ const contactFormSchema = z.object({
   firstName: z.string().min(2, "First name must be at least 2 characters"),
   lastName: z.string().min(2, "Last name must be at least 2 characters"),
   email: z.string().email("Please enter a valid email address"),
-  phone: z.string().min(10, "Please enter a valid phone number"),
+  phone: z.string().regex(
+    /^[\d\s()+-]+$/,
+    "Phone number can only contain digits, spaces, parentheses, plus and dash"
+  ).min(10, "Phone number must be at least 10 digits"),
   practiceName: z.string().min(2, "Practice name must be at least 2 characters"),
   locations: z.string(),
   message: z.string().optional(),
@@ -71,7 +74,7 @@ export default function ContactForm() {
             Thank You!
           </h3>
           <p className="text-gray-600">
-            We've received your demo request. Our team will contact you within 24 hours.
+            We&apos;ve received your demo request. Our team will contact you within 24 hours.
           </p>
         </div>
       </div>
@@ -198,7 +201,7 @@ export default function ContactForm() {
             {...register("message")}
             rows={4}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            placeholder="Tell us about your practice and what you're looking for..."
+            placeholder="Tell us about your practice and what you&apos;re looking for..."
           />
         </div>
 

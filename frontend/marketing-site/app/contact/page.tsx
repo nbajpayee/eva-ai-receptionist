@@ -19,10 +19,10 @@ export default function ContactPage() {
             <FadeInUp>
               <div>
                 <h1 className="heading-xl text-gray-900 mb-6">
-                  Let's Talk
+                  Let&apos;s Talk
                 </h1>
                 <p className="text-xl text-gray-600 mb-8">
-                  Schedule a personalized demo to see how Eva can transform your medical spa's front desk operations.
+                  Schedule a personalized demo to see how Eva can transform your medical spa&apos;s front desk operations.
                 </p>
 
                 <div className="space-y-6">
@@ -54,7 +54,7 @@ export default function ContactPage() {
                       >
                         {SITE_CONFIG.contact.email}
                       </a>
-                      <p className="text-sm text-gray-600 mt-1">We'll respond within 24 hours</p>
+                      <p className="text-sm text-gray-600 mt-1">We&apos;ll respond within 24 hours</p>
                     </div>
                   </div>
 

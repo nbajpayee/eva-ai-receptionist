@@ -42,7 +42,7 @@ export default function AboutPage() {
               Built by Med Spa Operators, For Med Spa Operators
             </h1>
             <p className="text-xl md:text-2xl text-gray-600">
-              We understand the pain of missed calls and inefficient scheduling because we've lived it. Eva was born from a simple question: What if your front desk never missed a call?
+              We understand the pain of missed calls and inefficient scheduling because we&apos;ve lived it. Eva was born from a simple question: What if your front desk never missed a call?
             </p>
           </FadeInUp>
         </div>
@@ -61,7 +61,7 @@ export default function AboutPage() {
                 We tried traditional answering services, but they lacked the medical spa knowledge to properly screen patients or book appointments. We needed something smarter—something that could understand nuanced questions about Botox, dermal fillers, and laser treatments without sounding robotic.
               </p>
               <p className="text-gray-600 leading-relaxed">
-                That's when we built Eva. Using OpenAI's cutting-edge Realtime API, we created an AI receptionist that speaks naturally, understands patient needs, and books appointments with 100% reliability. Within two months of deploying Eva at our own clinic, our booking rate increased by 40%. We knew we had to share this with the industry.
+                That&apos;s when we built Eva. Using OpenAI&apos;s cutting-edge Realtime API, we created an AI receptionist that speaks naturally, understands patient needs, and books appointments with 100% reliability. Within two months of deploying Eva at our own clinic, our booking rate increased by 40%. We knew we had to share this with the industry.
               </p>
             </div>
           </FadeInUp>

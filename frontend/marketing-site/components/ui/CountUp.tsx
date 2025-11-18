@@ -55,7 +55,14 @@ export default function CountUp({
   }, [inView, end, duration]);
 
   const formatNumber = (num: number) => {
-    return num.toFixed(decimals);
+    if (decimals > 0) {
+      return num.toFixed(decimals);
+    }
+    // Format with commas for whole numbers
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(Math.floor(num));
   };
 
   return (

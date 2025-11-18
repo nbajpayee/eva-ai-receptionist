@@ -23,7 +23,7 @@ export default function TestimonialsSection() {
                 <Quote className="w-10 h-10 text-primary-500 mb-6" />
 
                 <blockquote className="text-gray-700 text-lg mb-6 flex-1">
-                  "{testimonial.quote}"
+                  &quot;{testimonial.quote}&quot;
                 </blockquote>
 
                 <div className="flex items-center space-x-4 pt-6 border-t border-gray-100">
