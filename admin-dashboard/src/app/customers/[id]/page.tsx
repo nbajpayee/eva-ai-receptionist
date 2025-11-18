@@ -1,0 +1,484 @@
+"use client";
+
+import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, AlertTriangle, Baby, Calendar, MessageSquare, Headphones } from "lucide-react";
+import { format } from "date-fns";
+import Link from "next/link";
+
+interface Customer {
+  id: number;
+  name: string;
+  phone: string;
+  email?: string;
+  is_new_client: boolean;
+  has_allergies: boolean;
+  is_pregnant: boolean;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+  appointment_count?: number;
+  call_count?: number;
+  conversation_count?: number;
+}
+
+interface Appointment {
+  id: number;
+  appointment_datetime: string;
+  service_type: string;
+  provider?: string;
+  status: string;
+  booked_by: string;
+  special_requests?: string;
+  created_at?: string;
+}
+
+interface Call {
+  id: number;
+  session_id: string;
+  started_at?: string;
+  duration_seconds?: number;
+  satisfaction_score?: number;
+  sentiment?: string;
+  outcome?: string;
+  escalated: boolean;
+}
+
+interface Conversation {
+  id: string;
+  channel: string;
+  initiated_at?: string;
+  status?: string;
+  outcome?: string;
+  satisfaction_score?: number;
+}
+
+interface CustomerHistory {
+  customer: Customer;
+  appointments: Appointment[];
+  calls: Call[];
+  conversations: Conversation[];
+}
+
+export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const router = useRouter();
+  const [data, setData] = useState<CustomerHistory | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Customer>>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch(`/api/admin/customers/${resolvedParams.id}/history`);
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch customer");
+        }
+
+        const historyData = await response.json();
+        setData(historyData);
+        setEditForm(historyData.customer);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [resolvedParams.id]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+
+    try {
+      const response = await fetch(`/api/admin/customers/${resolvedParams.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(editForm),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update customer");
+      }
+
+      const updatedCustomer = await response.json();
+      setData((prev) => prev ? { ...prev, customer: updatedCustomer } : null);
+      setIsEditing(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this customer? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/admin/customers/${resolvedParams.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details?.detail || "Failed to delete customer");
+      }
+
+      router.push("/customers");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <p className="text-sm text-zinc-500">Loading...</p>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="space-y-6">
+        <p className="text-sm text-red-600">Error: {error || "Customer not found"}</p>
+        <Link href="/customers">
+          <Button variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Customers
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
+  const customer = data.customer;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/customers">
+            <Button variant="outline" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold text-zinc-900">
+              {customer.name}
+              {customer.is_new_client && (
+                <Badge variant="secondary" className="ml-2">
+                  New Client
+                </Badge>
+              )}
+            </h1>
+            <p className="text-sm text-zinc-500">Customer ID: {customer.id}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isEditing && (
+            <>
+              <Button variant="outline" onClick={() => setIsEditing(true)}>
+                <Edit2 className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
+              <Button variant="destructive" onClick={handleDelete}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            </>
+          )}
+          {isEditing && (
+            <>
+              <Button variant="outline" onClick={() => {
+                setIsEditing(false);
+                setEditForm(customer);
+              }}>
+                <X className="mr-2 h-4 w-4" />
+                Cancel
+              </Button>
+              <Button onClick={handleSave} disabled={isSaving}>
+                <Save className="mr-2 h-4 w-4" />
+                {isSaving ? "Saving..." : "Save"}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Customer Information Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Customer Information</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!isEditing ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium text-zinc-500">Phone</label>
+                  <p className="flex items-center gap-2 text-zinc-900">
+                    <Phone className="h-4 w-4" />
+                    {customer.phone}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-zinc-500">Email</label>
+                  <p className="flex items-center gap-2 text-zinc-900">
+                    <Mail className="h-4 w-4" />
+                    {customer.email || "Not provided"}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-zinc-500">Medical Screening</label>
+                <div className="flex items-center gap-2 mt-1">
+                  {customer.has_allergies && (
+                    <Badge variant="destructive">
+                      <AlertTriangle className="mr-1 h-3 w-3" />
+                      Has Allergies
+                    </Badge>
+                  )}
+                  {customer.is_pregnant && (
+                    <Badge className="bg-pink-600">
+                      <Baby className="mr-1 h-3 w-3" />
+                      Pregnant
+                    </Badge>
+                  )}
+                  {!customer.has_allergies && !customer.is_pregnant && (
+                    <span className="text-sm text-zinc-500">No flags</span>
+                  )}
+                </div>
+              </div>
+
+              {customer.notes && (
+                <div>
+                  <label className="text-sm font-medium text-zinc-500">Notes</label>
+                  <p className="text-zinc-900 whitespace-pre-wrap">{customer.notes}</p>
+                </div>
+              )}
+
+              <div className="text-xs text-zinc-500 pt-2 border-t">
+                Added {customer.created_at ? format(new Date(customer.created_at), "PPP") : "Unknown"}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium">Name</label>
+                  <input
+                    type="text"
+                    value={editForm.name || ""}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Phone</label>
+                  <input
+                    type="tel"
+                    value={editForm.phone || ""}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <input
+                  type="email"
+                  value={editForm.email || ""}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.has_allergies || false}
+                    onChange={(e) => setEditForm({ ...editForm, has_allergies: e.target.checked })}
+                    className="rounded"
+                  />
+                  <span className="text-sm">Has allergies</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.is_pregnant || false}
+                    onChange={(e) => setEditForm({ ...editForm, is_pregnant: e.target.checked })}
+                    className="rounded"
+                  />
+                  <span className="text-sm">Is pregnant</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.is_new_client !== undefined ? !editForm.is_new_client : false}
+                    onChange={(e) => setEditForm({ ...editForm, is_new_client: !e.target.checked })}
+                    className="rounded"
+                  />
+                  <span className="text-sm">Mark as existing client</span>
+                </label>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Notes</label>
+                <textarea
+                  value={editForm.notes || ""}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                  placeholder="Add any notes about this customer..."
+                />
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Activity Tabs */}
+      <Tabs defaultValue="appointments" className="w-full">
+        <TabsList>
+          <TabsTrigger value="appointments">
+            <Calendar className="mr-2 h-4 w-4" />
+            Appointments ({data.appointments.length})
+          </TabsTrigger>
+          <TabsTrigger value="calls">
+            <Headphones className="mr-2 h-4 w-4" />
+            Calls ({data.calls.length})
+          </TabsTrigger>
+          <TabsTrigger value="messages">
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Messages ({data.conversations.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="appointments" className="space-y-4">
+          {data.appointments.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-zinc-500">
+                No appointments yet
+              </CardContent>
+            </Card>
+          ) : (
+            data.appointments.map((apt) => (
+              <Card key={apt.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{apt.service_type}</CardTitle>
+                      <CardDescription>
+                        {format(new Date(apt.appointment_datetime), "PPP 'at' p")}
+                      </CardDescription>
+                    </div>
+                    <Badge variant={apt.status === "completed" ? "default" : apt.status === "cancelled" ? "destructive" : "secondary"}>
+                      {apt.status}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-sm">
+                  {apt.provider && <p className="text-zinc-500">Provider: {apt.provider}</p>}
+                  {apt.special_requests && <p className="mt-2 text-zinc-700">{apt.special_requests}</p>}
+                  <p className="text-xs text-zinc-400 mt-2">Booked by {apt.booked_by}</p>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="calls" className="space-y-4">
+          {data.calls.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-zinc-500">
+                No calls yet
+              </CardContent>
+            </Card>
+          ) : (
+            data.calls.map((call) => (
+              <Card key={call.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">Voice Call</CardTitle>
+                      <CardDescription>
+                        {call.started_at ? format(new Date(call.started_at), "PPP 'at' p") : "Unknown"}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {call.outcome && <Badge variant="secondary">{call.outcome}</Badge>}
+                      {call.escalated && <Badge variant="destructive">Escalated</Badge>}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-sm space-y-1">
+                  {call.duration_seconds && (
+                    <p className="text-zinc-500">Duration: {Math.floor(call.duration_seconds / 60)}m {call.duration_seconds % 60}s</p>
+                  )}
+                  {call.satisfaction_score !== undefined && call.satisfaction_score !== null && (
+                    <p className="text-zinc-500">Satisfaction: {call.satisfaction_score}/10</p>
+                  )}
+                  {call.sentiment && (
+                    <p className="text-zinc-500">Sentiment: {call.sentiment}</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="messages" className="space-y-4">
+          {data.conversations.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-zinc-500">
+                No messages yet
+              </CardContent>
+            </Card>
+          ) : (
+            data.conversations.map((conv) => (
+              <Card key={conv.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg capitalize">{conv.channel} Conversation</CardTitle>
+                      <CardDescription>
+                        {conv.initiated_at ? format(new Date(conv.initiated_at), "PPP 'at' p") : "Unknown"}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {conv.status && <Badge variant="secondary">{conv.status}</Badge>}
+                      {conv.outcome && <Badge>{conv.outcome}</Badge>}
+                    </div>
+                  </div>
+                </CardHeader>
+                {conv.satisfaction_score !== undefined && conv.satisfaction_score !== null && (
+                  <CardContent className="text-sm">
+                    <p className="text-zinc-500">Satisfaction: {conv.satisfaction_score}/10</p>
+                  </CardContent>
+                )}
+              </Card>
+            ))
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
