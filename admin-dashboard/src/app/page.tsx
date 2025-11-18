@@ -5,6 +5,7 @@ import {
   CallLogTable,
   type CallRecord,
 } from "@/components/call-log-table";
+import { LiveStatus } from "@/components/dashboard/live-status";
 
 type MetricsResponse = {
   period: string;
@@ -155,6 +156,9 @@ export default async function Home() {
 
   return (
     <div className="space-y-10">
+      {/* Live Status Indicator */}
+      <LiveStatus />
+
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         {/* Card 1: Appointments Booked */}
         <StatCard

@@ -78,6 +78,49 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/api/admin/live-status")
+async def get_live_status(db: Session = Depends(get_db)):
+    """Get current live call status and active sessions."""
+    # Get active WebSocket connections
+    active_session_ids = list(active_connections.keys())
+
+    # Get recent call sessions (last 10, including active ones)
+    recent_calls = db.query(CallSession).order_by(
+        CallSession.started_at.desc()
+    ).limit(10).all()
+
+    # Get active call sessions (not yet ended)
+    active_calls = db.query(CallSession).filter(
+        CallSession.ended_at.is_(None)
+    ).order_by(CallSession.started_at.desc()).all()
+
+    return {
+        "active_websocket_count": len(active_session_ids),
+        "active_session_ids": active_session_ids,
+        "active_calls": [
+            {
+                "id": call.id,
+                "session_id": call.session_id,
+                "phone_number": call.phone_number,
+                "started_at": call.started_at.isoformat() if call.started_at else None,
+                "customer_id": call.customer_id,
+            }
+            for call in active_calls
+        ],
+        "recent_activity": [
+            {
+                "id": call.id,
+                "session_id": call.session_id,
+                "started_at": call.started_at.isoformat() if call.started_at else None,
+                "ended_at": call.ended_at.isoformat() if call.ended_at else None,
+                "duration_seconds": call.duration_seconds,
+                "outcome": call.outcome,
+            }
+            for call in recent_calls
+        ]
+    }
+
+
 # ==================== Voice WebSocket Endpoint ====================
 
 @app.websocket("/ws/voice/{session_id}")
