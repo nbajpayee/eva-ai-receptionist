@@ -11,6 +11,7 @@ import {
 import { LiveStatus } from "@/components/dashboard/live-status";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
 
 type MetricsResponse = {
@@ -145,6 +146,11 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("today");
 
+  // Call log filters
+  const [outcomeFilter, setOutcomeFilter] = useState<CallRecord["outcome"] | "all">("all");
+  const [channelFilter, setChannelFilter] = useState<CallRecord["channel"] | "all">("all");
+  const [satisfactionFilter, setSatisfactionFilter] = useState<"all" | "high" | "medium" | "low">("all");
+
   useEffect(() => {
     const loadMetrics = async () => {
       try {
@@ -179,8 +185,33 @@ export default function Home() {
     loadCalls();
   }, []);
 
+  // Filter calls based on selected filters
+  const filteredCalls = calls.filter((call) => {
+    // Outcome filter
+    if (outcomeFilter !== "all" && call.outcome !== outcomeFilter) {
+      return false;
+    }
+
+    // Channel filter
+    if (channelFilter !== "all") {
+      const callChannel = call.channel || "voice";
+      if (callChannel !== channelFilter) {
+        return false;
+      }
+    }
+
+    // Satisfaction filter
+    if (satisfactionFilter !== "all" && call.satisfactionScore != null) {
+      if (satisfactionFilter === "high" && call.satisfactionScore < 8) return false;
+      if (satisfactionFilter === "medium" && (call.satisfactionScore < 5 || call.satisfactionScore >= 8)) return false;
+      if (satisfactionFilter === "low" && call.satisfactionScore >= 5) return false;
+    }
+
+    return true;
+  });
+
   const handleExportCalls = () => {
-    const exportData = calls.map((call) => ({
+    const exportData = filteredCalls.map((call) => ({
       ID: call.id,
       "Started At": new Date(call.startedAt).toISOString(),
       "Duration (seconds)": call.durationSeconds || 0,
@@ -291,12 +322,75 @@ export default function Home() {
             <h2 className="text-lg font-semibold text-zinc-900">Recent Communications</h2>
             <p className="text-sm text-zinc-500">Latest customer interactions across all channels.</p>
           </div>
-          <Button variant="outline" size="sm" onClick={handleExportCalls} disabled={calls.length === 0}>
+          <Button variant="outline" size="sm" onClick={handleExportCalls} disabled={filteredCalls.length === 0}>
             <Download className="mr-2 h-4 w-4" />
             Export Calls
           </Button>
         </div>
-        <CallLogTable calls={calls} />
+
+        {/* Call Log Filters */}
+        <div className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+          <span className="text-sm font-medium text-zinc-700">Filter:</span>
+
+          <Select value={outcomeFilter} onValueChange={(value) => setOutcomeFilter(value as CallRecord["outcome"] | "all")}>
+            <SelectTrigger className="w-[140px] bg-white">
+              <SelectValue placeholder="Outcome" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Outcomes</SelectItem>
+              <SelectItem value="booked">Booked</SelectItem>
+              <SelectItem value="info_only">Info Only</SelectItem>
+              <SelectItem value="escalated">Escalated</SelectItem>
+              <SelectItem value="abandoned">Abandoned</SelectItem>
+              <SelectItem value="rescheduled">Rescheduled</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={channelFilter} onValueChange={(value) => setChannelFilter(value as CallRecord["channel"] | "all")}>
+            <SelectTrigger className="w-[130px] bg-white">
+              <SelectValue placeholder="Channel" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Channels</SelectItem>
+              <SelectItem value="voice">Voice</SelectItem>
+              <SelectItem value="sms">SMS</SelectItem>
+              <SelectItem value="mobile_text">Mobile Text</SelectItem>
+              <SelectItem value="email">Email</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={satisfactionFilter} onValueChange={(value) => setSatisfactionFilter(value as "all" | "high" | "medium" | "low")}>
+            <SelectTrigger className="w-[150px] bg-white">
+              <SelectValue placeholder="Satisfaction" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Scores</SelectItem>
+              <SelectItem value="high">High (8-10)</SelectItem>
+              <SelectItem value="medium">Medium (5-7)</SelectItem>
+              <SelectItem value="low">Low (&lt;5)</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {(outcomeFilter !== "all" || channelFilter !== "all" || satisfactionFilter !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setOutcomeFilter("all");
+                setChannelFilter("all");
+                setSatisfactionFilter("all");
+              }}
+            >
+              Clear Filters
+            </Button>
+          )}
+
+          <span className="ml-auto text-sm text-zinc-500">
+            Showing {filteredCalls.length} of {calls.length} calls
+          </span>
+        </div>
+
+        <CallLogTable calls={filteredCalls} />
       </section>
     </div>
   );
