@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Phone, Mail, AlertTriangle, Baby, Download } from "lucide-react";
 import { format } from "date-fns";
 import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
+import { CreateCustomerModal } from "@/components/customers/create-customer-modal";
 
 interface Customer {
   id: number;
@@ -51,28 +52,34 @@ function resolveInternalUrl(path: string): string {
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  const fetchCustomers = async () => {
+    try {
+      const response = await fetch("/api/admin/customers?page=1&page_size=50");
+
+      if (!response.ok) {
+        console.warn("Failed to fetch customers", response.statusText);
+        return;
+      }
+
+      const data = (await response.json()) as CustomersResponse;
+      setCustomers(data.customers || []);
+    } catch (error) {
+      console.error("Error fetching customers", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchCustomers = async () => {
-      try {
-        const response = await fetch("/api/admin/customers?page=1&page_size=50");
-
-        if (!response.ok) {
-          console.warn("Failed to fetch customers", response.statusText);
-          return;
-        }
-
-        const data = (await response.json()) as CustomersResponse;
-        setCustomers(data.customers || []);
-      } catch (error) {
-        console.error("Error fetching customers", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchCustomers();
   }, []);
+
+  const handleCreateSuccess = () => {
+    // Refresh customer list after successful creation
+    fetchCustomers();
+  };
 
   const handleExport = () => {
     const exportData = customers.map((customer) => ({
@@ -106,7 +113,7 @@ export default function CustomersPage() {
             <Download className="mr-2 h-4 w-4" />
             Export CSV
           </Button>
-          <Button>
+          <Button onClick={() => setIsCreateModalOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             New Customer
           </Button>
@@ -203,6 +210,12 @@ export default function CustomersPage() {
           ))}
         </div>
       )}
+
+      <CreateCustomerModal
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+        onSuccess={handleCreateSuccess}
+      />
     </div>
   );
 }
