@@ -196,20 +196,33 @@ def seed_providers():
             print("⚠ Providers already exist, skipping...")
             return
 
-        display_order = 0
         for provider_id, provider_data in PROVIDERS.items():
+            # Map config.py fields to actual Provider model fields
+            # Provider model (main branch) has: name, email, phone, specialties, hire_date, avatar_url, bio, is_active
+            # Config has: name, title, specialties, credentials
+            # We'll store title and credentials in the bio field for now
+
+            bio_parts = []
+            if provider_data.get("title"):
+                bio_parts.append(provider_data["title"])
+            if provider_data.get("credentials"):
+                bio_parts.append(provider_data["credentials"])
+
+            # Generate email from name (temporary solution until real emails are provided)
+            email = provider_data["name"].lower().replace(" ", ".").replace("dr.", "").replace("nurse", "").replace("esthetician", "") + "@luxurymedspa.com"
+
             provider = Provider(
                 name=provider_data["name"],
-                title=provider_data["title"],
+                email=email,
+                phone=None,  # Not in config
                 specialties=provider_data["specialties"],
-                credentials=provider_data.get("credentials", ""),
-                bio="",  # Not in current config
+                bio=" | ".join(bio_parts) if bio_parts else "",
                 is_active=True,
-                display_order=display_order
+                hire_date=None,
+                avatar_url=None
             )
 
             db.add(provider)
-            display_order += 1
 
         db.commit()
         print(f"✓ Created {len(PROVIDERS)} providers")
