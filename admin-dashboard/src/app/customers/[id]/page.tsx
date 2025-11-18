@@ -5,6 +5,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Phone, Mail, Calendar, MessageSquare, Video, Smile } from "lucide-react";
 import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Customer = {
   id: number;
@@ -106,21 +110,19 @@ export default function CustomerDetailPage() {
   const getOutcomeBadge = (outcome: string | null) => {
     if (!outcome) return null;
 
-    const badges: Record<string, { bg: string; text: string }> = {
-      appointment_scheduled: { bg: "bg-green-100", text: "text-green-700" },
-      info_request: { bg: "bg-blue-100", text: "text-blue-700" },
-      complaint: { bg: "bg-red-100", text: "text-red-700" },
-      unresolved: { bg: "bg-zinc-100", text: "text-zinc-700" },
+    const badgeStyles: Record<string, string> = {
+      appointment_scheduled: "bg-green-100 text-green-700 border-green-200",
+      info_request: "bg-blue-100 text-blue-700 border-blue-200",
+      complaint: "bg-red-100 text-red-700 border-red-200",
+      unresolved: "bg-zinc-100 text-zinc-700 border-zinc-200",
     };
 
-    const badge = badges[outcome] || { bg: "bg-zinc-100", text: "text-zinc-700" };
+    const style = badgeStyles[outcome] || "bg-zinc-100 text-zinc-700 border-zinc-200";
 
     return (
-      <span
-        className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${badge.bg} ${badge.text}`}
-      >
+      <Badge variant="outline" className={style}>
         {outcome.replace("_", " ")}
-      </span>
+      </Badge>
     );
   };
 
@@ -128,8 +130,8 @@ export default function CustomerDetailPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-zinc-200 border-t-zinc-900"></div>
-          <p className="text-sm text-zinc-500">Loading customer details...</p>
+          <Skeleton className="h-10 w-10 rounded-full" />
+          <Skeleton className="h-4 w-48" />
         </div>
       </div>
     );
@@ -141,13 +143,12 @@ export default function CustomerDetailPage() {
         <div className="text-center">
           <p className="text-sm font-medium text-red-600">Error loading customer</p>
           <p className="mt-1 text-xs text-zinc-500">{error || "Customer not found"}</p>
-          <Link
-            href="/"
-            className="mt-4 inline-flex items-center gap-2 text-sm text-zinc-600 hover:text-zinc-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </Link>
+          <Button variant="ghost" size="sm" className="mt-4" asChild>
+            <Link href="/">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Dashboard
+            </Link>
+          </Button>
         </div>
       </div>
     );
@@ -157,18 +158,18 @@ export default function CustomerDetailPage() {
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link
-          href="/"
-          className="flex items-center gap-2 text-sm text-zinc-600 hover:text-zinc-900 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Dashboard
-        </Link>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Link>
+        </Button>
       </div>
 
       {/* Customer Profile Card */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-        <div className="flex items-start justify-between">
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-zinc-900">{data.customer.name}</h1>
             <div className="mt-3 flex flex-col gap-2 text-sm text-zinc-600">
@@ -218,35 +219,35 @@ export default function CustomerDetailPage() {
           <span className="text-sm font-medium text-zinc-700">Channels:</span>
           <div className="flex gap-2">
             {data.stats.channels_used.map((channel) => (
-              <div
+              <Badge
                 key={channel}
-                className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium ${getChannelColor(
-                  channel
-                )}`}
+                variant="outline"
+                className={`flex items-center gap-1.5 ${getChannelColor(channel)}`}
               >
                 {getChannelIcon(channel)}
                 {channel.charAt(0).toUpperCase() + channel.slice(1)}
-              </div>
+              </Badge>
             ))}
           </div>
         </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Timeline */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-zinc-900">Conversation History</h2>
 
         {data.timeline.length === 0 ? (
-          <div className="rounded-lg border border-zinc-200 bg-white p-8 text-center">
-            <p className="text-sm text-zinc-500">No conversation history yet</p>
-          </div>
+          <Card>
+            <CardContent className="p-8 text-center">
+              <p className="text-sm text-zinc-500">No conversation history yet</p>
+            </CardContent>
+          </Card>
         ) : (
           <div className="space-y-4">
             {data.timeline.map((event, index) => (
-              <div
-                key={event.id}
-                className="relative rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
-              >
+              <Card key={event.id} className="relative transition-shadow hover:shadow-md">
+                <CardContent className="p-5">
                 {/* Timeline connector line */}
                 {index < data.timeline.length - 1 && (
                   <div className="absolute left-7 top-14 h-[calc(100%+1rem)] w-0.5 bg-zinc-200"></div>
@@ -308,7 +309,8 @@ export default function CustomerDetailPage() {
                     </div>
                   </div>
                 </div>
-              </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}

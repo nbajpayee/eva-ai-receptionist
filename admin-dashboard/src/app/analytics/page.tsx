@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { ChartCard, FunnelChart, Heatmap, BarChartComponent } from "@/components/charts";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type FunnelStage = {
   name: string;
@@ -90,13 +92,12 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-sm text-zinc-600 hover:text-zinc-900 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </Link>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Dashboard
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -107,21 +108,17 @@ export default function AnalyticsPage() {
             Deep insights into conversion funnel and peak traffic patterns
           </p>
         </div>
-        <div className="flex gap-2">
-          {(["today", "week", "month"] as PeriodType[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                period === p
-                  ? "bg-zinc-900 text-white"
-                  : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-              }`}
-            >
-              {p.charAt(0).toUpperCase() + p.slice(1)}
-            </button>
-          ))}
-        </div>
+        <ToggleGroup
+          type="single"
+          value={period}
+          onValueChange={(value) => {
+            if (value) setPeriod(value as PeriodType);
+          }}
+        >
+          <ToggleGroupItem value="today">Today</ToggleGroupItem>
+          <ToggleGroupItem value="week">Week</ToggleGroupItem>
+          <ToggleGroupItem value="month">Month</ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {/* Conversion Funnel */}

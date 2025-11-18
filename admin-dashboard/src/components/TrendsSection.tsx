@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { ChartCard, TimeSeriesChart } from "./charts";
 import { format, formatDistanceToNow } from "date-fns";
 import { usePolling } from "@/hooks/usePolling";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type TimeSeriesData = {
   timestamp: string;
@@ -87,21 +88,17 @@ export function TrendsSection() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
-          {(["today", "week", "month"] as PeriodType[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                period === p
-                  ? "bg-zinc-900 text-white"
-                  : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-              }`}
-            >
-              {p.charAt(0).toUpperCase() + p.slice(1)}
-            </button>
-          ))}
-        </div>
+        <ToggleGroup
+          type="single"
+          value={period}
+          onValueChange={(value) => {
+            if (value) setPeriod(value as PeriodType);
+          }}
+        >
+          <ToggleGroupItem value="today">Today</ToggleGroupItem>
+          <ToggleGroupItem value="week">Week</ToggleGroupItem>
+          <ToggleGroupItem value="month">Month</ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
