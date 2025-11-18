@@ -6,7 +6,6 @@ Run with: locust --headless --users 50 --spawn-rate 10 --run-time 5m
 
 from __future__ import annotations
 
-import json
 import random
 
 from locust import HttpUser, between, events, task

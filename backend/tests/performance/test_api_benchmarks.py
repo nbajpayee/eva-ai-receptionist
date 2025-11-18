@@ -6,7 +6,6 @@ Run with: pytest -m performance --benchmark-only
 
 from __future__ import annotations
 
-from datetime import datetime
 from unittest.mock import patch
 
 import pytest
@@ -136,7 +135,7 @@ class TestAPIBenchmarks:
 
         # Add messages
         for i in range(50):
-            msg = AnalyticsService.add_message(
+            _ = AnalyticsService.add_message(
                 db=db_session,
                 conversation_id=voice_conversation.id,
                 direction="inbound" if i % 2 == 0 else "outbound",

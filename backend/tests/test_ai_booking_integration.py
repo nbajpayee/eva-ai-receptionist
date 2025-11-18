@@ -7,7 +7,6 @@ including tool calling behavior, retry logic, and error handling.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
@@ -46,7 +45,7 @@ def customer(db_session):
     try:
         db_session.query(Customer).filter(Customer.id == cust.id).delete()
         db_session.commit()
-    except:
+    except Exception:
         db_session.rollback()
 
 
@@ -72,7 +71,7 @@ def conversation(db_session, customer):
         ).delete()
         db_session.query(Conversation).filter(Conversation.id == conv.id).delete()
         db_session.commit()
-    except:
+    except Exception:
         db_session.rollback()
 
 

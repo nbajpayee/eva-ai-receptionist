@@ -53,7 +53,7 @@ class TestVoiceBookingFlow:
         4. System auto-books when details complete
         """
         # Step 1: User requests booking
-        user_message = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -159,7 +159,7 @@ class TestVoiceBookingFlow:
         )
 
         # User requests booking
-        user_message = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=conversation.id,
             direction="inbound",
@@ -204,7 +204,7 @@ class TestVoiceBookingFlow:
     ):
         """Test booking flow when customer asks about multiple services."""
         # User asks about services
-        user_message = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -226,7 +226,7 @@ class TestVoiceBookingFlow:
         assert not mock_check_avail.called
 
         # User now requests specific service
-        user_message2 = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -262,7 +262,7 @@ class TestVoiceBookingFlow:
         voice_conversation,
     ):
         """Test booking flow when customer requests specific provider."""
-        user_message = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -306,7 +306,7 @@ class TestVoiceBookingFlow:
         voice_conversation,
     ):
         """Test booking flow with special requests."""
-        user_message = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -351,7 +351,7 @@ class TestVoiceBookingFlow:
         voice_conversation,
     ):
         """Test booking flow when customer wants multiple services."""
-        user_message = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -396,7 +396,7 @@ class TestVoiceBookingFlow:
         voice_conversation,
     ):
         """Test booking flow when customer requests earliest available."""
-        user_message = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -430,7 +430,7 @@ class TestVoiceBookingFlow:
         voice_conversation,
     ):
         """Test booking flow when customer specifies exact date and time."""
-        user_message = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -477,7 +477,7 @@ class TestVoiceBookingFlow:
         customer.notes = "Allergic to lidocaine"
         db_session.commit()
 
-        user_message = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -514,7 +514,7 @@ class TestVoiceBookingFlow:
     ):
         """Test booking flow recovery after interruption."""
         # Start booking
-        user_message1 = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -536,7 +536,7 @@ class TestVoiceBookingFlow:
         )
 
         # Simulate interruption and recovery
-        user_message2 = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -577,7 +577,7 @@ class TestVoiceBookingFlow:
         availability = build_availability_response("2025-11-28", num_slots=3)
         mock_check_avail.return_value = availability
 
-        user_message = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",
@@ -618,7 +618,7 @@ class TestVoiceBookingFlow:
         voice_conversation,
     ):
         """Test booking request outside business hours."""
-        user_message = AnalyticsService.add_message(
+        _ = AnalyticsService.add_message(
             db=db_session,
             conversation_id=voice_conversation.id,
             direction="inbound",

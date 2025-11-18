@@ -29,9 +29,10 @@ else:
     load_dotenv()
 
 from config import get_settings  # noqa: E402
-from database import (Appointment, CallEvent, CallSession,  # noqa: E402
-                      CommunicationEvent, CommunicationMessage, Conversation,
-                      Customer, DailyMetric, SessionLocal, VoiceCallDetails)
+from database import CallSession  # noqa: E402
+from database import (Appointment, CallEvent, CommunicationEvent,
+                      CommunicationMessage, Conversation, Customer,
+                      DailyMetric, SessionLocal, VoiceCallDetails)
 
 
 def clear_existing_data() -> None:

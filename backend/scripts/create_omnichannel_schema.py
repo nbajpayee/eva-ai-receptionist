@@ -32,8 +32,8 @@ else:
     load_dotenv()
 
 from config import get_settings  # noqa: E402
-from database import (Base, CommunicationEvent,  # noqa: E402
-                      CommunicationMessage, Conversation, EmailDetails,
+from database import CommunicationEvent  # noqa: E402
+from database import (Base, CommunicationMessage, Conversation, EmailDetails,
                       SMSDetails, VoiceCallDetails, engine)
 
 

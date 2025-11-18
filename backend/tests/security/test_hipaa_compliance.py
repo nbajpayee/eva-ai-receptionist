@@ -24,7 +24,7 @@ class TestHIPAACompliance:
 
     def test_phi_fields_identified(self, db_session):
         """Test all PHI fields are properly identified."""
-        phi_fields = {
+        _ = {
             "Customer": ["name", "phone", "email", "notes"],
             "Appointment": ["special_requests"],
             "Conversation": ["custom_metadata"],
