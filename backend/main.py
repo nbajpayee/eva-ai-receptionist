@@ -624,9 +624,28 @@ async def get_customers_list(
     db: Session = Depends(get_db)
 ):
     """Get customers list with search and pagination."""
-    query = db.query(Customer)
+    from sqlalchemy import case
 
-    # Apply search filter
+    # Build subquery for conversation counts (optimized - single query instead of N queries)
+    conversation_counts = db.query(
+        Conversation.customer_id,
+        func.count(Conversation.id).label('conversation_count'),
+        func.sum(
+            case((Conversation.outcome == 'appointment_scheduled', 1), else_=0)
+        ).label('booking_count')
+    ).group_by(Conversation.customer_id).subquery()
+
+    # Main query with left join to get counts
+    query = db.query(
+        Customer,
+        func.coalesce(conversation_counts.c.conversation_count, 0).label('conversation_count'),
+        func.coalesce(conversation_counts.c.booking_count, 0).label('booking_count')
+    ).outerjoin(
+        conversation_counts,
+        Customer.id == conversation_counts.c.customer_id
+    )
+
+    # Apply search filter - handle potential null values
     if search:
         query = query.filter(
             (Customer.name.ilike(f"%{search}%")) |
@@ -639,33 +658,22 @@ async def get_customers_list(
 
     # Apply pagination
     offset = (page - 1) * page_size
-    customers = query.order_by(Customer.created_at.desc())\
+    results = query.order_by(Customer.created_at.desc())\
         .offset(offset)\
         .limit(page_size)\
         .all()
 
-    # Get conversation counts for each customer
+    # Serialize results
     serialized = []
-    for customer in customers:
-        conversation_count = db.query(func.count(Conversation.id))\
-            .filter(Conversation.customer_id == customer.id)\
-            .scalar() or 0
-
-        booking_count = db.query(func.count(Conversation.id))\
-            .filter(
-                Conversation.customer_id == customer.id,
-                Conversation.outcome == 'appointment_scheduled'
-            )\
-            .scalar() or 0
-
+    for customer, conversation_count, booking_count in results:
         serialized.append({
             "id": customer.id,
-            "name": customer.name,
-            "phone": customer.phone,
+            "name": customer.name or "",
+            "phone": customer.phone or "",
             "email": customer.email,
             "created_at": customer.created_at.isoformat() if customer.created_at else None,
-            "conversation_count": conversation_count,
-            "booking_count": booking_count,
+            "conversation_count": int(conversation_count),
+            "booking_count": int(booking_count),
         })
 
     return {

@@ -112,7 +112,12 @@ export function BarChartComponent({
             name={bar.name}
             fill={bar.color}
             radius={[4, 4, 0, 0]}
-          />
+          >
+            {/* Use individual colors from data if available */}
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.color || bar.color} />
+            ))}
+          </Bar>
         ))}
       </BarChart>
     </ResponsiveContainer>
