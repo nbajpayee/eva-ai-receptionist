@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import FadeInUp from "@/components/animations/FadeInUp";
-import { Mail, Phone, MapPin, Clock } from "lucide-react";
+import ContactForm from "@/components/sections/ContactForm";
+import { Mail, Phone, Clock } from "lucide-react";
 import { SITE_CONFIG } from "@/lib/constants";
 
 export const metadata: Metadata = {
@@ -86,119 +87,7 @@ export default function ContactPage() {
 
             {/* Right Column - Contact Form */}
             <FadeInUp delay={0.2}>
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-8" id="demo-form">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  Schedule a Demo
-                </h2>
-
-                <form className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
-                        First Name *
-                      </label>
-                      <input
-                        type="text"
-                        id="firstName"
-                        name="firstName"
-                        required
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
-                        Last Name *
-                      </label>
-                      <input
-                        type="text"
-                        id="lastName"
-                        name="lastName"
-                        required
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                      Email *
-                    </label>
-                    <input
-                      type="email"
-                      id="email"
-                      name="email"
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                      Phone *
-                    </label>
-                    <input
-                      type="tel"
-                      id="phone"
-                      name="phone"
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="practiceName" className="block text-sm font-medium text-gray-700 mb-2">
-                      Practice Name *
-                    </label>
-                    <input
-                      type="text"
-                      id="practiceName"
-                      name="practiceName"
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="locations" className="block text-sm font-medium text-gray-700 mb-2">
-                      Number of Locations
-                    </label>
-                    <select
-                      id="locations"
-                      name="locations"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    >
-                      <option value="1">1</option>
-                      <option value="2-3">2-3</option>
-                      <option value="4-10">4-10</option>
-                      <option value="10+">10+</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-2">
-                      Message (Optional)
-                    </label>
-                    <textarea
-                      id="message"
-                      name="message"
-                      rows={4}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Tell us about your practice and what you're looking for..."
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full btn-primary py-4 text-base"
-                  >
-                    Schedule Demo
-                  </button>
-
-                  <p className="text-xs text-gray-600 text-center">
-                    By submitting this form, you agree to our Privacy Policy and Terms of Service.
-                  </p>
-                </form>
-              </div>
+              <ContactForm />
             </FadeInUp>
           </div>
         </div>

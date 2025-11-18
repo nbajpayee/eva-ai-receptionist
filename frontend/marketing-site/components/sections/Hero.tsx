@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Play } from "lucide-react";
 import { motion } from "framer-motion";
 import Balancer from "react-wrap-balancer";
+import AnimatedStat from "@/components/ui/AnimatedStat";
 import { STATS } from "@/lib/constants";
 
 export default function Hero() {
@@ -136,12 +137,11 @@ export default function Hero() {
             transition={{ duration: 0.5, delay: 0.7 }}
           >
             {STATS.map((stat, index) => (
-              <div key={index} className="text-center">
-                <div className="text-3xl md:text-4xl font-bold text-primary-600 mb-2">
-                  {stat.value}
-                </div>
-                <div className="text-sm text-gray-600">{stat.label}</div>
-              </div>
+              <AnimatedStat
+                key={index}
+                value={stat.value}
+                label={stat.label}
+              />
             ))}
           </motion.div>
         </div>
