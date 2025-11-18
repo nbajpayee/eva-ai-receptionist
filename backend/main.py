@@ -460,10 +460,27 @@ async def update_customer(
     notes: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Update customer information."""
+    """Update customer information with audit logging."""
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+
+    # Track changes for audit log
+    changes = {}
+    if name is not None and name != customer.name:
+        changes['name'] = {'old': customer.name, 'new': name}
+    if phone is not None and phone != customer.phone:
+        changes['phone'] = {'old': customer.phone, 'new': phone}
+    if email is not None and email != customer.email:
+        changes['email'] = {'old': customer.email, 'new': email}
+    if is_new_client is not None and is_new_client != customer.is_new_client:
+        changes['is_new_client'] = {'old': customer.is_new_client, 'new': is_new_client}
+    if has_allergies is not None and has_allergies != customer.has_allergies:
+        changes['has_allergies'] = {'old': customer.has_allergies, 'new': has_allergies}
+    if is_pregnant is not None and is_pregnant != customer.is_pregnant:
+        changes['is_pregnant'] = {'old': customer.is_pregnant, 'new': is_pregnant}
+    if notes is not None and notes != customer.notes:
+        changes['notes'] = {'old': customer.notes, 'new': notes}
 
     # Check if phone is being changed and if it's already in use
     if phone and phone != customer.phone:
@@ -503,6 +520,14 @@ async def update_customer(
 
     db.commit()
     db.refresh(customer)
+
+    # Log changes for audit trail
+    if changes:
+        logger.info(
+            f"Customer profile updated - ID: {customer_id}, "
+            f"Changes: {', '.join(changes.keys())}, "
+            f"Details: {changes}"
+        )
 
     return {
         "customer": {
@@ -616,11 +641,15 @@ async def create_appointment(
 # ==================== Export Endpoints ====================
 
 @app.get("/api/admin/customers/export/csv")
-async def export_customers_csv(db: Session = Depends(get_db)):
-    """Export customers to CSV format."""
+async def export_customers_csv(request: Request, db: Session = Depends(get_db)):
+    """Export customers to CSV format with rate limiting."""
     import csv
     from io import StringIO
     from fastapi.responses import StreamingResponse
+    from rate_limiter import rate_limiter
+
+    # Rate limit: 3 exports per minute per IP to prevent abuse
+    rate_limiter.check_rate_limit(request, max_requests=3, window_seconds=60)
 
     # Fetch all customers with their stats
     customers = db.query(
