@@ -591,6 +591,11 @@ class ResearchCampaign(Base):
         CheckConstraint("campaign_type IN ('research', 'outbound_sales')", name='check_campaign_type'),
         CheckConstraint("channel IN ('sms', 'email', 'voice', 'multi')", name='check_campaign_channel'),
         CheckConstraint("status IN ('draft', 'active', 'paused', 'completed')", name='check_campaign_status'),
+        CheckConstraint("total_contacted <= total_targeted", name='check_contacted_not_exceed_targeted'),
+        CheckConstraint("total_responded <= total_contacted", name='check_responded_not_exceed_contacted'),
+        CheckConstraint("total_targeted >= 0", name='check_targeted_non_negative'),
+        CheckConstraint("total_contacted >= 0", name='check_contacted_non_negative'),
+        CheckConstraint("total_responded >= 0", name='check_responded_non_negative'),
     )
 
 
