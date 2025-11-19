@@ -4,16 +4,21 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from config import PROVIDERS, SERVICES
+from sqlalchemy.orm import Session
+
+from settings_service import SettingsService
 
 
-def get_booking_tools() -> List[Dict[str, Any]]:
+def get_booking_tools(db: Session) -> List[Dict[str, Any]]:
     """Return the list of tool definitions available to conversational agents.
 
     Format matches OpenAI Chat Completions API requirements (nested 'function' object).
     """
-    service_keys = list(SERVICES.keys())
-    provider_keys = list(PROVIDERS.keys())
+    services = SettingsService.get_services_dict(db)
+    providers = SettingsService.get_providers_dict(db)
+
+    service_keys = list(services.keys())
+    provider_keys = [p.get("id") or p.get("name") for p in providers]
 
     return [
         {

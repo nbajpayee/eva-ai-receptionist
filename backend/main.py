@@ -5,8 +5,8 @@ Main FastAPI application for Med Spa Voice AI.
 import asyncio
 import logging
 import uuid
-from datetime import datetime
-from typing import Dict, List, Optional
+from datetime import datetime, time, timedelta
+from typing import Any, Dict, List, Optional
 
 from fastapi import (
     Depends,
@@ -24,11 +24,31 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from starlette.websockets import WebSocketState
 
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
+
 from analytics import AnalyticsService
 from api_messaging import messaging_router
 from calendar_service import check_calendar_credentials
 from config import get_settings
-from database import Appointment, CallSession, Conversation, Customer, get_db, init_db
+from database import (
+    Appointment,
+    BusinessHours,
+    CallSession,
+    Conversation,
+    Customer,
+    Location,
+    MedSpaSettings,
+    Provider,
+    Service,
+    AIInsight,
+    InPersonConsultation,
+    get_db,
+    init_db,
+)
+from provider_analytics_service import ProviderAnalyticsService
+from ai_insights_service import AIInsightsService
+from consultation_service import ConsultationService
+from settings_service import SettingsService
 from realtime_client import RealtimeClient
 
 settings = get_settings()
@@ -43,6 +63,743 @@ app = FastAPI(
 
 # Register routers
 app.include_router(messaging_router)
+
+
+class MedSpaSettingsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    phone: str
+    email: EmailStr
+    website: Optional[str] = None
+    timezone: str
+    ai_assistant_name: str
+    cancellation_policy: Optional[str] = None
+
+
+class MedSpaSettingsUpdateRequest(BaseModel):
+    name: str
+    phone: str
+    email: EmailStr
+    website: Optional[str] = None
+    timezone: str
+    ai_assistant_name: str
+    cancellation_policy: Optional[str] = None
+
+
+class ServiceResponse(BaseModel):
+    id: int
+    name: str
+    slug: str
+    description: str
+    duration_minutes: int
+    price_min: Optional[float] = None
+    price_max: Optional[float] = None
+    price_display: Optional[str] = None
+    prep_instructions: Optional[str] = None
+    aftercare_instructions: Optional[str] = None
+    category: Optional[str] = None
+    is_active: bool
+    display_order: int
+
+
+class ServiceCreateRequest(BaseModel):
+    name: str
+    description: str
+    duration_minutes: int
+    slug: Optional[str] = None
+    price_min: Optional[float] = None
+    price_max: Optional[float] = None
+    price_display: Optional[str] = None
+    prep_instructions: Optional[str] = None
+    aftercare_instructions: Optional[str] = None
+    category: Optional[str] = None
+    is_active: Optional[bool] = True
+    display_order: Optional[int] = None
+
+
+class ServiceUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    slug: Optional[str] = None
+    price_min: Optional[float] = None
+    price_max: Optional[float] = None
+    price_display: Optional[str] = None
+    prep_instructions: Optional[str] = None
+    aftercare_instructions: Optional[str] = None
+    category: Optional[str] = None
+    is_active: Optional[bool] = None
+    display_order: Optional[int] = None
+
+
+class ProviderResponse(BaseModel):
+    id: str
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    specialties: List[str] = []
+    bio: Optional[str] = None
+    is_active: bool
+    hire_date: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
+class ProviderCreateRequest(BaseModel):
+    name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    specialties: Optional[List[str]] = None
+    bio: Optional[str] = None
+    is_active: Optional[bool] = True
+    hire_date: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
+class ProviderUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    specialties: Optional[List[str]] = None
+    bio: Optional[str] = None
+    is_active: Optional[bool] = None
+    hire_date: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
+class BusinessHourEntry(BaseModel):
+    day_of_week: int = Field(ge=0, le=6)
+    open_time: Optional[str] = None
+    close_time: Optional[str] = None
+    is_closed: Optional[bool] = False
+
+
+class ProviderSummary(BaseModel):
+    provider_id: str
+    name: str
+    email: Optional[str] = None
+    avatar_url: Optional[str] = None
+    specialties: List[str] = []
+    total_consultations: int
+    successful_bookings: int
+    conversion_rate: float
+    total_revenue: float
+    avg_satisfaction_score: Optional[float] = None
+
+
+class ProvidersSummaryResponse(BaseModel):
+    providers: List[ProviderSummary]
+    period_days: int
+
+
+class ProviderDetailResponse(BaseModel):
+    id: str
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    specialties: List[str] = []
+    hire_date: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    is_active: bool
+
+
+class ProviderMetricsSummary(BaseModel):
+    provider_id: str
+    name: str
+    total_consultations: int
+    successful_bookings: int
+    conversion_rate: float
+    total_revenue: float
+    avg_satisfaction_score: Optional[float] = None
+
+
+class TrendPoint(BaseModel):
+    date: str
+    value: Optional[float] = None
+
+
+class ProviderMetricsTrends(BaseModel):
+    conversion_rate: List[TrendPoint]
+    revenue: List[TrendPoint]
+
+
+class ServicePerformanceEntry(BaseModel):
+    service_type: str
+    total_consultations: int
+    successful_bookings: int
+    conversion_rate: float
+
+
+class ProviderMetricsResponse(BaseModel):
+    summary: ProviderMetricsSummary
+    trends: ProviderMetricsTrends
+    outcomes: Dict[str, int]
+    service_performance: List[ServicePerformanceEntry]
+    period_days: int
+
+
+class ProviderInsightModel(BaseModel):
+    id: str
+    type: str
+    title: str
+    insight_text: str
+    supporting_quote: Optional[str] = None
+    recommendation: Optional[str] = None
+    confidence_score: Optional[float] = None
+    is_positive: bool
+    is_reviewed: bool
+    created_at: Optional[str] = None
+
+
+class ProviderInsightsResponse(BaseModel):
+    insights: List[ProviderInsightModel]
+
+
+class ConsultationEntry(BaseModel):
+    id: str
+    customer_id: Optional[int] = None
+    service_type: Optional[str] = None
+    outcome: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    satisfaction_score: Optional[float] = None
+    sentiment: Optional[str] = None
+    ai_summary: Optional[str] = None
+    created_at: Optional[str] = None
+    ended_at: Optional[str] = None
+
+
+class ProviderConsultationsResponse(BaseModel):
+    consultations: List[ConsultationEntry]
+
+
+class LocationResponse(BaseModel):
+    id: int
+    name: str
+    address: str
+    phone: Optional[str] = None
+    is_primary: bool
+    is_active: bool
+    business_hours: List[BusinessHourEntry] = []
+
+
+class LocationCreateRequest(BaseModel):
+    name: str
+    address: str
+    phone: Optional[str] = None
+    is_primary: Optional[bool] = False
+    is_active: Optional[bool] = True
+    business_hours: Optional[List[BusinessHourEntry]] = None
+
+
+class LocationUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    is_primary: Optional[bool] = None
+    is_active: Optional[bool] = None
+    business_hours: Optional[List[BusinessHourEntry]] = None
+
+
+def _serialize_service(service: Service) -> Dict[str, Any]:
+    return {
+        "id": service.id,
+        "name": service.name,
+        "slug": service.slug,
+        "description": service.description,
+        "duration_minutes": service.duration_minutes,
+        "price_min": float(service.price_min) if service.price_min is not None else None,
+        "price_max": float(service.price_max) if service.price_max is not None else None,
+        "price_display": service.price_display,
+        "prep_instructions": service.prep_instructions,
+        "aftercare_instructions": service.aftercare_instructions,
+        "category": service.category,
+        "is_active": service.is_active,
+        "display_order": service.display_order,
+    }
+
+
+def _serialize_provider(provider: Provider) -> Dict[str, Any]:
+    hire_date = provider.hire_date.isoformat() if provider.hire_date else None
+    specialties = provider.specialties or []
+    return {
+        "id": str(provider.id),
+        "name": provider.name,
+        "email": provider.email,
+        "phone": provider.phone,
+        "specialties": specialties,
+        "bio": provider.bio,
+        "is_active": provider.is_active,
+        "hire_date": hire_date,
+        "avatar_url": provider.avatar_url,
+    }
+
+
+def _parse_hire_date(value: Optional[str]) -> Optional[datetime]:
+    if value is None or value == "":
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=400, detail="Invalid hire_date format. Use ISO 8601 date string."
+        ) from exc
+
+
+def _parse_time(value: Optional[str]) -> Optional[time]:
+    if value in (None, ""):
+        return None
+    try:
+        return time.fromisoformat(value)
+    except ValueError as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid time format. Use HH:MM or HH:MM:SS",
+        ) from exc
+
+
+def _serialize_business_hours(hours: List[BusinessHours]) -> List[Dict[str, Any]]:
+    serialized: List[Dict[str, Any]] = []
+    for entry in hours:
+        serialized.append(
+            {
+                "day_of_week": entry.day_of_week,
+                "open_time": entry.open_time.strftime("%H:%M") if entry.open_time else None,
+                "close_time": entry.close_time.strftime("%H:%M") if entry.close_time else None,
+                "is_closed": entry.is_closed,
+            }
+        )
+    return serialized
+
+
+def _serialize_location(location: Location, hours: List[BusinessHours]) -> Dict[str, Any]:
+    return {
+        "id": location.id,
+        "name": location.name,
+        "address": location.address,
+        "phone": location.phone,
+        "is_primary": location.is_primary,
+        "is_active": location.is_active,
+        "business_hours": _serialize_business_hours(hours),
+    }
+
+
+def _write_business_hours(db: Session, location_id: int, entries: List[BusinessHourEntry]) -> None:
+    normalized: List[Dict[str, Any]] = []
+    for entry in entries:
+        if entry.is_closed:
+            normalized.append(
+                {
+                    "day_of_week": entry.day_of_week,
+                    "open_time": None,
+                    "close_time": None,
+                    "is_closed": True,
+                }
+            )
+        else:
+            open_time = _parse_time(entry.open_time)
+            close_time = _parse_time(entry.close_time)
+            if open_time is None or close_time is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="open_time and close_time are required unless is_closed is true",
+                )
+            normalized.append(
+                {
+                    "day_of_week": entry.day_of_week,
+                    "open_time": open_time,
+                    "close_time": close_time,
+                    "is_closed": False,
+                }
+            )
+
+    SettingsService.update_business_hours(db, location_id, normalized)
+
+
+def _serialize_provider(provider: Provider) -> Dict[str, Any]:
+    hire_date = provider.hire_date.isoformat() if provider.hire_date else None
+    return {
+        "id": str(provider.id),
+        "name": provider.name,
+        "email": provider.email,
+        "phone": provider.phone,
+        "specialties": provider.specialties or [],
+        "hire_date": hire_date,
+        "bio": provider.bio,
+        "avatar_url": provider.avatar_url,
+        "is_active": provider.is_active,
+    }
+
+
+def _serialize_consultation(consultation: InPersonConsultation) -> Dict[str, Any]:
+    return {
+        "id": str(consultation.id),
+        "customer_id": consultation.customer_id,
+        "service_type": consultation.service_type,
+        "outcome": consultation.outcome,
+        "duration_seconds": consultation.duration_seconds,
+        "satisfaction_score": consultation.satisfaction_score,
+        "sentiment": consultation.sentiment,
+        "ai_summary": consultation.ai_summary,
+        "created_at": consultation.created_at.isoformat() if consultation.created_at else None,
+        "ended_at": consultation.ended_at.isoformat() if consultation.ended_at else None,
+    }
+
+
+def _serialize_insight(insight: AIInsight) -> Dict[str, Any]:
+    return {
+        "id": str(insight.id),
+        "type": insight.insight_type,
+        "title": insight.title,
+        "insight_text": insight.insight_text,
+        "supporting_quote": insight.supporting_quote,
+        "recommendation": insight.recommendation,
+        "confidence_score": insight.confidence_score,
+        "is_positive": insight.is_positive,
+        "is_reviewed": insight.is_reviewed,
+        "created_at": insight.created_at.isoformat() if insight.created_at else None,
+    }
+
+
+def _ensure_med_spa_settings(db: Session) -> MedSpaSettings:
+    existing = SettingsService.get_settings(db)
+    if existing:
+        return existing
+
+    defaults = {
+        "name": settings.MED_SPA_NAME,
+        "phone": settings.MED_SPA_PHONE,
+        "email": settings.MED_SPA_EMAIL,
+        "website": settings.MED_SPA_URL if hasattr(settings, "MED_SPA_URL") else None,
+        "timezone": getattr(settings, "MED_SPA_TIMEZONE", "America/New_York"),
+        "ai_assistant_name": settings.AI_ASSISTANT_NAME,
+        "cancellation_policy": None,
+    }
+
+    return SettingsService.update_settings(db, defaults)
+
+
+@app.get("/api/admin/settings", response_model=MedSpaSettingsResponse)
+def get_admin_settings(db: Session = Depends(get_db)):
+    settings_row = _ensure_med_spa_settings(db)
+    return MedSpaSettingsResponse.from_orm(settings_row)
+
+
+@app.put("/api/admin/settings", response_model=MedSpaSettingsResponse)
+def update_admin_settings(
+    payload: MedSpaSettingsUpdateRequest, db: Session = Depends(get_db)
+):
+    updated = SettingsService.update_settings(db, payload.dict())
+    return MedSpaSettingsResponse.from_orm(updated)
+
+
+@app.get("/api/admin/services", response_model=List[ServiceResponse])
+def list_services(
+    active_only: bool = Query(False),
+    category: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    services = SettingsService.get_all_services(
+        db, active_only=active_only, category=category
+    )
+    return [_serialize_service(service) for service in services]
+
+
+@app.get("/api/admin/services/{service_id}", response_model=ServiceResponse)
+def get_service(service_id: int, db: Session = Depends(get_db)):
+    service = SettingsService.get_service(db, service_id)
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+    return _serialize_service(service)
+
+
+@app.post("/api/admin/services", response_model=ServiceResponse, status_code=201)
+def create_service(payload: ServiceCreateRequest, db: Session = Depends(get_db)):
+    service_data = payload.dict(exclude_unset=True)
+    service = SettingsService.create_service(db, service_data)
+    return _serialize_service(service)
+
+
+@app.put("/api/admin/services/{service_id}", response_model=ServiceResponse)
+def update_service(
+    service_id: int, payload: ServiceUpdateRequest, db: Session = Depends(get_db)
+):
+    service_data = payload.dict(exclude_unset=True)
+    if not service_data:
+        service = SettingsService.get_service(db, service_id)
+        if not service:
+            raise HTTPException(status_code=404, detail="Service not found")
+        return _serialize_service(service)
+
+    service = SettingsService.update_service(db, service_id, service_data)
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+    return _serialize_service(service)
+
+
+@app.delete("/api/admin/services/{service_id}")
+def delete_service(service_id: int, db: Session = Depends(get_db)):
+    deleted = SettingsService.delete_service(db, service_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Service not found or already inactive")
+    return {"success": True}
+
+
+@app.get("/api/admin/providers", response_model=List[ProviderResponse])
+def list_providers(
+    active_only: bool = Query(False), db: Session = Depends(get_db)
+):
+    providers = SettingsService.get_all_providers(db, active_only=active_only)
+    return [_serialize_provider(provider) for provider in providers]
+
+
+@app.get("/api/admin/providers/{provider_id}", response_model=ProviderResponse)
+def get_provider(provider_id: str, db: Session = Depends(get_db)):
+    provider = SettingsService.get_provider(db, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return _serialize_provider(provider)
+
+
+@app.post("/api/admin/providers", response_model=ProviderResponse, status_code=201)
+def create_provider(payload: ProviderCreateRequest, db: Session = Depends(get_db)):
+    provider_data = payload.dict(exclude_unset=True)
+    if "hire_date" in provider_data:
+        provider_data["hire_date"] = _parse_hire_date(provider_data["hire_date"])
+    provider = SettingsService.create_provider(db, provider_data)
+    return _serialize_provider(provider)
+
+
+@app.put("/api/admin/providers/{provider_id}", response_model=ProviderResponse)
+def update_provider(
+    provider_id: str, payload: ProviderUpdateRequest, db: Session = Depends(get_db)
+):
+    provider_data = payload.dict(exclude_unset=True)
+    if "hire_date" in provider_data:
+        provider_data["hire_date"] = _parse_hire_date(provider_data["hire_date"])
+
+    provider = SettingsService.update_provider(db, provider_id, provider_data)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return _serialize_provider(provider)
+
+
+@app.delete("/api/admin/providers/{provider_id}")
+def delete_provider(provider_id: str, db: Session = Depends(get_db)):
+    deleted = SettingsService.delete_provider(db, provider_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Provider not found or already inactive")
+    return {"success": True}
+
+
+@app.get("/api/admin/locations", response_model=List[LocationResponse])
+def list_locations(
+    active_only: bool = Query(False), db: Session = Depends(get_db)
+):
+    locations = SettingsService.get_all_locations(db, active_only=active_only)
+    serialized = []
+    for location in locations:
+        hours = SettingsService.get_business_hours(db, location.id)
+        serialized.append(_serialize_location(location, hours))
+    return serialized
+
+
+@app.get("/api/admin/locations/{location_id}", response_model=LocationResponse)
+def get_location(location_id: int, db: Session = Depends(get_db)):
+    location = SettingsService.get_location(db, location_id)
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+    hours = SettingsService.get_business_hours(db, location.id)
+    return _serialize_location(location, hours)
+
+
+@app.get("/api/admin/locations/{location_id}/hours", response_model=List[BusinessHourEntry])
+def get_location_hours(location_id: int, db: Session = Depends(get_db)):
+    location = SettingsService.get_location(db, location_id)
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+    hours = SettingsService.get_business_hours(db, location.id)
+    return _serialize_business_hours(hours)
+
+
+@app.post("/api/admin/locations", response_model=LocationResponse, status_code=201)
+def create_location(payload: LocationCreateRequest, db: Session = Depends(get_db)):
+    location_data = payload.model_dump(exclude={"business_hours"}, exclude_none=True)
+    location = SettingsService.create_location(db, location_data)
+
+    if payload.business_hours is not None:
+        _write_business_hours(db, location.id, payload.business_hours)
+
+    hours = SettingsService.get_business_hours(db, location.id)
+    return _serialize_location(location, hours)
+
+
+@app.put("/api/admin/locations/{location_id}", response_model=LocationResponse)
+def update_location(
+    location_id: int, payload: LocationUpdateRequest, db: Session = Depends(get_db)
+):
+    location_data = payload.model_dump(exclude={"business_hours"}, exclude_unset=True)
+
+    if location_data:
+        location = SettingsService.update_location(db, location_id, location_data)
+        if not location:
+            raise HTTPException(status_code=404, detail="Location not found")
+    else:
+        location = SettingsService.get_location(db, location_id)
+        if not location:
+            raise HTTPException(status_code=404, detail="Location not found")
+
+    if payload.business_hours is not None:
+        _write_business_hours(db, location_id, payload.business_hours)
+
+    hours = SettingsService.get_business_hours(db, location_id)
+    return _serialize_location(location, hours)
+
+
+@app.put("/api/admin/locations/{location_id}/hours", response_model=LocationResponse)
+def update_location_hours(
+    location_id: int,
+    entries: List[BusinessHourEntry],
+    db: Session = Depends(get_db),
+):
+    location = SettingsService.get_location(db, location_id)
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    _write_business_hours(db, location_id, entries)
+    hours = SettingsService.get_business_hours(db, location_id)
+    return _serialize_location(location, hours)
+
+
+@app.delete("/api/admin/locations/{location_id}")
+def delete_location(location_id: int, db: Session = Depends(get_db)):
+    try:
+        deleted = SettingsService.delete_location(db, location_id)
+    except ValueError as exc:  # e.g., deleting primary or only location
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Location not found")
+    return {"success": True}
+
+
+@app.get("/api/providers", response_model=ProvidersSummaryResponse)
+def get_providers_summary(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    service = ProviderAnalyticsService(db)
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+    summaries = service.get_all_providers_summary(start_date=start_date, end_date=end_date)
+    return {"providers": summaries, "period_days": days}
+
+
+@app.get("/api/providers/summary", response_model=ProvidersSummaryResponse)
+def get_providers_summary_alias(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    return get_providers_summary(days=days, db=db)
+
+
+@app.get("/api/providers/{provider_id}", response_model=ProviderDetailResponse)
+def get_provider_detail(provider_id: str, db: Session = Depends(get_db)):
+    provider = SettingsService.get_provider(db, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return _serialize_provider(provider)
+
+
+@app.get("/api/providers/{provider_id}/metrics", response_model=ProviderMetricsResponse)
+def get_provider_metrics(
+    provider_id: str,
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    provider = SettingsService.get_provider(db, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    analytics = ProviderAnalyticsService(db)
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+
+    summaries = analytics.get_all_providers_summary(start_date=start_date, end_date=end_date)
+    summary = next((item for item in summaries if item["provider_id"] == provider_id), None)
+    if not summary:
+        summary = {
+            "provider_id": provider_id,
+            "name": provider.name,
+            "email": provider.email,
+            "avatar_url": provider.avatar_url,
+            "specialties": provider.specialties or [],
+            "total_consultations": 0,
+            "successful_bookings": 0,
+            "conversion_rate": 0.0,
+            "total_revenue": 0.0,
+            "avg_satisfaction_score": None,
+        }
+
+    trends = {
+        "conversion_rate": analytics.get_provider_performance_trend(
+            provider_id, metric="conversion_rate", days=days
+        ),
+        "revenue": analytics.get_provider_performance_trend(
+            provider_id, metric="revenue", days=days
+        ),
+    }
+
+    outcomes = analytics.get_consultation_outcomes_breakdown(provider_id, days=days)
+    service_perf = analytics.get_service_performance(provider_id, days=days)
+
+    return {
+        "summary": summary,
+        "trends": trends,
+        "outcomes": outcomes,
+        "service_performance": service_perf,
+        "period_days": days,
+    }
+
+
+@app.get("/api/providers/{provider_id}/insights", response_model=ProviderInsightsResponse)
+def get_provider_insights(
+    provider_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    provider = SettingsService.get_provider(db, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    insights_service = AIInsightsService(db)
+    insights = insights_service.get_provider_insights(provider_id, limit=limit)
+    return {"insights": [_serialize_insight(insight) for insight in insights]}
+
+
+@app.get(
+    "/api/providers/{provider_id}/consultations",
+    response_model=ProviderConsultationsResponse,
+)
+def get_provider_consultations(
+    provider_id: str,
+    limit: int = Query(20, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    provider = SettingsService.get_provider(db, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    consultations = (
+        db.query(InPersonConsultation)
+        .filter(InPersonConsultation.provider_id == uuid.UUID(provider_id))
+        .order_by(InPersonConsultation.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return {"consultations": [_serialize_consultation(c) for c in consultations]}
 
 # CORS middleware
 app.add_middleware(

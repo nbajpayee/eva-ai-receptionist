@@ -4,6 +4,7 @@ import "./globals.css";
 
 import { SidebarNav, type SidebarNavItem } from "@/components/ui/sidebar-nav";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
+import { ToastProviderWrapper } from "@/components/providers/toast-provider-wrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -62,6 +63,11 @@ const NAV_ITEMS: SidebarNavItem[] = [
     icon: "providers",
   },
   {
+    title: "Settings",
+    href: "/settings",
+    icon: "dashboard",
+  },
+  {
     title: "Console Reports",
     href: "/reports",
     icon: "reports",
@@ -84,7 +90,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} bg-zinc-50 text-zinc-900 antialiased`}
       >
-        <div className="flex min-h-screen bg-zinc-100/60">
+        <ToastProviderWrapper>
+          <div className="flex min-h-screen bg-zinc-100/60">
           <aside className="hidden border-r border-zinc-200 bg-white/80 backdrop-blur lg:flex lg:w-64 lg:flex-col">
             <div className="flex h-20 flex-col justify-center gap-1 border-b border-zinc-200 px-6">
               <span className="text-xs uppercase tracking-[0.2em] text-zinc-500">
@@ -120,6 +127,7 @@ export default function RootLayout({
             </main>
           </div>
         </div>
+        </ToastProviderWrapper>
       </body>
     </html>
   );

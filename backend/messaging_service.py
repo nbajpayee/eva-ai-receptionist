@@ -37,9 +37,10 @@ from booking_handlers import (
 )
 from booking_tools import get_booking_tools
 from calendar_service import get_calendar_service
-from config import SERVICES, get_settings
+from config import get_settings
 from database import Appointment, CommunicationMessage, Conversation, Customer
 from prompts import get_system_prompt
+from settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -65,6 +66,13 @@ class MessagingService:
             db_session_factory
         )
         self._trace_seq = 0
+        self._services_cache = None
+
+    def _get_services(self, db: Session) -> Dict[str, Any]:
+        """Get services from database (cached per instance)."""
+        if self._services_cache is None:
+            self._services_cache = SettingsService.get_services_dict(db)
+        return self._services_cache
 
     @staticmethod
     def _format_start_for_channel(dt: datetime, channel: str) -> str:
@@ -413,7 +421,7 @@ class MessagingService:
         }
 
     @staticmethod
-    def _extract_booking_params(conversation: Conversation) -> Tuple[str, str]:
+    def _extract_booking_params(db: Session, conversation: Conversation) -> Tuple[str, str]:
         """Extract date and service type from recent conversation messages."""
         metadata = SlotSelectionManager.conversation_metadata(conversation)
         hinted_date = metadata.get("pending_booking_date")
@@ -424,6 +432,9 @@ class MessagingService:
             "%Y-%m-%d"
         )
         service_type = hinted_service
+
+        # Get services from database
+        services = SettingsService.get_services_dict(db)
 
         # Consider last few inbound and outbound messages to capture user requests
         relevant_messages = [
@@ -442,7 +453,7 @@ class MessagingService:
                     continue
 
                 if service_type is None:
-                    for service_name in SERVICES.keys():
+                    for service_name in services.keys():
                         if service_name.lower() in content:
                             service_type = service_name.lower()
                             break
@@ -1152,7 +1163,8 @@ class MessagingService:
                 )
                 return
 
-            service_config = SERVICES.get(service_type)
+            services = SettingsService.get_services_dict(db)
+            service_config = services.get(service_type)
             duration = output.get("duration_minutes")
             if duration is None:
                 duration = (
@@ -1223,7 +1235,8 @@ class MessagingService:
                 )
                 return
 
-            service_config = SERVICES.get(service_type)
+            services = SettingsService.get_services_dict(db)
+            service_config = services.get(service_type)
             duration = output.get("duration_minutes")
             if duration is None:
                 duration = (
@@ -1342,6 +1355,7 @@ class MessagingService:
     def _call_ai(
         messages: List[Dict[str, Any]],
         *,
+        db: Session,
         channel: str,
         ai_mode: str,
         temperature: float,
@@ -1369,7 +1383,7 @@ class MessagingService:
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                tools=get_booking_tools(),
+                tools=get_booking_tools(db),
                 tool_choice=tool_choice,
             )
             trace("AI raw response: %s", response)
@@ -1416,7 +1430,7 @@ class MessagingService:
             )
 
             # Extract date and service from recent messages
-            date, service_type = MessagingService._extract_booking_params(conversation)
+            date, service_type = MessagingService._extract_booking_params(db, conversation)
 
             trace(
                 "Preemptively calling check_availability: date=%s, service=%s",
@@ -1542,6 +1556,7 @@ class MessagingService:
         # Just call the AI once with the availability already in context.
         ai_response = MessagingService._call_ai(
             messages=history,
+            db=db,
             channel=channel,
             ai_mode="ai",
             temperature=0.3,
@@ -1647,7 +1662,7 @@ class MessagingService:
                 messages=history,
                 temperature=0.3,
                 max_tokens=max_tokens,
-                tools=get_booking_tools(),
+                tools=get_booking_tools(db),
                 tool_choice="none",
             )
             message = response.choices[0].message

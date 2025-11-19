@@ -15,6 +15,25 @@ from database import BusinessHours, Location, MedSpaSettings, Provider, Service
 class SettingsService:
     """Service for managing med spa settings."""
 
+    _services_version = 0
+    _providers_version = 0
+
+    @classmethod
+    def _bump_services_version(cls) -> None:
+        cls._services_version += 1
+
+    @classmethod
+    def _bump_providers_version(cls) -> None:
+        cls._providers_version += 1
+
+    @classmethod
+    def get_services_version(cls) -> int:
+        return cls._services_version
+
+    @classmethod
+    def get_providers_version(cls) -> int:
+        return cls._providers_version
+
     @staticmethod
     def get_settings(db: Session) -> Optional[MedSpaSettings]:
         """Get med spa settings (singleton)."""
@@ -190,6 +209,7 @@ class SettingsService:
         db.add(service)
         db.commit()
         db.refresh(service)
+        SettingsService._bump_services_version()
         return service
 
     @staticmethod
@@ -207,6 +227,7 @@ class SettingsService:
 
         db.commit()
         db.refresh(service)
+        SettingsService._bump_services_version()
         return service
 
     @staticmethod
@@ -218,6 +239,7 @@ class SettingsService:
 
         service.is_active = False
         db.commit()
+        SettingsService._bump_services_version()
         return True
 
     @staticmethod
@@ -232,6 +254,7 @@ class SettingsService:
                 service.display_order = item["display_order"]
 
         db.commit()
+        SettingsService._bump_services_version()
         return True
 
     @staticmethod
@@ -276,6 +299,7 @@ class SettingsService:
         db.add(provider)
         db.commit()
         db.refresh(provider)
+        SettingsService._bump_providers_version()
         return provider
 
     @staticmethod
@@ -311,6 +335,7 @@ class SettingsService:
 
         db.commit()
         db.refresh(provider)
+        SettingsService._bump_providers_version()
         return provider
 
     @staticmethod
@@ -329,6 +354,7 @@ class SettingsService:
 
         provider.is_active = False
         db.commit()
+        SettingsService._bump_providers_version()
         return True
 
     @staticmethod
@@ -342,6 +368,7 @@ class SettingsService:
 
         for service in services:
             services_dict[service.slug] = {
+                "id": service.id,
                 "name": service.name,
                 "duration_minutes": service.duration_minutes,
                 "price_range": (
@@ -369,7 +396,10 @@ class SettingsService:
         for provider in providers:
             providers_list.append(
                 {
+                    "id": str(provider.id),
                     "name": provider.name,
+                    "email": provider.email,
+                    "phone": provider.phone,
                     "specialties": provider.specialties or [],
                     "bio": provider.bio or "",
                 }

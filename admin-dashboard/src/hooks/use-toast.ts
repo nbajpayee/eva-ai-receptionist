@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { createPortal } from "react-dom";
 
@@ -24,6 +26,11 @@ const ToastContext = React.createContext<ToastContextValue | undefined>(undefine
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = React.useState<ToastRecord[]>([]);
+  const [isMounted, setIsMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const dismiss = React.useCallback((id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
@@ -50,7 +57,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 
   const toastPortal =
-    typeof document !== "undefined"
+    isMounted && typeof document !== "undefined"
       ? createPortal(
           React.createElement(
             "div",
