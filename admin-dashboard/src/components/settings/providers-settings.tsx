@@ -28,14 +28,15 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 interface Provider {
-  id: number;
+  id: string;  // UUID string
   name: string;
-  title: string;
+  email: string;
+  phone: string | null;
   specialties: string[] | null;
-  credentials: string | null;
   bio: string | null;
   is_active: boolean;
-  display_order: number;
+  hire_date: string | null;
+  avatar_url: string | null;
 }
 
 export function ProvidersSettings() {
@@ -73,9 +74,9 @@ export function ProvidersSettings() {
     } else {
       setEditingProvider({
         name: "",
-        title: "",
+        email: "",
+        phone: "",
         specialties: [],
-        credentials: "",
         bio: "",
         is_active: true,
       });
@@ -118,7 +119,7 @@ export function ProvidersSettings() {
     }
   };
 
-  const handleDeleteProvider = async (id: number) => {
+  const handleDeleteProvider = async (id: string) => {
     if (!confirm("Are you sure you want to delete this provider?")) return;
 
     try {
@@ -197,9 +198,9 @@ export function ProvidersSettings() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Title</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Phone</TableHead>
                 <TableHead>Specialties</TableHead>
-                <TableHead>Credentials</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -208,7 +209,8 @@ export function ProvidersSettings() {
               {providers.map((provider) => (
                 <TableRow key={provider.id}>
                   <TableCell className="font-medium">{provider.name}</TableCell>
-                  <TableCell>{provider.title}</TableCell>
+                  <TableCell>{provider.email}</TableCell>
+                  <TableCell>{provider.phone || "-"}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {provider.specialties?.slice(0, 2).map((specialty) => (
@@ -223,7 +225,6 @@ export function ProvidersSettings() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{provider.credentials || "-"}</TableCell>
                   <TableCell>
                     <Badge variant={provider.is_active ? "default" : "secondary"}>
                       {provider.is_active ? "Active" : "Inactive"}
@@ -277,34 +278,48 @@ export function ProvidersSettings() {
                       setEditingProvider({ ...editingProvider, name: e.target.value })
                     }
                     placeholder="Dr. Jane Smith"
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="title">Title</Label>
+                  <Label htmlFor="email">Email</Label>
                   <Input
-                    id="title"
-                    value={editingProvider.title || ""}
+                    id="email"
+                    type="email"
+                    value={editingProvider.email || ""}
                     onChange={(e) =>
-                      setEditingProvider({ ...editingProvider, title: e.target.value })
+                      setEditingProvider({ ...editingProvider, email: e.target.value })
                     }
-                    placeholder="Medical Director"
+                    placeholder="doctor@example.com"
+                    required
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="credentials">Credentials</Label>
-                <Input
-                  id="credentials"
-                  value={editingProvider.credentials || ""}
-                  onChange={(e) =>
-                    setEditingProvider({
-                      ...editingProvider,
-                      credentials: e.target.value,
-                    })
-                  }
-                  placeholder="MD, Board Certified Dermatologist"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={editingProvider.phone || ""}
+                    onChange={(e) =>
+                      setEditingProvider({ ...editingProvider, phone: e.target.value })
+                    }
+                    placeholder="+1 (555) 123-4567"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hire_date">Hire Date</Label>
+                  <Input
+                    id="hire_date"
+                    type="date"
+                    value={editingProvider.hire_date || ""}
+                    onChange={(e) =>
+                      setEditingProvider({ ...editingProvider, hire_date: e.target.value })
+                    }
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -347,7 +362,7 @@ export function ProvidersSettings() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="bio">Bio</Label>
+                <Label htmlFor="bio">Bio / Role Description</Label>
                 <Textarea
                   id="bio"
                   value={editingProvider.bio || ""}
@@ -355,7 +370,7 @@ export function ProvidersSettings() {
                     setEditingProvider({ ...editingProvider, bio: e.target.value })
                   }
                   rows={4}
-                  placeholder="Provider biography and experience..."
+                  placeholder="Medical Director | Board Certified Dermatologist with 15 years of experience..."
                 />
               </div>
 

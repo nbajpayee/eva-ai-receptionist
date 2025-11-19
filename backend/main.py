@@ -1883,19 +1883,27 @@ async def create_service(
     db: Session = Depends(get_db)
 ):
     """Create a new service."""
-    data_dict = service_data.dict()
-    service = SettingsService.create_service(db, data_dict)
+    from sqlalchemy.exc import IntegrityError
 
-    return {
-        "id": service.id,
-        "name": service.name,
-        "slug": service.slug,
-        "description": service.description,
-        "duration_minutes": service.duration_minutes,
-        "price_display": service.price_display,
-        "category": service.category,
-        "is_active": service.is_active,
-    }
+    try:
+        data_dict = service_data.dict()
+        service = SettingsService.create_service(db, data_dict)
+
+        return {
+            "id": service.id,
+            "name": service.name,
+            "slug": service.slug,
+            "description": service.description,
+            "duration_minutes": service.duration_minutes,
+            "price_display": service.price_display,
+            "category": service.category,
+            "is_active": service.is_active,
+        }
+    except IntegrityError as e:
+        db.rollback()
+        if "slug" in str(e):
+            raise HTTPException(status_code=400, detail="Service with this slug already exists")
+        raise HTTPException(status_code=400, detail="Database integrity error")
 
 @app.put("/api/admin/services/{service_id}")
 async def update_service(
@@ -1904,22 +1912,30 @@ async def update_service(
     db: Session = Depends(get_db)
 ):
     """Update a service."""
-    data_dict = service_data.dict(exclude_unset=True)
-    service = SettingsService.update_service(db, service_id, data_dict)
+    from sqlalchemy.exc import IntegrityError
 
-    if not service:
-        raise HTTPException(status_code=404, detail="Service not found")
+    try:
+        data_dict = service_data.dict(exclude_unset=True)
+        service = SettingsService.update_service(db, service_id, data_dict)
 
-    return {
-        "id": service.id,
-        "name": service.name,
-        "slug": service.slug,
-        "description": service.description,
-        "duration_minutes": service.duration_minutes,
-        "price_display": service.price_display,
-        "category": service.category,
-        "is_active": service.is_active,
-    }
+        if not service:
+            raise HTTPException(status_code=404, detail="Service not found")
+
+        return {
+            "id": service.id,
+            "name": service.name,
+            "slug": service.slug,
+            "description": service.description,
+            "duration_minutes": service.duration_minutes,
+            "price_display": service.price_display,
+            "category": service.category,
+            "is_active": service.is_active,
+        }
+    except IntegrityError as e:
+        db.rollback()
+        if "slug" in str(e):
+            raise HTTPException(status_code=400, detail="Service with this slug already exists")
+        raise HTTPException(status_code=400, detail="Database integrity error")
 
 @app.delete("/api/admin/services/{service_id}")
 async def delete_service(service_id: int, db: Session = Depends(get_db)):
@@ -1984,18 +2000,26 @@ async def create_provider(
     db: Session = Depends(get_db)
 ):
     """Create a new provider."""
-    data_dict = provider_data.dict()
-    provider = SettingsService.create_provider(db, data_dict)
+    from sqlalchemy.exc import IntegrityError
 
-    return {
-        "id": str(provider.id),
-        "name": provider.name,
-        "email": provider.email,
-        "phone": provider.phone,
-        "specialties": provider.specialties,
-        "bio": provider.bio,
-        "is_active": provider.is_active,
-    }
+    try:
+        data_dict = provider_data.dict()
+        provider = SettingsService.create_provider(db, data_dict)
+
+        return {
+            "id": str(provider.id),
+            "name": provider.name,
+            "email": provider.email,
+            "phone": provider.phone,
+            "specialties": provider.specialties,
+            "bio": provider.bio,
+            "is_active": provider.is_active,
+        }
+    except IntegrityError as e:
+        db.rollback()
+        if "email" in str(e):
+            raise HTTPException(status_code=400, detail="Provider with this email already exists")
+        raise HTTPException(status_code=400, detail="Database integrity error")
 
 @app.put("/api/admin/providers/{provider_id}")
 async def update_provider(
@@ -2004,21 +2028,29 @@ async def update_provider(
     db: Session = Depends(get_db)
 ):
     """Update a provider."""
-    data_dict = provider_data.dict(exclude_unset=True)
-    provider = SettingsService.update_provider(db, provider_id, data_dict)
+    from sqlalchemy.exc import IntegrityError
 
-    if not provider:
-        raise HTTPException(status_code=404, detail="Provider not found")
+    try:
+        data_dict = provider_data.dict(exclude_unset=True)
+        provider = SettingsService.update_provider(db, provider_id, data_dict)
 
-    return {
-        "id": str(provider.id),
-        "name": provider.name,
-        "email": provider.email,
-        "phone": provider.phone,
-        "specialties": provider.specialties,
-        "bio": provider.bio,
-        "is_active": provider.is_active,
-    }
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+
+        return {
+            "id": str(provider.id),
+            "name": provider.name,
+            "email": provider.email,
+            "phone": provider.phone,
+            "specialties": provider.specialties,
+            "bio": provider.bio,
+            "is_active": provider.is_active,
+        }
+    except IntegrityError as e:
+        db.rollback()
+        if "email" in str(e):
+            raise HTTPException(status_code=400, detail="Provider with this email already exists")
+        raise HTTPException(status_code=400, detail="Database integrity error")
 
 @app.delete("/api/admin/providers/{provider_id}")
 async def delete_provider(provider_id: str, db: Session = Depends(get_db)):
