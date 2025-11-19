@@ -1,28 +1,25 @@
 """Helper utilities for omnichannel messaging console flows."""
-
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
+import textwrap
 import os
 import re
-import textwrap
-from datetime import datetime, timedelta
 from types import SimpleNamespace
-from typing import Any
-from typing import Any as TypingAny
-from typing import Callable, Dict, List, Optional, Tuple
+
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any, List, Tuple, Callable, Any as TypingAny
 from uuid import UUID, uuid4
 
-import pytz
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.orm.attributes import flag_modified
 
+import pytz
+
 from analytics import AnalyticsService, openai_client
-from booking.manager import SlotSelectionError, SlotSelectionManager
-from booking.time_utils import EASTERN_TZ, format_for_display, parse_iso_datetime
 from booking_handlers import (
     handle_book_appointment,
     handle_cancel_appointment,
@@ -37,9 +34,11 @@ from booking_handlers import (
 )
 from booking_tools import get_booking_tools
 from calendar_service import get_calendar_service
-from config import SERVICES, get_settings
-from database import Appointment, CommunicationMessage, Conversation, Customer
+from config import get_settings, SERVICES
+from database import Conversation, Customer, CommunicationMessage, Appointment
 from prompts import get_system_prompt
+from booking.time_utils import parse_iso_datetime, format_for_display, EASTERN_TZ
+from booking.manager import SlotSelectionManager, SlotSelectionError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -61,9 +60,7 @@ class MessagingService:
     ):
         self._db_session_factory = db_session_factory
         self.calendar_service = calendar_service or get_calendar_service()
-        self.analytics_service = analytics_service or AnalyticsService(
-            db_session_factory
-        )
+        self.analytics_service = analytics_service or AnalyticsService(db_session_factory)
         self._trace_seq = 0
 
     @staticmethod
@@ -91,11 +88,17 @@ class MessagingService:
 
         if canonical_phone:
             customer = (
-                db.query(Customer).filter(Customer.phone == canonical_phone).first()
+                db.query(Customer)
+                .filter(Customer.phone == canonical_phone)
+                .first()
             )
 
         if customer is None and email_value:
-            customer = db.query(Customer).filter(Customer.email == email_value).first()
+            customer = (
+                db.query(Customer)
+                .filter(Customer.email == email_value)
+                .first()
+            )
 
         if customer:
             updated = False
@@ -212,31 +215,20 @@ class MessagingService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _latest_customer_message(
-        conversation: Conversation,
-    ) -> Optional[CommunicationMessage]:
+    def _latest_customer_message(conversation: Conversation) -> Optional[CommunicationMessage]:
         if not conversation.messages:
             return None
-        inbound_messages = [
-            m for m in conversation.messages if m.direction == "inbound"
-        ]
+        inbound_messages = [m for m in conversation.messages if m.direction == "inbound"]
         if not inbound_messages:
             return None
-        return max(
-            inbound_messages,
-            key=lambda m: m.sent_at
-            or conversation.last_activity_at
-            or conversation.initiated_at,
-        )
+        return max(inbound_messages, key=lambda m: m.sent_at or conversation.last_activity_at or conversation.initiated_at)
 
     @staticmethod
     def _resolve_selected_slot(pending: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if not pending:
             return None
 
-        selected_slot = (
-            pending.get("selected_slot") if isinstance(pending, dict) else None
-        )
+        selected_slot = pending.get("selected_slot") if isinstance(pending, dict) else None
         slots = pending.get("slots") if isinstance(pending, dict) else None
 
         if not selected_slot and isinstance(slots, list):
@@ -249,9 +241,7 @@ class MessagingService:
         return None
 
     @staticmethod
-    def _should_execute_booking(
-        db: Session, conversation: Conversation
-    ) -> Optional[Dict[str, Any]]:
+    def _should_execute_booking(db: Session, conversation: Conversation) -> Optional[Dict[str, Any]]:
         pending = SlotSelectionManager.get_pending_slot_offers(db, conversation)
         if not pending:
             return None
@@ -268,18 +258,17 @@ class MessagingService:
         if not last_message or not last_message.content:
             return None
 
-        selected_message_id = pending.get("selected_by_message_id")
-        if selected_message_id and str(last_message.id) != selected_message_id:
+        selected_message_id = pending.get("selected_by_message_id") if isinstance(pending, dict) else None
+        if not selected_message_id:
             return None
 
+        if str(last_message.id) != str(selected_message_id):
+            return None
+
+        # Don't execute if last appointment already matches this slot (prevents duplicates)
         metadata = SlotSelectionManager.conversation_metadata(conversation)
-        last_appointment = (
-            metadata.get("last_appointment") if isinstance(metadata, dict) else {}
-        )
-        if (
-            isinstance(last_appointment, dict)
-            and last_appointment.get("status") == "scheduled"
-        ):
+        last_appointment = metadata.get("last_appointment") if isinstance(metadata, dict) else {}
+        if isinstance(last_appointment, dict) and last_appointment.get("status") == "scheduled":
             last_start = last_appointment.get("start_time")
             if last_start and last_start == selected_slot.get("start"):
                 return None
@@ -359,7 +348,11 @@ class MessagingService:
                         "function": {
                             "name": "book_appointment",
                             "arguments": json.dumps(
-                                {k: v for k, v in arguments.items() if v is not None}
+                                {
+                                    k: v
+                                    for k, v in arguments.items()
+                                    if v is not None
+                                }
                             ),
                         },
                     }
@@ -373,6 +366,12 @@ class MessagingService:
         ]
 
         if success:
+            # Clear booking intent and slot offers after successful booking
+            metadata = SlotSelectionManager.conversation_metadata(conversation)
+            metadata["pending_booking_intent"] = False
+            SlotSelectionManager.persist_conversation_metadata(db, conversation, metadata)
+            SlotSelectionManager.clear_offers(db, conversation)
+
             confirmation = MessagingService.build_booking_confirmation_message(
                 channel=channel,
                 tool_output=output,
@@ -400,19 +399,13 @@ class MessagingService:
         hinted_service = metadata.get("pending_booking_service")
 
         # Default date is tomorrow
-        date = hinted_date or (datetime.utcnow() + timedelta(days=1)).strftime(
-            "%Y-%m-%d"
-        )
+        date = hinted_date or (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
         service_type = hinted_service
 
         # Consider last few inbound and outbound messages to capture user requests
-        relevant_messages = [
-            m for m in conversation.messages if m.direction == "inbound"
-        ][-5:]
+        relevant_messages = [m for m in conversation.messages if m.direction == "inbound"][-5:]
         # Include last assistant reply in case it mentioned a service the user confirmed
-        outbound_messages = [
-            m for m in conversation.messages if m.direction == "outbound"
-        ][-3:]
+        outbound_messages = [m for m in conversation.messages if m.direction == "outbound"][-3:]
 
         def _scan(messages: List[CommunicationMessage]) -> None:
             nonlocal date, service_type
@@ -446,12 +439,8 @@ class MessagingService:
         return date, service_type
 
     @staticmethod
-    def _requires_availability_enforcement(
-        db: Session, conversation: Conversation
-    ) -> bool:
-        pending = SlotSelectionManager.get_pending_slot_offers(
-            db, conversation, enforce_expiry=False
-        )
+    def _requires_availability_enforcement(db: Session, conversation: Conversation) -> bool:
+        pending = SlotSelectionManager.get_pending_slot_offers(db, conversation, enforce_expiry=False)
         if pending:
             return False
 
@@ -465,9 +454,7 @@ class MessagingService:
 
         text = last_customer.content.lower()
         booking_keywords = ["book", "schedule", "appointment", "reserve", "slot"]
-        current_message_is_booking = any(
-            keyword in text for keyword in booking_keywords
-        )
+        current_message_is_booking = any(keyword in text for keyword in booking_keywords)
 
         # Return True if EITHER current message OR pending intent indicates booking
         if current_message_is_booking or pending_booking_intent:
@@ -501,18 +488,14 @@ class MessagingService:
         booking_keywords = ["book", "schedule", "appointment", "reserve", "slot"]
 
         # Check if the current message OR pending intent indicates a booking request
-        current_message_is_booking = any(
-            keyword in text for keyword in booking_keywords
-        )
+        current_message_is_booking = any(keyword in text for keyword in booking_keywords)
 
         if current_message_is_booking or pending_booking_intent:
             return True
         return False
 
     @staticmethod
-    def build_booking_confirmation_message(
-        *, channel: str, tool_output: Dict[str, Any]
-    ) -> Optional[str]:
+    def build_booking_confirmation_message(*, channel: str, tool_output: Dict[str, Any]) -> Optional[str]:
         start_iso = tool_output.get("start_time")
         service_label = tool_output.get("service") or tool_output.get("service_type")
         if not start_iso:
@@ -523,9 +506,7 @@ class MessagingService:
         except ValueError:
             return None
 
-        formatted_datetime = MessagingService._format_start_for_channel(
-            start_dt, channel
-        )
+        formatted_datetime = MessagingService._format_start_for_channel(start_dt, channel)
         provider = tool_output.get("provider") or None
         auto_adjusted = tool_output.get("was_auto_adjusted")
 
@@ -601,9 +582,7 @@ class MessagingService:
                                 break
                     if (
                         preceding_assistant_message is not None
-                        and _message_mentions_tomorrow(
-                            preceding_assistant_message.content
-                        )
+                        and _message_mentions_tomorrow(preceding_assistant_message.content)
                     ):
                         stripped = (last_customer_message.content or "").strip().lower()
                         if stripped in {"1", "option 1", "1.", "one", "1)"}:
@@ -627,15 +606,11 @@ class MessagingService:
                 date_value = normalized.get("date")
                 if date_value:
                     try:
-                        new_date = normalize_date_to_future(
-                            str(date_value), reference=reference
-                        )
+                        new_date = normalize_date_to_future(str(date_value), reference=reference)
                     except ValueError:
                         new_date = reference.strftime("%Y-%m-%d")
                     if tomorrow_hint and new_date == reference.strftime("%Y-%m-%d"):
-                        tomorrow_date = (reference + timedelta(days=1)).strftime(
-                            "%Y-%m-%d"
-                        )
+                        tomorrow_date = (reference + timedelta(days=1)).strftime("%Y-%m-%d")
                         _set("date", tomorrow_date)
                     else:
                         _set("date", new_date)
@@ -644,20 +619,14 @@ class MessagingService:
                 for key in ("start_time", "start"):
                     if normalized.get(key):
                         try:
-                            new_dt = normalize_datetime_to_future(
-                                str(normalized[key]), reference=reference
-                            )
+                            new_dt = normalize_datetime_to_future(str(normalized[key]), reference=reference)
                         except ValueError:
-                            new_dt = normalize_datetime_to_future(
-                                reference.isoformat(), reference=reference
-                            )
+                            new_dt = normalize_datetime_to_future(reference.isoformat(), reference=reference)
                         _set(key, new_dt)
                         normalized["start_time"] = new_dt
                 if normalized.get("date"):
                     try:
-                        new_date = normalize_date_to_future(
-                            str(normalized["date"]), reference=reference
-                        )
+                        new_date = normalize_date_to_future(str(normalized["date"]), reference=reference)
                     except ValueError:
                         new_date = reference.strftime("%Y-%m-%d")
                     _set("date", new_date)
@@ -666,36 +635,26 @@ class MessagingService:
                 for key in ("new_start_time", "start_time", "start"):
                     if normalized.get(key):
                         try:
-                            new_dt = normalize_datetime_to_future(
-                                str(normalized[key]), reference=reference
-                            )
+                            new_dt = normalize_datetime_to_future(str(normalized[key]), reference=reference)
                         except ValueError:
-                            new_dt = normalize_datetime_to_future(
-                                reference.isoformat(), reference=reference
-                            )
+                            new_dt = normalize_datetime_to_future(reference.isoformat(), reference=reference)
                         _set(key, new_dt)
                         if key != "new_start_time":
                             normalized["new_start_time"] = new_dt
                 if normalized.get("date"):
                     try:
-                        new_date = normalize_date_to_future(
-                            str(normalized["date"]), reference=reference
-                        )
+                        new_date = normalize_date_to_future(str(normalized["date"]), reference=reference)
                     except ValueError:
                         new_date = reference.strftime("%Y-%m-%d")
                     _set("date", new_date)
 
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Failed to normalize arguments for tool %s: %s", tool_name, exc
-            )
+            logger.warning("Failed to normalize arguments for tool %s: %s", tool_name, exc)
 
         return normalized, adjustments
 
     @staticmethod
-    def _build_history(
-        conversation: Conversation, channel: str
-    ) -> List[Dict[str, Any]]:
+    def _build_history(conversation: Conversation, channel: str) -> List[Dict[str, Any]]:
         prompt = get_system_prompt(channel)
 
         history: List[Dict[str, Any]] = [
@@ -722,9 +681,7 @@ class MessagingService:
         pending_offers = metadata.get("pending_slot_offers")
         if pending_offers and isinstance(pending_offers, dict):
             # Reconstruct the check_availability tool call and result
-            tool_call_id = pending_offers.get(
-                "source_tool_call_id", "reconstructed_call"
-            )
+            tool_call_id = pending_offers.get("source_tool_call_id", "reconstructed_call")
             service_type = pending_offers.get("service_type")
             date = pending_offers.get("date")
             slots = pending_offers.get("slots", [])
@@ -741,46 +698,34 @@ class MessagingService:
             }
 
             # Inject tool call and result into history
-            history.append(
-                {
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": [
-                        {
-                            "id": tool_call_id,
-                            "type": "function",
-                            "function": {
-                                "name": "check_availability",
-                                "arguments": json.dumps(
-                                    {"date": date, "service_type": service_type}
-                                ),
-                            },
-                        }
-                    ],
-                }
-            )
-            history.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": json.dumps(availability_output),
-                }
-            )
+            history.append({
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{
+                    "id": tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": "check_availability",
+                        "arguments": json.dumps({"date": date, "service_type": service_type})
+                    }
+                }]
+            })
+            history.append({
+                "role": "tool",
+                "tool_call_id": tool_call_id,
+                "content": json.dumps(availability_output)
+            })
 
         return history
 
     @staticmethod
     def _fallback_response(channel: str) -> str:
         if channel == "sms":
-            return (
-                "Ava (AI assistant) is currently unavailable. We'll follow up shortly."
-            )
+            return "Ava (AI assistant) is currently unavailable. We'll follow up shortly."
         return "Hello! Ava here — I'm offline at the moment, but we'll reply with more details soon."
 
     @staticmethod
-    def _tool_context_messages(
-        assistant_message: Any, tool_results: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def _tool_context_messages(assistant_message: Any, tool_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if assistant_message is None:
             return []
 
@@ -816,11 +761,7 @@ class MessagingService:
             if isinstance(output_payload, dict):
                 sanitized_output = dict(output_payload)
                 original_start = sanitized_output.pop("original_start_time", None)
-                if (
-                    original_start
-                    and sanitized_output.get("start_time")
-                    and sanitized_output["start_time"] != original_start
-                ):
+                if original_start and sanitized_output.get("start_time") and sanitized_output["start_time"] != original_start:
                     sanitized_output.setdefault(
                         "note",
                         "Start time automatically adjusted to the next available future slot.",
@@ -849,11 +790,7 @@ class MessagingService:
             try:
                 content_json = json.dumps(sanitized_output, default=str)
             except (TypeError, ValueError) as exc:
-                logger.warning(
-                    "Failed to serialize tool output for %s: %s",
-                    result.get("name"),
-                    exc,
-                )
+                logger.warning("Failed to serialize tool output for %s: %s", result.get("name"), exc)
                 content_json = json.dumps(
                     {
                         "repr": repr(sanitized_output),
@@ -889,9 +826,7 @@ class MessagingService:
         }
 
     @staticmethod
-    def _update_customer_from_arguments(
-        db: Session, customer: Customer, arguments: Dict[str, Any]
-    ) -> None:
+    def _update_customer_from_arguments(db: Session, customer: Customer, arguments: Dict[str, Any]) -> None:
         updated = False
 
         name_arg = arguments.get("customer_name")
@@ -938,16 +873,8 @@ class MessagingService:
         calendar_service,
         call: Any,
     ) -> Dict[str, Any]:
-        name = (
-            getattr(call.function, "name", None)
-            if getattr(call, "function", None)
-            else None
-        )
-        arguments_raw = (
-            getattr(call.function, "arguments", "{}")
-            if getattr(call, "function", None)
-            else "{}"
-        )
+        name = getattr(call.function, "name", None) if getattr(call, "function", None) else None
+        arguments_raw = getattr(call.function, "arguments", "{}") if getattr(call, "function", None) else "{}"
         try:
             arguments = json.loads(arguments_raw) if arguments_raw else {}
         except json.JSONDecodeError as exc:
@@ -986,38 +913,28 @@ class MessagingService:
                     # Clearing it too early causes the retry loop to stop triggering.
                 else:
                     SlotSelectionManager.clear_offers(db, conversation)
-                result["slot_offers"] = SlotSelectionManager.pending_slot_summary(
-                    db, conversation
-                )
+                result["slot_offers"] = SlotSelectionManager.pending_slot_summary(db, conversation)
             elif name == "book_appointment":
                 # AI may collect updated customer details mid-conversation; persist them before booking.
                 try:
-                    arguments, selection_adjustments = (
-                        SlotSelectionManager.enforce_booking(
-                            db,
-                            conversation,
-                            arguments,
-                        )
+                    arguments, selection_adjustments = SlotSelectionManager.enforce_booking(
+                        db,
+                        conversation,
+                        arguments,
                     )
                 except SlotSelectionError as exc:
                     output = {
                         "success": False,
                         "error": str(exc),
                         "code": "slot_selection_mismatch",
-                        "pending_slot_options": SlotSelectionManager.pending_slot_summary(
-                            db, conversation
-                        ),
+                        "pending_slot_options": SlotSelectionManager.pending_slot_summary(db, conversation),
                     }
                 else:
-                    MessagingService._update_customer_from_arguments(
-                        db, customer, arguments
-                    )
+                    MessagingService._update_customer_from_arguments(db, customer, arguments)
                     output = handle_book_appointment(
                         calendar_service,
                         customer_name=arguments.get("customer_name", customer.name),
-                        customer_phone=arguments.get(
-                            "customer_phone", customer.phone or ""
-                        ),
+                        customer_phone=arguments.get("customer_phone", customer.phone or ""),
                         customer_email=arguments.get("customer_email", customer.email),
                         start_time=arguments.get("start_time", arguments.get("start")),
                         service_type=arguments.get("service_type"),
@@ -1031,16 +948,12 @@ class MessagingService:
                             metadata["pending_booking_intent"] = False
                             conversation.custom_metadata = metadata
                             db.commit()
-                result["slot_offers"] = SlotSelectionManager.pending_slot_summary(
-                    db, conversation
-                )
+                result["slot_offers"] = SlotSelectionManager.pending_slot_summary(db, conversation)
             elif name == "reschedule_appointment":
                 output = handle_reschedule_appointment(
                     calendar_service,
                     appointment_id=arguments.get("appointment_id"),
-                    new_start_time=arguments.get("new_start_time")
-                    or arguments.get("start_time")
-                    or arguments.get("start"),
+                    new_start_time=arguments.get("new_start_time") or arguments.get("start_time") or arguments.get("start"),
                     service_type=arguments.get("service_type"),
                     provider=arguments.get("provider"),
                 )
@@ -1080,11 +993,7 @@ class MessagingService:
         if selection_adjustments:
             result.setdefault("argument_adjustments", {}).update(selection_adjustments)
 
-        if result.get("name") in {
-            "book_appointment",
-            "reschedule_appointment",
-            "cancel_appointment",
-        }:
+        if result.get("name") in {"book_appointment", "reschedule_appointment", "cancel_appointment"}:
             if (result.get("output") or {}).get("success"):
                 booking_action_success = True
             MessagingService._apply_booking_tool_side_effects(
@@ -1115,11 +1024,7 @@ class MessagingService:
 
         if tool_name == "book_appointment":
             event_id = output.get("event_id")
-            start_iso = (
-                output.get("start_time")
-                or arguments.get("start_time")
-                or arguments.get("start")
-            )
+            start_iso = output.get("start_time") or arguments.get("start_time") or arguments.get("start")
             service_type = output.get("service_type") or arguments.get("service_type")
             if not event_id or not start_iso or not service_type:
                 return
@@ -1127,17 +1032,13 @@ class MessagingService:
             try:
                 start_time = MessagingService._parse_iso_datetime(start_iso)
             except ValueError as exc:  # noqa: BLE001
-                logger.warning(
-                    "Failed to parse start_time for booking side effects: %s", exc
-                )
+                logger.warning("Failed to parse start_time for booking side effects: %s", exc)
                 return
 
             service_config = SERVICES.get(service_type)
             duration = output.get("duration_minutes")
             if duration is None:
-                duration = (
-                    service_config.get("duration_minutes", 60) if service_config else 60
-                )
+                duration = service_config.get("duration_minutes", 60) if service_config else 60
 
             provider = output.get("provider") or arguments.get("provider")
             notes = arguments.get("notes")
@@ -1182,15 +1083,8 @@ class MessagingService:
             SlotSelectionManager.clear_offers(db, conversation)
 
         elif tool_name == "reschedule_appointment":
-            appointment_id = output.get("appointment_id") or arguments.get(
-                "appointment_id"
-            )
-            new_start_iso = (
-                output.get("start_time")
-                or arguments.get("new_start_time")
-                or arguments.get("start_time")
-                or arguments.get("start")
-            )
+            appointment_id = output.get("appointment_id") or arguments.get("appointment_id")
+            new_start_iso = output.get("start_time") or arguments.get("new_start_time") or arguments.get("start_time") or arguments.get("start")
             service_type = output.get("service_type") or arguments.get("service_type")
             if not appointment_id or not new_start_iso or not service_type:
                 return
@@ -1198,17 +1092,13 @@ class MessagingService:
             try:
                 new_start = MessagingService._parse_iso_datetime(new_start_iso)
             except ValueError as exc:  # noqa: BLE001
-                logger.warning(
-                    "Failed to parse new_start for reschedule side effects: %s", exc
-                )
+                logger.warning("Failed to parse new_start for reschedule side effects: %s", exc)
                 return
 
             service_config = SERVICES.get(service_type)
             duration = output.get("duration_minutes")
             if duration is None:
-                duration = (
-                    service_config.get("duration_minutes", 60) if service_config else 60
-                )
+                duration = service_config.get("duration_minutes", 60) if service_config else 60
 
             provider = output.get("provider") or arguments.get("provider")
 
@@ -1249,9 +1139,7 @@ class MessagingService:
             commit_required = True
 
         elif tool_name == "cancel_appointment":
-            appointment_id = output.get("appointment_id") or arguments.get(
-                "appointment_id"
-            )
+            appointment_id = output.get("appointment_id") or arguments.get("appointment_id")
             if not appointment_id:
                 return
 
@@ -1261,11 +1149,7 @@ class MessagingService:
                 .first()
             )
 
-            cancellation_reason = (
-                output.get("reason")
-                or output.get("cancellation_reason")
-                or arguments.get("cancellation_reason")
-            )
+            cancellation_reason = output.get("reason") or output.get("cancellation_reason") or arguments.get("cancellation_reason")
 
             if appointment:
                 appointment.status = "cancelled"
@@ -1281,9 +1165,7 @@ class MessagingService:
             SlotSelectionManager.clear_offers(db, conversation)
 
         if commit_required:
-            SlotSelectionManager.persist_conversation_metadata(
-                db, conversation, metadata
-            )
+            SlotSelectionManager.persist_conversation_metadata(db, conversation, metadata)
 
     @staticmethod
     def _make_trace_logger(conversation: Conversation):
@@ -1293,9 +1175,7 @@ class MessagingService:
         def _trace(message: str, *args) -> None:
             counter["value"] += 1
             formatted = message % args if args else message
-            logger.info(
-                "[trace:%s:%03d] %s", conversation_id, counter["value"], formatted
-            )
+            logger.info("[trace:%s:%03d] %s", conversation_id, counter["value"], formatted)
 
         return _trace
 
@@ -1356,7 +1236,9 @@ class MessagingService:
             return response
         except Exception as exc:  # noqa: BLE001 - fall back gracefully for local dev
             trace("AI call failed: %s", exc)
-            fallback_message = "I'm running in a local environment without AI access."
+            fallback_message = (
+                "I'm running in a local environment without AI access."
+            )
             return MessagingService._mock_completion(fallback_message)
 
     @staticmethod
@@ -1377,9 +1259,7 @@ class MessagingService:
         history = MessagingService._build_history(conversation, channel)
         max_tokens = 500 if channel == "sms" else 1000
         metadata = SlotSelectionManager.conversation_metadata(conversation)
-        force_needed = MessagingService._requires_availability_enforcement(
-            db, conversation
-        )
+        force_needed = MessagingService._requires_availability_enforcement(db, conversation)
 
         trace = MessagingService._make_trace_logger(conversation)
         calendar_service = MessagingService._get_calendar_service()
@@ -1398,11 +1278,7 @@ class MessagingService:
             # Extract date and service from recent messages
             date, service_type = MessagingService._extract_booking_params(conversation)
 
-            trace(
-                "Preemptively calling check_availability: date=%s, service=%s",
-                date,
-                service_type,
-            )
+            trace("Preemptively calling check_availability: date=%s, service=%s", date, service_type)
 
             try:
                 output = handle_check_availability(
@@ -1431,58 +1307,54 @@ class MessagingService:
                     }
 
                     # Add tool result to history so AI knows about the availability
-                    history.append(
-                        {
-                            "role": "assistant",
-                            "content": "",  # Empty string instead of None to avoid trace errors
-                            "tool_calls": [
-                                {
-                                    "id": "preemptive_call",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "check_availability",
-                                        "arguments": json.dumps(
-                                            {"date": date, "service_type": service_type}
-                                        ),
-                                    },
-                                }
-                            ],
-                        }
-                    )
-                    history.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": "preemptive_call",
-                            "content": json.dumps(output),
-                        }
-                    )
+                    history.append({
+                        "role": "assistant",
+                        "content": "",  # Empty string instead of None to avoid trace errors
+                        "tool_calls": [{
+                            "id": "preemptive_call",
+                            "type": "function",
+                            "function": {
+                                "name": "check_availability",
+                                "arguments": json.dumps({"date": date, "service_type": service_type})
+                            }
+                        }]
+                    })
+                    history.append({
+                        "role": "tool",
+                        "tool_call_id": "preemptive_call",
+                        "content": json.dumps(output)
+                    })
 
-                    metadata.update(
-                        {
-                            "pending_booking_intent": True,
-                            "pending_booking_date": date,
-                            "pending_booking_service": service_type,
-                        }
-                    )
-                    SlotSelectionManager.persist_conversation_metadata(
-                        db, conversation, metadata
-                    )
+                    # Only set booking intent if not already completed
+                    # If last_appointment exists with same slot, don't restart the booking flow
+                    should_set_intent = True
+                    last_appt = metadata.get("last_appointment")
+                    if isinstance(last_appt, dict) and last_appt.get("status") == "scheduled":
+                        should_set_intent = False
 
-                    trace(
-                        "Preemptive check_availability succeeded. Injected results into context."
-                    )
+                    if should_set_intent:
+                        metadata.update(
+                            {
+                                "pending_booking_intent": True,
+                                "pending_booking_date": date,
+                                "pending_booking_service": service_type,
+                            }
+                        )
+                        SlotSelectionManager.persist_conversation_metadata(db, conversation, metadata)
+
+                    trace("Preemptive check_availability succeeded. Injected results into context.")
                 else:
                     logger.warning(
                         "Preemptive check_availability failed for conversation %s: %s",
                         conversation_id,
-                        output.get("error", "Unknown error"),
+                        output.get("error", "Unknown error")
                     )
             except Exception as exc:
                 logger.error(
                     "Exception during preemptive check_availability for conversation %s: %s",
                     conversation_id,
                     exc,
-                    exc_info=True,
+                    exc_info=True
                 )
 
         readiness = MessagingService._should_execute_booking(db, conversation)
@@ -1549,9 +1421,7 @@ class MessagingService:
                 trace("-- ToolResult[%s]: %s", call_id, result.get("output"))
                 tool_call_results.append(result)
 
-            history.extend(
-                MessagingService._tool_context_messages(message, tool_call_results)
-            )
+            history.extend(MessagingService._tool_context_messages(message, tool_call_results))
 
             # When tools are called, return empty text content
             # The followup response will generate the actual message based on tool results
@@ -1578,9 +1448,7 @@ class MessagingService:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
         history = MessagingService._build_history(conversation, channel)
-        history.extend(
-            MessagingService._tool_context_messages(assistant_message, tool_results)
-        )
+        history.extend(MessagingService._tool_context_messages(assistant_message, tool_results))
         max_tokens = 500 if channel == "sms" else 1000
 
         if not s.OPENAI_API_KEY:
@@ -1591,6 +1459,26 @@ class MessagingService:
             return MessagingService._fallback_response(channel), None
 
         try:
+            # Check if any tool result was a successful book_appointment
+            booking_success = None
+            for result in tool_results:
+                output = result.get("output", {})
+                if isinstance(output, dict) and output.get("success") is True:
+                    # Check if this was a booking operation
+                    if output.get("event_id") or output.get("appointment_id"):
+                        booking_success = output
+                        break
+
+            # If booking succeeded, force a confirmation message
+            if booking_success:
+                confirmation = MessagingService.build_booking_confirmation_message(
+                    channel=channel,
+                    tool_output=booking_success,
+                )
+                if confirmation:
+                    # Return confirmation directly, don't let AI generate ambiguous text
+                    return confirmation, None
+
             response = openai_client.chat.completions.create(
                 model=s.OPENAI_MESSAGING_MODEL,
                 messages=history,
@@ -1631,9 +1519,7 @@ class MessagingService:
         }
 
     @staticmethod
-    def email_metadata_for_customer(
-        customer_email: str, subject: Optional[str], body_text: str
-    ) -> Dict[str, Any]:
+    def email_metadata_for_customer(customer_email: str, subject: Optional[str], body_text: str) -> Dict[str, Any]:
         return {
             "subject": subject or "Message from Luxury Med Spa",
             "from_address": customer_email,
@@ -1642,9 +1528,7 @@ class MessagingService:
         }
 
     @staticmethod
-    def email_metadata_for_assistant(
-        customer_email: str, subject: Optional[str], body_text: str
-    ) -> Dict[str, Any]:
+    def email_metadata_for_assistant(customer_email: str, subject: Optional[str], body_text: str) -> Dict[str, Any]:
         return {
             "subject": subject or "Message from Luxury Med Spa",
             "from_address": s.MED_SPA_EMAIL,

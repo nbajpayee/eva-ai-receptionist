@@ -12,6 +12,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session, joinedload
 
 from analytics import AnalyticsService
+from booking.manager import SlotSelectionManager
 from database import Conversation, Customer, get_db
 from messaging_service import MessagingService
 
@@ -168,6 +169,11 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
         content=request.content,
         metadata={"source": "messaging_console"},
     )
+
+    # Capture slot selections (e.g., "Option 2" or explicit time choices) as soon as the
+    # inbound message is stored so deterministic booking can trigger without waiting for
+    # the AI to parse the message later.
+    SlotSelectionManager.capture_selection(db, conversation, inbound_message)
 
     # Refresh conversation to get any metadata updates from slot selection capture
     db.refresh(conversation)

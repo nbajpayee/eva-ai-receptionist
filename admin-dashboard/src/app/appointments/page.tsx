@@ -1,385 +1,286 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, ChevronRight, Calendar, Clock, User } from "lucide-react";
-import Link from "next/link";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar, Clock, User, Download, ChevronRight } from "lucide-react";
+import { format, parseISO, isFuture, isPast } from "date-fns";
+import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
+import { AppointmentCardSkeletonList } from "@/components/skeletons/appointment-card-skeleton";
 
-type Appointment = {
+interface Appointment {
   id: number;
   customer_id: number;
-  calendar_event_id: string;
+  calendar_event_id?: string;
   appointment_datetime: string;
   service_type: string;
-  provider: string | null;
+  provider?: string;
   duration_minutes: number;
   status: "scheduled" | "completed" | "cancelled" | "no_show" | "rescheduled";
-  special_requests: string | null;
   booked_by: string;
+  special_requests?: string;
+  cancellation_reason?: string;
   created_at: string;
   updated_at: string;
-  cancelled_at: string | null;
-  cancellation_reason: string | null;
-};
+  cancelled_at?: string;
+  customer?: {
+    id: number;
+    name: string;
+    phone: string;
+    email?: string;
+  };
+}
 
-type AppointmentsResponse = {
+interface AppointmentsResponse {
   appointments: Appointment[];
+  total: number;
+}
+
+const STATUS_LABELS: Record<Appointment["status"], string> = {
+  scheduled: "Scheduled",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  no_show: "No Show",
+  rescheduled: "Rescheduled",
 };
 
-const statusColors: Record<Appointment["status"], string> = {
+const STATUS_COLORS: Record<Appointment["status"], string> = {
   scheduled: "bg-sky-50 text-sky-700 border-sky-200",
   completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
   cancelled: "bg-rose-50 text-rose-700 border-rose-200",
   no_show: "bg-amber-50 text-amber-700 border-amber-200",
-  rescheduled: "bg-zinc-100 text-zinc-700 border-zinc-200",
+  rescheduled: "bg-violet-50 text-violet-700 border-violet-200",
 };
 
-const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December"
-];
-
 export default function AppointmentsPage() {
-  const [currentDate, setCurrentDate] = useState(new Date());
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [refreshStatus, setRefreshStatus] = useState<"idle" | "success" | "error">("idle");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<Appointment["status"] | "all">("all");
+  const [timeFilter, setTimeFilter] = useState<"all" | "upcoming" | "past">("all");
 
-  const currentMonth = currentDate.getMonth();
-  const currentYear = currentDate.getFullYear();
-
-  const fetchAppointments = useCallback(
-    async (options?: { silent?: boolean }) => {
-      const silent = options?.silent ?? false;
-      if (!silent) {
-        setLoading(true);
-      }
-
+  useEffect(() => {
+    const fetchAppointments = async () => {
       try {
-        // Fetch appointments for the current month
-        const startDate = new Date(currentYear, currentMonth, 1);
-        const endDate = new Date(currentYear, currentMonth + 1, 0);
-
-        const response = await fetch(
-          `/api/admin/appointments?start_date=${startDate.toISOString()}&end_date=${endDate.toISOString()}`
-        );
+        const response = await fetch("/api/admin/appointments");
 
         if (!response.ok) {
-          throw new Error("Failed to fetch appointments");
+          console.warn("Failed to fetch appointments", response.statusText);
+          return;
         }
 
-        const data: AppointmentsResponse = await response.json();
-        setAppointments(data.appointments);
-        setLastUpdated(new Date());
-        setRefreshStatus("success");
-        setErrorMessage(null);
+        const data = (await response.json()) as AppointmentsResponse;
+        setAppointments(data.appointments || []);
       } catch (error) {
-        console.error("Error fetching appointments:", error);
-        setRefreshStatus("error");
-        setErrorMessage(error instanceof Error ? error.message : "Unknown error");
+        console.error("Error fetching appointments", error);
       } finally {
-        if (!silent) {
-          setLoading(false);
-        }
+        setIsLoading(false);
       }
-    },
-    [currentMonth, currentYear]
-  );
+    };
 
-  useEffect(() => {
     fetchAppointments();
-  }, [fetchAppointments]);
+  }, []);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchAppointments({ silent: true }).catch(() => {
-        /* errors handled in fetch */
-      });
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [fetchAppointments]);
-
-  useEffect(() => {
-    if (refreshStatus === "idle") {
-      return;
+  // Filter appointments
+  const filteredAppointments = appointments.filter((apt) => {
+    // Status filter
+    if (statusFilter !== "all" && apt.status !== statusFilter) {
+      return false;
     }
 
-    const timeout = setTimeout(() => {
-      setRefreshStatus("idle");
-    }, refreshStatus === "error" ? 6000 : 3000);
-
-    return () => clearTimeout(timeout);
-  }, [refreshStatus]);
-
-  const getDaysInMonth = () => {
-    const firstDay = new Date(currentYear, currentMonth, 1);
-    const lastDay = new Date(currentYear, currentMonth + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
-
-    const days: (Date | null)[] = [];
-
-    // Add empty cells for days before the first day of the month
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(null);
+    // Time filter
+    if (timeFilter !== "all") {
+      const aptDate = parseISO(apt.appointment_datetime);
+      if (timeFilter === "upcoming" && !isFuture(aptDate)) return false;
+      if (timeFilter === "past" && !isPast(aptDate)) return false;
     }
 
-    // Add all days of the month
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push(new Date(currentYear, currentMonth, day));
-    }
+    return true;
+  });
 
-    return days;
+  const handleExport = () => {
+    const exportData = filteredAppointments.map((apt) => ({
+      ID: apt.id,
+      "Customer": apt.customer?.name || "N/A",
+      "Phone": apt.customer?.phone || "N/A",
+      "Service": apt.service_type,
+      "Provider": apt.provider || "N/A",
+      "Date & Time": format(parseISO(apt.appointment_datetime), "yyyy-MM-dd HH:mm"),
+      "Duration (min)": apt.duration_minutes,
+      "Status": apt.status,
+      "Booked By": apt.booked_by,
+      "Special Requests": apt.special_requests || "N/A",
+      "Created": format(parseISO(apt.created_at), "yyyy-MM-dd"),
+    }));
+
+    exportToCSV(exportData, generateExportFilename("appointments"));
   };
-
-  const getAppointmentsForDate = (date: Date | null) => {
-    if (!date) return [];
-
-    return appointments.filter((apt) => {
-      const aptDate = new Date(apt.appointment_datetime);
-      return (
-        aptDate.getDate() === date.getDate() &&
-        aptDate.getMonth() === date.getMonth() &&
-        aptDate.getFullYear() === date.getFullYear()
-      );
-    });
-  };
-
-  const previousMonth = () => {
-    setCurrentDate(new Date(currentYear, currentMonth - 1, 1));
-  };
-
-  const nextMonth = () => {
-    setCurrentDate(new Date(currentYear, currentMonth + 1, 1));
-  };
-
-  const isToday = (date: Date | null) => {
-    if (!date) return false;
-    const today = new Date();
-    return (
-      date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    );
-  };
-
-  const days = getDaysInMonth();
-  const selectedDateAppointments = selectedDate ? getAppointmentsForDate(selectedDate) : [];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-900">Appointments Calendar</h1>
-          <p className="mt-1 text-sm text-zinc-500">View and manage scheduled appointments</p>
+      <header className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold text-zinc-900">Appointments</h1>
+          <p className="text-sm text-zinc-500">
+            Manage and track all scheduled appointments
+          </p>
         </div>
-        <div className="flex flex-col gap-2 text-right sm:flex-row sm:items-center sm:gap-3">
-          <div className="flex items-center justify-end gap-2 text-xs text-zinc-500 sm:text-sm">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                refreshStatus === "error"
-                  ? "bg-rose-500"
-                  : refreshStatus === "success"
-                    ? "bg-emerald-500"
-                    : "bg-zinc-300"
-              }`}
-            />
-            {refreshStatus === "error" && errorMessage ? (
-              <span className="max-w-[220px] truncate text-rose-600" title={errorMessage}>
-                Sync failed: {errorMessage}
-              </span>
-            ) : lastUpdated ? (
-              <span>
-                Updated at {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </span>
-            ) : (
-              <span>Waiting for first sync…</span>
-            )}
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => fetchAppointments()} disabled={loading}>
-              Refresh now
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/">Back to Dashboard</Link>
-            </Button>
-          </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={filteredAppointments.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
         </div>
+      </header>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+        <span className="text-sm font-medium text-zinc-700">Filter:</span>
+
+        <Select value={timeFilter} onValueChange={(value) => setTimeFilter(value as "all" | "upcoming" | "past")}>
+          <SelectTrigger className="w-[130px] bg-white">
+            <SelectValue placeholder="Time" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Times</SelectItem>
+            <SelectItem value="upcoming">Upcoming</SelectItem>
+            <SelectItem value="past">Past</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as Appointment["status"] | "all")}>
+          <SelectTrigger className="w-[140px] bg-white">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="scheduled">Scheduled</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
+            <SelectItem value="no_show">No Show</SelectItem>
+            <SelectItem value="rescheduled">Rescheduled</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {(statusFilter !== "all" || timeFilter !== "all") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setStatusFilter("all");
+              setTimeFilter("all");
+            }}
+          >
+            Clear Filters
+          </Button>
+        )}
+
+        <span className="ml-auto text-sm text-zinc-500">
+          Showing {filteredAppointments.length} of {appointments.length} appointments
+        </span>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-          {/* Calendar View */}
-          <Card className="border-zinc-200 lg:col-span-2">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">
-                  {MONTHS[currentMonth]} {currentYear}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={previousMonth}>
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={nextMonth}>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <p className="text-sm text-zinc-500">Loading appointments...</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {/* Days of week header */}
-                  <div className="grid grid-cols-7 gap-2">
-                    {DAYS_OF_WEEK.map((day) => (
-                      <div
-                        key={day}
-                        className="text-center text-xs font-medium uppercase tracking-wide text-zinc-500"
-                      >
-                        {day}
-                      </div>
-                    ))}
-                  </div>
+      {isLoading && <AppointmentCardSkeletonList count={5} />}
 
-                  {/* Calendar grid */}
-                  <div className="grid grid-cols-7 gap-2">
-                    {days.map((date, index) => {
-                      const dayAppointments = getAppointmentsForDate(date);
-                      const isSelected = selectedDate && date &&
-                        selectedDate.getDate() === date.getDate() &&
-                        selectedDate.getMonth() === date.getMonth();
+      {!isLoading && appointments.length === 0 && (
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
+          <p className="text-sm text-zinc-600">
+            No appointments found. Appointments will appear here once they are booked.
+          </p>
+        </div>
+      )}
 
-                      return (
-                        <button
-                          key={index}
-                          onClick={() => date && setSelectedDate(date)}
-                          disabled={!date}
-                          className={`
-                            min-h-[80px] rounded-lg border p-2 text-left transition-colors
-                            ${!date ? "invisible" : ""}
-                            ${isToday(date) ? "border-sky-500 bg-sky-50/50" : "border-zinc-200 bg-white"}
-                            ${isSelected ? "ring-2 ring-sky-500" : ""}
-                            ${date && !isSelected ? "hover:bg-zinc-50" : ""}
-                            disabled:cursor-not-allowed
-                          `}
+      {!isLoading && appointments.length > 0 && filteredAppointments.length === 0 && (
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
+          <p className="text-sm text-zinc-600">
+            No appointments match your filter criteria.
+          </p>
+        </div>
+      )}
+
+      {filteredAppointments.length > 0 && (
+        <div className="grid gap-4">
+          {filteredAppointments.map((apt) => {
+            const aptDate = parseISO(apt.appointment_datetime);
+            const isUpcoming = isFuture(aptDate);
+
+            return (
+              <Card key={apt.id} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-lg font-semibold">{apt.service_type}</CardTitle>
+                        <Badge
+                          variant="outline"
+                          className={`${STATUS_COLORS[apt.status]} font-medium text-xs`}
                         >
-                          {date && (
-                            <>
-                              <div className="mb-1 flex items-center justify-between">
-                                <span className={`text-sm font-medium ${isToday(date) ? "text-sky-700" : "text-zinc-900"}`}>
-                                  {date.getDate()}
-                                </span>
-                                {dayAppointments.length > 0 && (
-                                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-100 text-xs font-medium text-sky-700">
-                                    {dayAppointments.length}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="space-y-1">
-                                {dayAppointments.slice(0, 2).map((apt) => (
-                                  <div
-                                    key={apt.id}
-                                    className="truncate rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700"
-                                  >
-                                    {new Date(apt.appointment_datetime).toLocaleTimeString("en-US", {
-                                      hour: "numeric",
-                                      minute: "2-digit",
-                                      hour12: true,
-                                    })}
-                                  </div>
-                                ))}
-                                {dayAppointments.length > 2 && (
-                                  <div className="text-xs text-zinc-500">
-                                    +{dayAppointments.length - 2} more
-                                  </div>
-                                )}
-                              </div>
-                            </>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Appointments List for Selected Date */}
-          <Card className="border-zinc-200">
-            <CardHeader>
-              <CardTitle className="text-lg">
-                {selectedDate
-                  ? `${MONTHS[selectedDate.getMonth()]} ${selectedDate.getDate()}, ${selectedDate.getFullYear()}`
-                  : "Select a date"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {!selectedDate ? (
-                <p className="text-center text-sm text-zinc-500">
-                  Click on a date to view appointments
-                </p>
-              ) : selectedDateAppointments.length === 0 ? (
-                <p className="text-center text-sm text-zinc-500">
-                  No appointments scheduled
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {selectedDateAppointments.map((apt) => (
-                    <div
-                      key={apt.id}
-                      className="rounded-lg border border-zinc-200 bg-white p-4"
-                    >
-                      <div className="mb-3 flex items-start justify-between">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-zinc-400" />
-                          <span className="text-sm font-medium text-zinc-900">
-                            {apt.service_type}
-                          </span>
-                        </div>
-                        <Badge variant="outline" className={statusColors[apt.status]}>
-                          {apt.status}
+                          {STATUS_LABELS[apt.status]}
                         </Badge>
-                      </div>
-
-                      <div className="space-y-2 text-sm text-zinc-600">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-zinc-400" />
-                          <span>
-                            {new Date(apt.appointment_datetime).toLocaleTimeString("en-US", {
-                              hour: "numeric",
-                              minute: "2-digit",
-                              hour12: true,
-                            })}
-                            {" "}({apt.duration_minutes} min)
-                          </span>
-                        </div>
-
-                        {apt.provider && (
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-zinc-400" />
-                            <span>{apt.provider}</span>
-                          </div>
+                        {isUpcoming && apt.status === "scheduled" && (
+                          <Badge variant="default" className="bg-blue-600 text-xs">
+                            Upcoming
+                          </Badge>
                         )}
                       </div>
+
+                      <div className="flex items-center gap-4 text-sm text-zinc-600">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          {format(aptDate, "EEE, MMM d, yyyy")}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-4 w-4" />
+                          {format(aptDate, "h:mm a")} ({apt.duration_minutes} min)
+                        </span>
+                        {apt.provider && (
+                          <span className="flex items-center gap-1">
+                            <User className="h-4 w-4" />
+                            {apt.provider}
+                          </span>
+                        )}
+                      </div>
+
+                      {apt.customer && (
+                        <div className="text-sm text-zinc-600">
+                          <span className="font-medium">Customer:</span> {apt.customer.name} ({apt.customer.phone})
+                        </div>
+                      )}
+
+                      {apt.special_requests && (
+                        <div className="text-sm text-zinc-600">
+                          <span className="font-medium">Notes:</span> {apt.special_requests}
+                        </div>
+                      )}
+
+                      {apt.cancellation_reason && (
+                        <div className="text-sm text-rose-600">
+                          <span className="font-medium">Cancellation Reason:</span> {apt.cancellation_reason}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+
+                    <Link href={`/customers/${apt.customer_id}`}>
+                      <Button variant="outline" size="sm">
+                        View Customer
+                        <ChevronRight className="ml-1 h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-3 border-t border-zinc-100">
+                  <div className="flex items-center justify-between text-xs text-zinc-500">
+                    <span>Booked by: {apt.booked_by}</span>
+                    <span>Created: {format(parseISO(apt.created_at), "MMM d, yyyy")}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
+      )}
     </div>
   );
 }

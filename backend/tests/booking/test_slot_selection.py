@@ -122,6 +122,32 @@ def test_capture_selection_parses_numeric_choice(db_session):
     assert pending["selected_slot"]["start"] == slots[1]["start"]
 
 
+def test_capture_selection_handles_time_string(db_session):
+    conversation = _make_conversation(db_session)
+    base_time = datetime(2025, 11, 16, 9, 0)
+    slots = [
+        _sample_slot(idx + 1, base_time + timedelta(minutes=30 * idx))
+        for idx in range(12)
+    ]
+
+    SlotSelectionCore.record_offers(
+        db_session,
+        conversation,
+        tool_call_id="tool_time",
+        arguments={},
+        output={"available_slots": slots},
+    )
+
+    message = _make_message(db_session, conversation, "Let's do 11:30am")
+    captured = SlotSelectionCore.capture_selection(db_session, conversation, message)
+    assert captured is True
+
+    db_session.refresh(conversation)
+    pending = conversation.custom_metadata["pending_slot_offers"]
+    assert pending["selected_slot"]["start"] == slots[5]["start"]
+    assert pending["selected_option_index"] == 6
+
+
 def test_enforce_booking_raises_when_no_pending_offers(db_session):
     conversation = _make_conversation(db_session)
 
