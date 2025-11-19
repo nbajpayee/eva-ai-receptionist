@@ -2336,9 +2336,13 @@ async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
     Twilio SMS webhook handler.
     Receives incoming SMS, finds or creates conversation, generates AI response.
     """
-    from twilio.twiml.messaging_response import MessagingResponse
-    from research.outbound_service import OutboundService
     import logging
+
+    from twilio.twiml.messaging_response import MessagingResponse
+
+    from database import SessionLocal
+    from messaging_service import MessagingService
+    from research.outbound_service import OutboundService
 
     logger = logging.getLogger(__name__)
 
@@ -2364,7 +2368,7 @@ async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
             customer = Customer(
                 name=f"Customer {from_number[-4:]}",  # Temp name
                 phone=from_number,
-                created_at=datetime.utcnow()
+                created_at=datetime.utcnow(),
             )
             db.add(customer)
             db.commit()
@@ -2373,9 +2377,7 @@ async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
 
         # Find active SMS conversation (non-campaign) or create new
         conversation = MessagingService.find_active_conversation(
-            db=db,
-            customer_id=customer.id,
-            channel="sms"
+            db=db, customer_id=customer.id, channel="sms"
         )
 
         # If no active conversation, create one
@@ -2384,7 +2386,7 @@ async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
                 db=db,
                 customer_id=customer.id,
                 channel="sms",
-                metadata={"twilio_from": to_number}
+                metadata={"twilio_from": to_number},
             )
             logger.info(f"Created new SMS conversation {conversation.id}")
 
@@ -2394,7 +2396,7 @@ async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
             conversation_id=conversation.id,
             direction="inbound",
             content=message_body,
-            metadata={"message_sid": message_sid}
+            metadata={"message_sid": message_sid},
         )
 
         # Add SMS details
@@ -2404,7 +2406,7 @@ async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
             from_number=from_number,
             to_number=to_number,
             provider_message_id=message_sid,
-            delivery_status="received"
+            delivery_status="received",
         )
 
         # Update conversation last activity
@@ -2419,17 +2421,12 @@ async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
 
         # Generate AI response
         ai_response_text = MessagingService.generate_ai_response(
-            db=db,
-            conversation_id=conversation.id,
-            user_message=message_body
+            db=db, conversation_id=conversation.id, user_message=message_body
         )
 
         # Add outbound message to database
         outbound_msg = MessagingService.add_assistant_message(
-            db=db,
-            conversation=conversation,
-            content=ai_response_text,
-            metadata={}
+            db=db, conversation=conversation, content=ai_response_text, metadata={}
         )
 
         # TODO: In production, send SMS via Twilio:
@@ -2461,7 +2458,9 @@ async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
         logger.error(f"Error handling SMS webhook: {str(e)}", exc_info=True)
         # Return generic error response
         resp = MessagingResponse()
-        resp.message(f"We're experiencing technical difficulties. Please call us at {settings.MED_SPA_PHONE}")
+        resp.message(
+            f"We're experiencing technical difficulties. Please call us at {settings.MED_SPA_PHONE}"
+        )
         return Response(content=str(resp), media_type="application/xml")
 
 
@@ -2471,8 +2470,11 @@ async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db))
     SendGrid inbound email webhook handler.
     Receives incoming emails, finds or creates conversation, generates AI response.
     """
-    from research.outbound_service import OutboundService
     import logging
+
+    from database import SessionLocal
+    from messaging_service import MessagingService
+    from research.outbound_service import OutboundService
 
     logger = logging.getLogger(__name__)
 
@@ -2493,7 +2495,8 @@ async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db))
 
         # Extract plain email address (remove name if present)
         import re
-        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', from_email)
+
+        email_match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", from_email)
         from_email_clean = email_match.group(0) if email_match else from_email
 
         # Find or create customer by email
@@ -2503,7 +2506,7 @@ async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db))
             customer = Customer(
                 name=f"Customer ({from_email_clean})",  # Temp name
                 email=from_email_clean,
-                created_at=datetime.utcnow()
+                created_at=datetime.utcnow(),
             )
             db.add(customer)
             db.commit()
@@ -2512,9 +2515,7 @@ async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db))
 
         # Find active email conversation or create new
         conversation = MessagingService.find_active_conversation(
-            db=db,
-            customer_id=customer.id,
-            channel="email"
+            db=db, customer_id=customer.id, channel="email"
         )
 
         # If no active conversation, create one
@@ -2524,7 +2525,7 @@ async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db))
                 customer_id=customer.id,
                 channel="email",
                 subject=subject,
-                metadata={"original_subject": subject}
+                metadata={"original_subject": subject},
             )
             logger.info(f"Created new email conversation {conversation.id}")
 
@@ -2535,7 +2536,7 @@ async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db))
             conversation_id=conversation.id,
             direction="inbound",
             content=message_content,
-            metadata={"subject": subject}
+            metadata={"subject": subject},
         )
 
         # Add email details
@@ -2548,7 +2549,7 @@ async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db))
             body_text=text_body,
             body_html=html_body,
             provider_message_id=form_data.get("message-id", f"sg_{inbound_msg.id}"),
-            delivery_status="received"
+            delivery_status="received",
         )
 
         # Update conversation last activity
@@ -2563,9 +2564,7 @@ async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db))
 
         # Generate AI response
         ai_response_text = MessagingService.generate_ai_response(
-            db=db,
-            conversation_id=conversation.id,
-            user_message=message_content
+            db=db, conversation_id=conversation.id, user_message=message_content
         )
 
         # Add outbound message to database
@@ -2574,7 +2573,7 @@ async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db))
             db=db,
             conversation=conversation,
             content=ai_response_text,
-            metadata={"subject": reply_subject}
+            metadata={"subject": reply_subject},
         )
 
         # TODO: In production, send email via SendGrid:
@@ -2606,15 +2605,12 @@ async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db))
         return {
             "status": "success",
             "conversation_id": str(conversation.id),
-            "message": "Email received and response generated"
+            "message": "Email received and response generated",
         }
 
     except Exception as e:
         logger.error(f"Error handling email webhook: {str(e)}", exc_info=True)
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return {"status": "error", "message": str(e)}
 
 
 # ==================== Provider Analytics Endpoints ====================
