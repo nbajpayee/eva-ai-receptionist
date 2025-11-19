@@ -54,12 +54,12 @@ const NAV_ITEMS: SidebarNavItem[] = [
   {
     title: "Consultation",
     href: "/consultation",
-    icon: "mic",
+    icon: "consultation",
   },
   {
     title: "Providers",
     href: "/providers",
-    icon: "users",
+    icon: "providers",
   },
   {
     title: "Console Reports",
