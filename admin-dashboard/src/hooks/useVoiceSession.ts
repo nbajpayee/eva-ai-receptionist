@@ -30,6 +30,50 @@ const AUDIO_BUFFER_SIZE = 4096;
 const PING_INTERVAL_MS = 5000;
 const DEFAULT_VAD_THRESHOLD = 0.005;
 
+type VoiceServerMessage =
+  | { type: "audio"; data: string }
+  | { type: "transcript"; data?: { speaker?: string; text?: string } }
+  | { type: "pong"; data?: { client_sent_at?: string; server_received_at?: string } }
+  | { type: "error"; data?: { message?: string } | string | null };
+
+type UnknownVoiceServerMessage = { type: string; data?: unknown };
+
+type AudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext;
+
+const parseVoiceServerMessage = (payload: string): VoiceServerMessage | UnknownVoiceServerMessage | null => {
+  try {
+    const parsed = JSON.parse(payload) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    const { type } = parsed as { type?: unknown };
+    if (typeof type !== "string") {
+      return null;
+    }
+    return parsed as VoiceServerMessage | UnknownVoiceServerMessage;
+  } catch (err) {
+    console.error("Failed to parse server payload", err);
+    return null;
+  }
+};
+
+const resolveAudioContextConstructor = (): AudioContextConstructor => {
+  const win = window as Window & {
+    AudioContext?: AudioContextConstructor;
+    webkitAudioContext?: AudioContextConstructor;
+  };
+
+  if (typeof win.AudioContext === "function") {
+    return win.AudioContext;
+  }
+
+  if (typeof win.webkitAudioContext === "function") {
+    return win.webkitAudioContext;
+  }
+
+  throw new Error("Web Audio API not supported in this browser");
+};
+
 const initialDiagnostics: VoiceDiagnostics = {
   latencyMs: null,
   lastHeartbeatAt: null,
@@ -296,18 +340,32 @@ export function useVoiceSession() {
 
   const handleServerMessage = useCallback(
     (event: MessageEvent<string>) => {
-      try {
-        const message = JSON.parse(event.data) as { type: string; data: any };
-        if (message.type === "audio" && message.data) {
-          playAudioChunk(message.data as string);
-        } else if (message.type === "transcript" && message.data) {
-          addTranscriptEntry(message.data.speaker ?? "Ava", message.data.text ?? "");
-        } else if (message.type === "pong") {
-          const clientSentAt = message.data?.client_sent_at
-            ? new Date(message.data.client_sent_at).getTime()
+      const message = parseVoiceServerMessage(event.data);
+      if (!message) {
+        return;
+      }
+
+      switch (message.type) {
+        case "audio": {
+          if (typeof message.data === "string") {
+            playAudioChunk(message.data);
+          }
+          break;
+        }
+        case "transcript": {
+          const payload = message as Extract<VoiceServerMessage, { type: "transcript" }>;
+          const speaker = payload.data?.speaker ?? "Ava";
+          const text = payload.data?.text ?? "";
+          addTranscriptEntry(speaker, text);
+          break;
+        }
+        case "pong": {
+          const payload = message as Extract<VoiceServerMessage, { type: "pong" }>;
+          const clientSentAt = payload.data?.client_sent_at
+            ? new Date(payload.data.client_sent_at).getTime()
             : null;
-          const serverReceivedAt = message.data?.server_received_at
-            ? new Date(message.data.server_received_at).getTime()
+          const serverReceivedAt = payload.data?.server_received_at
+            ? new Date(payload.data.server_received_at).getTime()
             : null;
 
           setDiagnostics((prev) => ({
@@ -315,17 +373,26 @@ export function useVoiceSession() {
             latencyMs: clientSentAt ? Date.now() - clientSentAt : prev.latencyMs,
             lastHeartbeatAt: serverReceivedAt ?? Date.now(),
           }));
-        } else if (message.type === "error") {
-          const messageText = typeof message.data === "string" ? message.data : message.data?.message;
-          setError(messageText ?? "Server returned an error");
-          addTranscriptEntry("System", `Error: ${messageText ?? "Unknown"}`);
+          break;
+        }
+        case "error": {
+          const payload = message as Extract<VoiceServerMessage, { type: "error" }>;
+          const messageText =
+            typeof payload.data === "string"
+              ? payload.data
+              : payload.data?.message ?? null;
+          const errorText = messageText ?? "Server returned an error";
+          setError(errorText);
+          addTranscriptEntry("System", `Error: ${errorText}`);
           setDiagnostics((prev) => ({
             ...prev,
             lastErrorAt: Date.now(),
           }));
+          break;
         }
-      } catch (err) {
-        console.error("Failed to parse server message", err);
+        default:
+          // Unknown message types are ignored for now
+          break;
       }
     },
     [addTranscriptEntry, playAudioChunk]
@@ -421,7 +488,8 @@ export function useVoiceSession() {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = mediaStream;
 
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+      const AudioContextClass = resolveAudioContextConstructor();
+      const audioContext = new AudioContextClass({
         sampleRate: SAMPLE_RATE,
       });
       audioContextRef.current = audioContext;

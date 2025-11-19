@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Settings, MapPin, Clock, Briefcase, Users } from "lucide-react";
+import { Settings, MapPin, Briefcase, Users } from "lucide-react";
 import { GeneralSettings } from "@/components/settings/general-settings";
 import { LocationsSettings } from "@/components/settings/locations-settings";
 import { ServicesSettings } from "@/components/settings/services-settings";

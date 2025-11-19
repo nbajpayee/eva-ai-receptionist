@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const incomingUrl = new URL(request.url);
     const proxyUrl = new URL("/api/admin/providers", baseUrl);
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 

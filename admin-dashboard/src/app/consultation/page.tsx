@@ -7,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Mic, Square, Upload, Loader2, CheckCircle } from "lucide-react";
-import { Input } from "@/components/ui/input";
 
 type Provider = {
   id: string;
@@ -311,7 +310,7 @@ export default function ConsultationPage() {
                 <Label htmlFor="provider">Provider *</Label>
                 <Select
                   value={state.providerId}
-                  onValueChange={(value) =>
+                  onValueChange={(value: string) =>
                     setState(prev => ({ ...prev, providerId: value }))
                   }
                   disabled={state.status === "recording"}
@@ -333,8 +332,8 @@ export default function ConsultationPage() {
                 <Label htmlFor="customer">Customer (Optional)</Label>
                 <Select
                   value={state.customerId?.toString() || ""}
-                  onValueChange={(value) =>
-                    setState(prev => ({ ...prev, customerId: parseInt(value) }))
+                  onValueChange={(value: string) =>
+                    setState(prev => ({ ...prev, customerId: parseInt(value, 10) || null }))
                   }
                   disabled={state.status === "recording"}
                 >
@@ -355,7 +354,7 @@ export default function ConsultationPage() {
                 <Label htmlFor="service">Service Type</Label>
                 <Select
                   value={state.serviceType}
-                  onValueChange={(value) =>
+                  onValueChange={(value: string) =>
                     setState(prev => ({ ...prev, serviceType: value }))
                   }
                   disabled={state.status === "recording"}
@@ -377,7 +376,7 @@ export default function ConsultationPage() {
                 <Label htmlFor="outcome">Outcome *</Label>
                 <Select
                   value={state.outcome}
-                  onValueChange={(value: any) =>
+                  onValueChange={(value: ConsultationState["outcome"]) =>
                     setState(prev => ({ ...prev, outcome: value }))
                   }
                   disabled={state.status === "recording" || !state.recording}

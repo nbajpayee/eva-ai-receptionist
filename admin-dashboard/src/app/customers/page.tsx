@@ -36,21 +36,6 @@ interface CustomersResponse {
   total_pages: number;
 }
 
-function getAppOrigin(): string {
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL;
-  }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-  return "http://localhost:3000";
-}
-
-function resolveInternalUrl(path: string): string {
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-  return `${getAppOrigin()}${basePath}${path}`;
-}
-
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -273,7 +258,10 @@ export default function CustomersPage() {
                   {/* Medical Flags */}
                   <div className="flex items-center gap-2">
                     {customer.has_allergies && (
-                      <Badge variant="destructive" className="text-xs">
+                      <Badge
+                        variant="outline"
+                        className="text-xs border-red-200 bg-red-100 text-red-700"
+                      >
                         <AlertTriangle className="mr-1 h-3 w-3" />
                         Allergies
                       </Badge>

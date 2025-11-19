@@ -10,10 +10,12 @@ import type { VoiceConnectionStatus } from "@/lib/voice-utils";
 
 const statusCopy: Record<VoiceConnectionStatus, string> = {
   idle: "Press start to begin a live call with Ava.",
+  disconnected: "Session ended. Start a new call to continue testing.",
   connecting: "Establishing secure connection…",
   connected: "Connection ready. Initializing audio stream…",
   listening: "Ava is listening. Try asking about services or booking an appointment!",
   error: "Something went wrong. Review the error below and try again.",
+  reconnecting: "Connection dropped. Attempting automatic reconnection…",
 };
 
 function LiveIndicator({ status }: { status: VoiceConnectionStatus }) {
@@ -47,7 +49,6 @@ function LiveIndicator({ status }: { status: VoiceConnectionStatus }) {
       >
         {Array.from({ length: 5 }).map((_, index) => (
           <span
-            // eslint-disable-next-line react/no-array-index-key
             key={index}
             className="voice-wave-bar h-3 w-1 rounded-full bg-emerald-500"
             style={{ animationDelay: `${index * 0.1}s` }}
@@ -61,6 +62,18 @@ function LiveIndicator({ status }: { status: VoiceConnectionStatus }) {
 }
 
 function TranscriptList({ entries }: { entries: TranscriptEntry[] }) {
+  const formatTimestamp = useCallback((entry: TranscriptEntry) => {
+    const [timestampPart] = entry.id.split("_");
+    const timestamp = Number(timestampPart);
+    if (Number.isFinite(timestamp) && timestamp > 0) {
+      const date = new Date(timestamp);
+      if (!Number.isNaN(date.valueOf())) {
+        return date.toLocaleTimeString();
+      }
+    }
+    return "--";
+  }, []);
+
   if (!entries.length) {
     return (
       <div className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 p-6 text-sm text-zinc-500">
@@ -80,7 +93,7 @@ function TranscriptList({ entries }: { entries: TranscriptEntry[] }) {
             {entry.speaker}
             <span className="h-1 w-1 rounded-full bg-zinc-300" />
             <span className="font-normal text-zinc-400">
-              {new Date(Number(entry.id.split("_")[0]) || Date.now()).toLocaleTimeString()}
+              {formatTimestamp(entry)}
             </span>
           </div>
           <p className="text-sm leading-relaxed text-zinc-800">{entry.text}</p>

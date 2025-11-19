@@ -56,7 +56,7 @@ export function useEnhancedVAD(options: EnhancedVADOptions) {
           isSpeakingRef.current = true;
           onSpeechStart();
         },
-        onSpeechEnd: (audio) => {
+        onSpeechEnd: () => {
           isSpeakingRef.current = false;
           onSpeechEnd();
         },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Users, Sparkles, MessageSquare, ArrowRight } from "lucide-react";
+import { Users, Sparkles, ArrowRight } from "lucide-react";
 
 interface CreateCampaignDialogProps {
   open: boolean;
@@ -19,10 +17,25 @@ interface CreateCampaignDialogProps {
   onSuccess: () => void;
 }
 
+type SegmentCriteriaValue = string | number | boolean | null | (string | number | boolean)[];
+type SegmentCriteria = Record<string, SegmentCriteriaValue>;
+
+type SegmentSample = {
+  id: string;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+};
+
+type SegmentPreview = {
+  total_count: number;
+  sample: SegmentSample[];
+};
+
 interface SegmentTemplate {
   name: string;
   description: string;
-  criteria: Record<string, any>;
+  criteria: SegmentCriteria;
 }
 
 interface AgentTemplate {
@@ -31,8 +44,24 @@ interface AgentTemplate {
   description: string;
   system_prompt: string;
   questions: string[];
-  voice_settings: Record<string, any>;
+  voice_settings: Record<string, unknown>;
 }
+
+type SegmentTemplatesResponse = {
+  success: boolean;
+  templates: Record<string, SegmentTemplate>;
+};
+
+type AgentTemplatesResponse = {
+  success: boolean;
+  templates: Record<string, AgentTemplate>;
+};
+
+type SegmentPreviewResponse = {
+  success: boolean;
+  total_count: number;
+  sample: SegmentSample[];
+};
 
 export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCampaignDialogProps) {
   const [step, setStep] = useState(1);
@@ -46,8 +75,8 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
   // Segment state
   const [segmentTemplates, setSegmentTemplates] = useState<Record<string, SegmentTemplate>>({});
   const [selectedSegmentTemplate, setSelectedSegmentTemplate] = useState<string>("");
-  const [segmentCriteria, setSegmentCriteria] = useState<Record<string, any>>({});
-  const [segmentPreview, setSegmentPreview] = useState<{ total_count: number; sample: any[] } | null>(null);
+  const [segmentCriteria, setSegmentCriteria] = useState<SegmentCriteria>({});
+  const [segmentPreview, setSegmentPreview] = useState<SegmentPreview | null>(null);
 
   // Agent state
   const [agentTemplates, setAgentTemplates] = useState<Record<string, AgentTemplate>>({});
@@ -55,67 +84,65 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
   const [systemPrompt, setSystemPrompt] = useState("");
   const [questions, setQuestions] = useState<string[]>([""]);
 
-  useEffect(() => {
-    if (open) {
-      fetchSegmentTemplates();
-      fetchAgentTemplates();
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (campaignType) {
-      fetchAgentTemplates();
-    }
-  }, [campaignType]);
-
-  const fetchSegmentTemplates = async () => {
+  const fetchSegmentTemplates = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/research/segments/templates");
-      const data = await response.json();
+      const data = (await response.json()) as SegmentTemplatesResponse;
       if (data.success) {
         setSegmentTemplates(data.templates);
       }
     } catch (error) {
       console.error("Failed to fetch segment templates:", error);
     }
-  };
+  }, []);
 
-  const fetchAgentTemplates = async () => {
+  const fetchAgentTemplates = useCallback(async () => {
     try {
       const response = await fetch(`/api/admin/research/agent-templates?campaign_type=${campaignType}`);
-      const data = await response.json();
+      const data = (await response.json()) as AgentTemplatesResponse;
       if (data.success) {
         setAgentTemplates(data.templates);
       }
     } catch (error) {
       console.error("Failed to fetch agent templates:", error);
     }
-  };
+  }, [campaignType]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    void fetchSegmentTemplates();
+    void fetchAgentTemplates();
+  }, [open, fetchSegmentTemplates, fetchAgentTemplates]);
 
   const handleSegmentTemplateSelect = (templateId: string) => {
     setSelectedSegmentTemplate(templateId);
     const template = segmentTemplates[templateId];
     if (template) {
       setSegmentCriteria(template.criteria);
-      previewSegment(template.criteria);
+      void previewSegment(template.criteria);
+    } else {
+      setSegmentCriteria({});
+      setSegmentPreview(null);
     }
   };
 
-  const previewSegment = async (criteria: Record<string, any>) => {
+  const previewSegment = useCallback(async (criteria: SegmentCriteria) => {
     try {
       const response = await fetch("/api/admin/research/segments/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(criteria),
       });
-      const data = await response.json();
+      const data = (await response.json()) as SegmentPreviewResponse;
       if (data.success) {
-        setSegmentPreview(data);
+        setSegmentPreview({ total_count: data.total_count, sample: data.sample });
       }
     } catch (error) {
       console.error("Failed to preview segment:", error);
     }
-  };
+  }, []);
 
   const handleAgentTemplateSelect = (templateId: string) => {
     setSelectedAgentTemplate(templateId);
@@ -142,7 +169,11 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
   };
 
   const handleCreate = async () => {
-    if (!name || !segmentCriteria || !systemPrompt || questions.filter((q) => q.trim()).length === 0) {
+    const trimmedQuestions = questions
+      .map((question) => question.trim())
+      .filter((question): question is string => question.length > 0);
+
+    if (!name || Object.keys(segmentCriteria).length === 0 || !systemPrompt || trimmedQuestions.length === 0) {
       alert("Please fill in all required fields");
       return;
     }
@@ -158,7 +189,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
           segment_criteria: segmentCriteria,
           agent_config: {
             system_prompt: systemPrompt,
-            questions: questions.filter((q) => q.trim()),
+            questions: trimmedQuestions,
             voice_settings: {
               voice: "alloy",
               temperature: 0.7,
@@ -203,9 +234,9 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
       case 1:
         return name && campaignType && channel;
       case 2:
-        return segmentCriteria && Object.keys(segmentCriteria).length > 0;
+        return Object.keys(segmentCriteria).length > 0;
       case 3:
-        return systemPrompt && questions.filter((q) => q.trim()).length > 0;
+        return systemPrompt && questions.some((question) => question.trim().length > 0);
       default:
         return false;
     }
@@ -407,7 +438,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 rows={6}
               />
-              <p className="text-sm text-muted-foreground">Instructions for the AI agent's behavior and personality</p>
+              <p className="text-sm text-muted-foreground">Instructions for the AI agent&rsquo;s behavior and personality</p>
             </div>
 
             <div className="space-y-3">

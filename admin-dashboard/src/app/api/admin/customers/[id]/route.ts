@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -13,7 +13,7 @@ export async function GET(
     );
   }
 
-  const customerId = params.id;
+  const { id: customerId } = await context.params;
   const proxyUrl = new URL(`/api/admin/customers/${customerId}`, baseUrl);
 
   try {
@@ -50,8 +50,8 @@ export async function GET(
 }
 
 export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -62,11 +62,11 @@ export async function PUT(
     );
   }
 
-  const customerId = params.id;
+  const { id: customerId } = await context.params;
   const proxyUrl = new URL(`/api/admin/customers/${customerId}`, baseUrl);
 
   try {
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, unknown>;
 
     // Build query params from body
     const searchParams = new URLSearchParams();

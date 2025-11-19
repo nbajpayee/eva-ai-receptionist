@@ -37,7 +37,7 @@ export function VADSettings({
           </Badge>
         </CardTitle>
         <CardDescription>
-          Configure how the system detects when you're speaking
+          Configure how the system detects when you&apos;re speaking
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

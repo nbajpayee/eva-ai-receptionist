@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -139,7 +139,12 @@ export default function AppointmentsPage() {
       <div className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
         <span className="text-sm font-medium text-zinc-700">Filter:</span>
 
-        <Select value={timeFilter} onValueChange={(value) => setTimeFilter(value as "all" | "upcoming" | "past")}>
+        <Select
+          value={timeFilter}
+          onValueChange={(value: "all" | "upcoming" | "past") => {
+            setTimeFilter(value);
+          }}
+        >
           <SelectTrigger className="w-[130px] bg-white">
             <SelectValue placeholder="Time" />
           </SelectTrigger>
@@ -150,7 +155,12 @@ export default function AppointmentsPage() {
           </SelectContent>
         </Select>
 
-        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as Appointment["status"] | "all")}>
+        <Select
+          value={statusFilter}
+          onValueChange={(value: Appointment["status"] | "all") => {
+            setStatusFilter(value);
+          }}
+        >
           <SelectTrigger className="w-[140px] bg-white">
             <SelectValue placeholder="Status" />
           </SelectTrigger>

@@ -1,14 +1,13 @@
 """
 Database models and session management for the Med Spa Voice AI application.
 """
-
+import logging
 import uuid
 from datetime import datetime, time
 from typing import Optional
 
 from sqlalchemy import (
     ARRAY,
-    JSON,
     Boolean,
     CheckConstraint,
     Column,
@@ -16,11 +15,14 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
     Time,
     create_engine,
+    inspect,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import declarative_base
@@ -32,6 +34,7 @@ except ModuleNotFoundError:  # Fallback for direct execution contexts
     from config import get_settings
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 # Create database engine
 engine_kwargs = {
@@ -960,7 +963,95 @@ class Service(Base):
 def init_db():
     """Initialize database tables."""
     Base.metadata.create_all(bind=engine)
+    _ensure_schema_upgrades()
     print("Database tables created successfully!")
+
+
+def _ensure_schema_upgrades() -> None:
+    """Perform minimal schema upgrades required for newer code paths."""
+    inspector = inspect(engine)
+
+    try:
+        tables = inspector.get_table_names()
+    except Exception as exc:  # noqa: BLE001 - log and exit silently to avoid startup failures
+        logger.warning("Failed to inspect database schema: %s", exc)
+        return
+
+    if "conversations" not in tables:
+        return
+
+    try:
+        column_names = {col["name"] for col in inspector.get_columns("conversations")}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to inspect conversations columns: %s", exc)
+        return
+
+    if "conversation_type" in column_names:
+        pass
+    else:
+        logger.info("Adding missing conversation_type column to conversations table")
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        """
+                        ALTER TABLE conversations
+                        ADD COLUMN conversation_type VARCHAR(50)
+                        DEFAULT 'inbound_service'
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        "UPDATE conversations SET conversation_type = 'inbound_service' WHERE conversation_type IS NULL"
+                    )
+                )
+                conn.execute(
+                    text("ALTER TABLE conversations ALTER COLUMN conversation_type SET NOT NULL")
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_conversations_conversation_type ON conversations (conversation_type)"
+                    )
+                )
+            logger.info("conversation_type column added successfully")
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to add conversation_type column: %s", exc)
+
+    if "campaign_id" not in column_names:
+        logger.info("Adding missing campaign_id column to conversations table")
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        """
+                        ALTER TABLE conversations
+                        ADD COLUMN campaign_id UUID NULL
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_conversations_campaign_id
+                        ON conversations (campaign_id)
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        """
+                        ALTER TABLE conversations
+                        ADD CONSTRAINT IF NOT EXISTS conversations_campaign_id_fkey
+                        FOREIGN KEY (campaign_id)
+                        REFERENCES research_campaigns (id)
+                        ON DELETE SET NULL
+                        """
+                    )
+                )
+            logger.info("campaign_id column added successfully")
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to add campaign_id column: %s", exc)
 
 
 if __name__ == "__main__":

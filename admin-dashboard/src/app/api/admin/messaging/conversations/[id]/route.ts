@@ -1,18 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 type RouteContext = {
-  params?: { id: string } | Promise<{ id: string }>;
+  params: Promise<{ id: string }>;
 };
 
-async function resolveParams(context: RouteContext): Promise<{ id: string }> {
-  if (!context?.params) {
-    throw new Error("Route params unavailable");
-  }
-
-  return await context.params;
-}
-
-export async function GET(request: Request, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   if (!baseUrl) {
@@ -22,7 +14,7 @@ export async function GET(request: Request, context: RouteContext) {
     );
   }
 
-  const { id } = await resolveParams(context);
+  const { id } = await context.params;
   const proxyUrl = new URL(`/api/admin/messaging/conversations/${id}`, baseUrl);
 
   try {

@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(
-  request: Request,
-  context: { params: { id: string } | Promise<{ id: string }> }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -13,8 +13,8 @@ export async function GET(
     );
   }
 
-  const params = await Promise.resolve(context.params);
-  const normalizedId = params?.id?.trim();
+  const { id } = await context.params;
+  const normalizedId = id.trim();
 
   if (!normalizedId) {
     return NextResponse.json(

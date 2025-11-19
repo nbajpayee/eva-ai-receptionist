@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Plus, Users, TrendingUp, MessageSquare, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { CampaignList } from "./components/CampaignList";
 import { CreateCampaignDialog } from "./components/CreateCampaignDialog";
-import { CampaignStats } from "./components/CampaignStats";
 
 interface Campaign {
   id: string;
@@ -30,11 +28,7 @@ export default function ResearchPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("all");
 
-  useEffect(() => {
-    fetchCampaigns();
-  }, [activeTab]);
-
-  const fetchCampaigns = async () => {
+  const fetchCampaigns = useCallback(async () => {
     setLoading(true);
     try {
       const statusFilter = activeTab === "all" ? "" : `?status=${activeTab}`;
@@ -49,7 +43,11 @@ export default function ResearchPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab]);
+
+  useEffect(() => {
+    fetchCampaigns();
+  }, [fetchCampaigns]);
 
   const handleCampaignCreated = () => {
     setCreateDialogOpen(false);

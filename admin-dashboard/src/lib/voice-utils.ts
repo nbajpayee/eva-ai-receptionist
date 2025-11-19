@@ -3,9 +3,11 @@
  */
 
 export type VoiceConnectionStatus =
+  | "idle"
   | "disconnected"
   | "connecting"
   | "connected"
+  | "listening"
   | "error"
   | "reconnecting";
 
@@ -66,7 +68,7 @@ function int16ArrayToBase64(int16Array: Int16Array): string {
 /**
  * Convert ArrayBuffer to base64 string
  */
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
+function arrayBufferToBase64(buffer: ArrayBufferLike): string {
   let binary = "";
   const bytes = new Uint8Array(buffer);
   const chunkSize = 0x8000;

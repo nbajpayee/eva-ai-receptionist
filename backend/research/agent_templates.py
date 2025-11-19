@@ -1,8 +1,7 @@
 """
 Agent configuration templates for research and outbound campaigns.
 """
-
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from config import get_settings
 
@@ -290,7 +289,7 @@ Your goal: Get 1-2 referrals from happy customers.""",
         return interpolated
 
     @staticmethod
-    def validate_agent_config(config: Dict[str, Any]) -> tuple[bool, List[str]]:
+    def validate_agent_config(config: Dict[str, Any]) -> Tuple[bool, List[str]]:
         """
         Validate agent configuration.
 

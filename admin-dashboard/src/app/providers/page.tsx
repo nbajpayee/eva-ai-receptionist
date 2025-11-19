@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,11 +33,7 @@ export default function ProvidersPage() {
   const [periodDays, setPeriodDays] = useState(30);
   const [sortBy, setSortBy] = useState<"conversion_rate" | "revenue" | "consultations">("conversion_rate");
 
-  useEffect(() => {
-    fetchProviders();
-  }, [periodDays]);
-
-  const fetchProviders = async () => {
+  const fetchProviders = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/providers/summary?days=${periodDays}`);
@@ -48,7 +44,11 @@ export default function ProvidersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [periodDays]);
+
+  useEffect(() => {
+    void fetchProviders();
+  }, [fetchProviders]);
 
   const sortedProviders = data?.providers ? [...data.providers].sort((a, b) => {
     if (sortBy === "conversion_rate") {
@@ -86,7 +86,12 @@ export default function ProvidersPage() {
           </p>
         </div>
 
-        <Select value={periodDays.toString()} onValueChange={(v) => setPeriodDays(parseInt(v))}>
+        <Select
+          value={periodDays.toString()}
+          onValueChange={(value: string) => {
+            setPeriodDays(parseInt(value, 10));
+          }}
+        >
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Time period" />
           </SelectTrigger>

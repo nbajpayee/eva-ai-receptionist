@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  const url = `${BACKEND_URL}/api/admin/research/campaigns/${params.id}`;
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const { id } = await context.params;
+  const url = `${BACKEND_URL}/api/admin/research/campaigns/${id}`;
 
   try {
     const response = await fetch(url, {
@@ -21,10 +25,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     const body = await request.json();
-    const url = `${BACKEND_URL}/api/admin/research/campaigns/${params.id}`;
+    const { id } = await context.params;
+    const url = `${BACKEND_URL}/api/admin/research/campaigns/${id}`;
 
     const response = await fetch(url, {
       method: "PATCH",
@@ -42,8 +50,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
-  const url = `${BACKEND_URL}/api/admin/research/campaigns/${params.id}`;
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const { id } = await context.params;
+  const url = `${BACKEND_URL}/api/admin/research/campaigns/${id}`;
 
   try {
     const response = await fetch(url, {

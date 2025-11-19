@@ -1,15 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
   const body = await request.json();
+  const { id } = await context.params;
 
   try {
     const response = await fetch(
-      `${baseUrl}/api/consultations/${params.id}/end`,
+      `${baseUrl}/api/consultations/${id}/end`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

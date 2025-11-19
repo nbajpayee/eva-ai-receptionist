@@ -1,13 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
   try {
-    const response = await fetch(`${baseUrl}/api/providers/${params.id}`, {
+    const { id } = await context.params;
+    const response = await fetch(`${baseUrl}/api/providers/${id}`, {
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
     });

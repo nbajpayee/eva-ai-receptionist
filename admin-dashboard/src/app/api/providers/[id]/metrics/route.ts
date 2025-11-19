@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
   const incomingUrl = new URL(request.url);
-  const proxyUrl = new URL(`/api/providers/${params.id}/metrics`, baseUrl);
+  const { id } = await context.params;
+  const proxyUrl = new URL(`/api/providers/${id}/metrics`, baseUrl);
 
   incomingUrl.searchParams.forEach((value, key) => {
     proxyUrl.searchParams.set(key, value);

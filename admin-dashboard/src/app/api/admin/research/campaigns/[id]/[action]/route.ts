@@ -4,9 +4,10 @@ const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string; action: string } }
+  context: { params: Promise<{ id: string; action: string }> }
 ) {
-  const url = `${BACKEND_URL}/api/admin/research/campaigns/${params.id}/${params.action}`;
+  const { id, action } = await context.params;
+  const url = `${BACKEND_URL}/api/admin/research/campaigns/${id}/${action}`;
 
   try {
     const response = await fetch(url, {
@@ -21,7 +22,7 @@ export async function POST(
   } catch (error) {
     console.error("Error proxying request:", error);
     return NextResponse.json(
-      { success: false, error: `Failed to ${params.action} campaign` },
+      { success: false, error: `Failed to ${action} campaign` },
       { status: 500 }
     );
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,10 +14,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Pencil, Trash2, MapPin, Star, Clock } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Star, Clock } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -57,17 +56,14 @@ export function LocationsSettings() {
   const [isHoursDialogOpen, setIsHoursDialogOpen] = useState(false);
   const [editingLocation, setEditingLocation] = useState<Partial<Location> | null>(null);
 
-  useEffect(() => {
-    fetchLocations();
-  }, []);
-
-  const fetchLocations = async () => {
+  const fetchLocations = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/locations");
       if (!response.ok) throw new Error("Failed to fetch locations");
       const data = await response.json();
       setLocations(data);
     } catch (error) {
+      console.error("Failed to load locations", error);
       toast({
         title: "Error",
         description: "Failed to load locations",
@@ -76,34 +72,42 @@ export function LocationsSettings() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const fetchBusinessHours = async (locationId: number) => {
-    try {
-      const response = await fetch(`/api/admin/locations/${locationId}/hours`);
-      if (!response.ok) throw new Error("Failed to fetch business hours");
-      const data = await response.json();
+  useEffect(() => {
+    fetchLocations();
+  }, [fetchLocations]);
 
-      // Ensure all 7 days are present
-      const allDays = Array.from({ length: 7 }, (_, i) => {
-        const existing = data.find((h: BusinessHours) => h.day_of_week === i);
-        return existing || {
-          day_of_week: i,
-          open_time: "09:00",
-          close_time: "17:00",
-          is_closed: i === 6, // Sunday closed by default
-        };
-      });
+  const fetchBusinessHours = useCallback(
+    async (locationId: number) => {
+      try {
+        const response = await fetch(`/api/admin/locations/${locationId}/hours`);
+        if (!response.ok) throw new Error("Failed to fetch business hours");
+        const data = await response.json();
 
-      setBusinessHours(allDays);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to load business hours",
-        variant: "destructive",
-      });
-    }
-  };
+        // Ensure all 7 days are present
+        const allDays = Array.from({ length: 7 }, (_, i) => {
+          const existing = data.find((h: BusinessHours) => h.day_of_week === i);
+          return existing || {
+            day_of_week: i,
+            open_time: "09:00",
+            close_time: "17:00",
+            is_closed: i === 6, // Sunday closed by default
+          };
+        });
+
+        setBusinessHours(allDays);
+      } catch (error) {
+        console.error("Failed to load business hours", error);
+        toast({
+          title: "Error",
+          description: "Failed to load business hours",
+          variant: "destructive",
+        });
+      }
+    },
+    [toast]
+  );
 
   const handleEditLocation = (location: Location | null = null) => {
     if (location) {
@@ -146,6 +150,7 @@ export function LocationsSettings() {
       setIsEditDialogOpen(false);
       fetchLocations();
     } catch (error) {
+      console.error("Failed to save location", error);
       toast({
         title: "Error",
         description: "Failed to save location",
@@ -173,10 +178,13 @@ export function LocationsSettings() {
       });
 
       fetchLocations();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error("Failed to delete location", error);
+      const message =
+        error instanceof Error ? error.message : "Failed to delete location";
       toast({
         title: "Error",
-        description: error.message || "Failed to delete location",
+        description: message,
         variant: "destructive",
       });
     }
@@ -207,6 +215,7 @@ export function LocationsSettings() {
 
       setIsHoursDialogOpen(false);
     } catch (error) {
+      console.error("Failed to save business hours", error);
       toast({
         title: "Error",
         description: "Failed to save business hours",
@@ -356,7 +365,7 @@ export function LocationsSettings() {
                 <Switch
                   id="is_primary"
                   checked={editingLocation.is_primary || false}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={(checked: boolean) =>
                     setEditingLocation({ ...editingLocation, is_primary: checked })
                   }
                 />
@@ -366,7 +375,7 @@ export function LocationsSettings() {
                 <Switch
                   id="is_active"
                   checked={editingLocation.is_active !== false}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={(checked: boolean) =>
                     setEditingLocation({ ...editingLocation, is_active: checked })
                   }
                 />
@@ -398,7 +407,7 @@ export function LocationsSettings() {
                 <div className="flex items-center gap-2 flex-1">
                   <Switch
                     checked={!hours.is_closed}
-                    onCheckedChange={(checked) => {
+                    onCheckedChange={(checked: boolean) => {
                       const newHours = [...businessHours];
                       newHours[index].is_closed = !checked;
                       setBusinessHours(newHours);

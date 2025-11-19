@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Pencil, Trash2, Briefcase } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -59,17 +59,14 @@ export function ServicesSettings() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Partial<Service> | null>(null);
 
-  useEffect(() => {
-    fetchServices();
-  }, []);
-
-  const fetchServices = async () => {
+  const fetchServices = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/services");
       if (!response.ok) throw new Error("Failed to fetch services");
       const data = await response.json();
       setServices(data);
     } catch (error) {
+      console.error("Failed to fetch services", error);
       toast({
         title: "Error",
         description: "Failed to load services",
@@ -78,7 +75,11 @@ export function ServicesSettings() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    fetchServices();
+  }, [fetchServices]);
 
   const handleEditService = (service: Service | null = null) => {
     if (service) {
@@ -124,6 +125,7 @@ export function ServicesSettings() {
       setIsEditDialogOpen(false);
       fetchServices();
     } catch (error) {
+      console.error("Failed to save service", error);
       toast({
         title: "Error",
         description: "Failed to save service",
@@ -149,6 +151,7 @@ export function ServicesSettings() {
 
       fetchServices();
     } catch (error) {
+      console.error("Failed to delete service", error);
       toast({
         title: "Error",
         description: "Failed to delete service",
@@ -270,7 +273,7 @@ export function ServicesSettings() {
                   <Label htmlFor="category">Category</Label>
                   <Select
                     value={editingService.category || "other"}
-                    onValueChange={(value) =>
+                    onValueChange={(value: string) =>
                       setEditingService({ ...editingService, category: value })
                     }
                   >
@@ -398,8 +401,8 @@ export function ServicesSettings() {
                 <Label htmlFor="is_active">Active</Label>
                 <Switch
                   id="is_active"
-                  checked={editingService.is_active !== false}
-                  onCheckedChange={(checked) =>
+                  checked={editingService.is_active ?? true}
+                  onCheckedChange={(checked: boolean) =>
                     setEditingService({ ...editingService, is_active: checked })
                   }
                 />

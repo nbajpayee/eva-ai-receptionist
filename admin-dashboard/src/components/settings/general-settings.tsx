@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,17 +26,14 @@ export function GeneralSettings() {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<MedSpaSettings | null>(null);
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/settings");
       if (!response.ok) throw new Error("Failed to fetch settings");
       const data = await response.json();
       setSettings(data);
     } catch (error) {
+      console.error("Failed to load settings", error);
       toast({
         title: "Error",
         description: "Failed to load settings",
@@ -45,7 +42,11 @@ export function GeneralSettings() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +67,7 @@ export function GeneralSettings() {
         description: "Settings saved successfully",
       });
     } catch (error) {
+      console.error("Failed to save settings", error);
       toast({
         title: "Error",
         description: "Failed to save settings",
@@ -102,7 +104,7 @@ export function GeneralSettings() {
         <CardHeader>
           <CardTitle>General Information</CardTitle>
           <CardDescription>
-            Configure your med spa's basic information
+            Configure your med spa&apos;s basic information
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,17 +47,14 @@ export function ProvidersSettings() {
   const [editingProvider, setEditingProvider] = useState<Partial<Provider> | null>(null);
   const [newSpecialty, setNewSpecialty] = useState("");
 
-  useEffect(() => {
-    fetchProviders();
-  }, []);
-
-  const fetchProviders = async () => {
+  const fetchProviders = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/providers");
       if (!response.ok) throw new Error("Failed to fetch providers");
       const data = await response.json();
       setProviders(data);
     } catch (error) {
+      console.error("Failed to load providers", error);
       toast({
         title: "Error",
         description: "Failed to load providers",
@@ -66,7 +63,11 @@ export function ProvidersSettings() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    fetchProviders();
+  }, [fetchProviders]);
 
   const handleEditProvider = (provider: Provider | null = null) => {
     if (provider) {
@@ -111,6 +112,7 @@ export function ProvidersSettings() {
       setIsEditDialogOpen(false);
       fetchProviders();
     } catch (error) {
+      console.error("Failed to save provider", error);
       toast({
         title: "Error",
         description: "Failed to save provider",
@@ -136,6 +138,7 @@ export function ProvidersSettings() {
 
       fetchProviders();
     } catch (error) {
+      console.error("Failed to delete provider", error);
       toast({
         title: "Error",
         description: "Failed to delete provider",
@@ -379,7 +382,7 @@ export function ProvidersSettings() {
                 <Switch
                   id="is_active"
                   checked={editingProvider.is_active !== false}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={(checked: boolean) =>
                     setEditingProvider({ ...editingProvider, is_active: checked })
                   }
                 />

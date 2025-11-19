@@ -143,7 +143,6 @@ const PERIODS = [
 export default function Home() {
   const [metrics, setMetrics] = useState<MetricsResponse>(defaultMetrics);
   const [calls, setCalls] = useState<CallRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("today");
 
   // Call log filters
@@ -179,7 +178,6 @@ export default function Home() {
     const loadCalls = async () => {
       const callsData = await fetchCallHistory();
       setCalls(callsData);
-      setIsLoading(false);
     };
 
     loadCalls();
@@ -225,8 +223,6 @@ export default function Home() {
 
     exportToCSV(exportData, generateExportFilename("calls"));
   };
-
-  const selectedPeriodLabel = PERIODS.find((p) => p.value === selectedPeriod)?.label || "Today";
 
   return (
     <div className="space-y-10">
@@ -332,7 +328,12 @@ export default function Home() {
         <div className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
           <span className="text-sm font-medium text-zinc-700">Filter:</span>
 
-          <Select value={outcomeFilter} onValueChange={(value) => setOutcomeFilter(value as CallRecord["outcome"] | "all")}>
+          <Select
+            value={outcomeFilter}
+            onValueChange={(value: CallRecord["outcome"] | "all") => {
+              setOutcomeFilter(value);
+            }}
+          >
             <SelectTrigger className="w-[140px] bg-white">
               <SelectValue placeholder="Outcome" />
             </SelectTrigger>
@@ -346,7 +347,12 @@ export default function Home() {
             </SelectContent>
           </Select>
 
-          <Select value={channelFilter} onValueChange={(value) => setChannelFilter(value as CallRecord["channel"] | "all")}>
+          <Select
+            value={channelFilter}
+            onValueChange={(value: CallRecord["channel"] | "all") => {
+              setChannelFilter(value);
+            }}
+          >
             <SelectTrigger className="w-[130px] bg-white">
               <SelectValue placeholder="Channel" />
             </SelectTrigger>
@@ -359,7 +365,12 @@ export default function Home() {
             </SelectContent>
           </Select>
 
-          <Select value={satisfactionFilter} onValueChange={(value) => setSatisfactionFilter(value as "all" | "high" | "medium" | "low")}>
+          <Select
+            value={satisfactionFilter}
+            onValueChange={(value: "all" | "high" | "medium" | "low") => {
+              setSatisfactionFilter(value);
+            }}
+          >
             <SelectTrigger className="w-[150px] bg-white">
               <SelectValue placeholder="Satisfaction" />
             </SelectTrigger>

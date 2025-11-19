@@ -57,6 +57,39 @@ interface Conversation {
   satisfaction_score?: number;
 }
 
+function formatTime(isoString: string): string {
+  const date = new Date(isoString);
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+}
+
+function getStatusBadgeProps(status?: string | null) {
+  const normalized = status?.toLowerCase() ?? "";
+
+  switch (normalized) {
+    case "completed":
+    case "success":
+      return { variant: "default" as const };
+    case "cancelled":
+    case "canceled":
+    case "failed":
+      return {
+        variant: "outline" as const,
+        className: "border-red-200 bg-red-100 text-red-700",
+      };
+    case "active":
+    case "scheduled":
+    case "pending":
+      return { variant: "secondary" as const };
+    default:
+      return { variant: "outline" as const };
+  }
+}
+
 interface CustomerHistory {
   customer: Customer;
   appointments: Appointment[];
@@ -249,7 +282,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 <label className="text-sm font-medium text-zinc-500">Medical Screening</label>
                 <div className="flex items-center gap-2 mt-1">
                   {customer.has_allergies && (
-                    <Badge variant="destructive">
+                    <Badge
+                      variant="outline"
+                      className="border-red-200 bg-red-100 text-red-700"
+                    >
                       <AlertTriangle className="mr-1 h-3 w-3" />
                       Has Allergies
                     </Badge>
@@ -390,9 +426,14 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                         {format(new Date(apt.appointment_datetime), "PPP 'at' p")}
                       </CardDescription>
                     </div>
-                    <Badge variant={apt.status === "completed" ? "default" : apt.status === "cancelled" ? "destructive" : "secondary"}>
-                      {apt.status}
-                    </Badge>
+                    {(() => {
+                      const badgeProps = getStatusBadgeProps(apt.status);
+                      return (
+                        <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                          {apt.status}
+                        </Badge>
+                      );
+                    })()}
                   </div>
                 </CardHeader>
                 <CardContent className="text-sm">
@@ -424,8 +465,19 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
-                      {call.outcome && <Badge variant="secondary">{call.outcome}</Badge>}
-                      {call.escalated && <Badge variant="destructive">Escalated</Badge>}
+                      {call.outcome && (() => {
+                        const badgeProps = getStatusBadgeProps(call.outcome);
+                        return (
+                          <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                            {call.outcome}
+                          </Badge>
+                        );
+                      })()}
+                      {call.escalated && (
+                        <Badge variant="outline" className="border-red-200 bg-red-100 text-red-700">
+                          Escalated
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
@@ -464,8 +516,22 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
-                      {conv.status && <Badge variant="secondary">{conv.status}</Badge>}
-                      {conv.outcome && <Badge>{conv.outcome}</Badge>}
+                      {conv.status && (() => {
+                        const badgeProps = getStatusBadgeProps(conv.status);
+                        return (
+                          <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                            {conv.status}
+                          </Badge>
+                        );
+                      })()}
+                      {conv.outcome && (() => {
+                        const badgeProps = getStatusBadgeProps(conv.outcome);
+                        return (
+                          <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                            {conv.outcome}
+                          </Badge>
+                        );
+                      })()}
                     </div>
                   </div>
                 </CardHeader>

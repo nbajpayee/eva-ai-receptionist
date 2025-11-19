@@ -1,14 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
   try {
     const response = await fetch(
-      `${baseUrl}/api/insights/${params.id}/review`,
+      `${baseUrl}/api/insights/${(await context.params).id}/review`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

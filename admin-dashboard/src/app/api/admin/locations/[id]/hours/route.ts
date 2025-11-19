@@ -1,13 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
+
   try {
-    const response = await fetch(`${baseUrl}/api/admin/locations/${params.id}/hours`, {
+    const response = await fetch(`${baseUrl}/api/admin/locations/${id}/hours`, {
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
     });
@@ -34,13 +36,14 @@ export async function GET(
 }
 
 export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params;
     const body = await request.json();
 
-    const response = await fetch(`${baseUrl}/api/admin/locations/${params.id}/hours`, {
+    const response = await fetch(`${baseUrl}/api/admin/locations/${id}/hours`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

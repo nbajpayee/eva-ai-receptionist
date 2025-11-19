@@ -1,26 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import {
-  TrendingUp,
-  TrendingDown,
   DollarSign,
   Target,
   Clock,
   Smile,
   CheckCircle,
-  XCircle,
-  AlertCircle,
   Lightbulb,
   ThumbsUp,
-  ThumbsDown,
   ArrowLeft,
   Calendar
 } from "lucide-react";
@@ -103,15 +98,13 @@ export default function ProviderDetailPage() {
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [periodDays, setPeriodDays] = useState(30);
+  const periodDays = 30;
 
-  useEffect(() => {
-    if (providerId) {
-      fetchProviderData();
+  const fetchProviderData = useCallback(async () => {
+    if (!providerId) {
+      return;
     }
-  }, [providerId, periodDays]);
 
-  const fetchProviderData = async () => {
     setLoading(true);
     try {
       const [providerRes, metricsRes, insightsRes, consultationsRes] = await Promise.all([
@@ -137,7 +130,11 @@ export default function ProviderDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [periodDays, providerId]);
+
+  useEffect(() => {
+    void fetchProviderData();
+  }, [fetchProviderData]);
 
   const markInsightReviewed = async (insightId: string) => {
     try {
@@ -178,6 +175,8 @@ export default function ProviderDetailPage() {
     value,
     color: COLORS[key as keyof typeof COLORS] || "#gray"
   }));
+
+  type OutcomeDatum = (typeof outcomesData)[number];
 
   return (
     <div className="p-8">
@@ -306,7 +305,7 @@ export default function ProviderDetailPage() {
                     </p>
                     {insight.supporting_quote && (
                       <div className="bg-white p-2 rounded border-l-2 border-green-500 mb-2">
-                        <p className="text-xs italic">"{insight.supporting_quote}"</p>
+                        <p className="text-xs italic">&ldquo;{insight.supporting_quote}&rdquo;</p>
                       </div>
                     )}
                     {!insight.is_reviewed && (
@@ -358,7 +357,7 @@ export default function ProviderDetailPage() {
                     </p>
                     {insight.supporting_quote && (
                       <div className="bg-white p-2 rounded border-l-2 border-orange-500 mb-2">
-                        <p className="text-xs italic">"{insight.supporting_quote}"</p>
+                        <p className="text-xs italic">&ldquo;{insight.supporting_quote}&rdquo;</p>
                       </div>
                     )}
                     {insight.recommendation && (
@@ -422,7 +421,7 @@ export default function ProviderDetailPage() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={(entry) => `${entry.name}: ${entry.value}`}
+                      label={(entry: OutcomeDatum) => `${entry.name}: ${entry.value}`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
@@ -478,11 +477,10 @@ export default function ProviderDetailPage() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <Badge
-                            variant={
-                              consultation.outcome === "booked" ? "default" :
-                              consultation.outcome === "declined" ? "destructive" :
-                              "secondary"
-                            }
+                            variant={consultation.outcome === "booked" ? "default" : "secondary"}
+                            className={cn(
+                              consultation.outcome === "declined" && "border-red-200 bg-red-100 text-red-700"
+                            )}
                           >
                             {consultation.outcome}
                           </Badge>

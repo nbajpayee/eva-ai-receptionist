@@ -1,14 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Play, Pause, CheckCircle, MessageSquare, TrendingUp, Users, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+interface ChannelBreakdownEntry {
+  total: number;
+  completed: number;
+  responded: number;
+}
 
 interface CampaignStats {
   campaign_id: string;
@@ -23,7 +29,7 @@ interface CampaignStats {
   avg_satisfaction_score: number | null;
   sentiment_distribution: Record<string, number>;
   outcome_distribution: Record<string, number>;
-  channel_breakdown: Record<string, any>;
+  channel_breakdown: Record<string, ChannelBreakdownEntry>;
   launched_at: string | null;
   completed_at: string | null;
 }
@@ -48,12 +54,7 @@ export default function CampaignDetailPage({ params }: { params: { id: string } 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
-  useEffect(() => {
-    fetchCampaignStats();
-    fetchConversations();
-  }, [params.id]);
-
-  const fetchCampaignStats = async () => {
+  const fetchCampaignStats = useCallback(async () => {
     try {
       const response = await fetch(`/api/admin/research/campaigns/${params.id}/stats`);
       const data = await response.json();
@@ -66,9 +67,9 @@ export default function CampaignDetailPage({ params }: { params: { id: string } 
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.id]);
 
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     try {
       const response = await fetch(`/api/admin/research/campaigns/${params.id}/conversations`);
       const data = await response.json();
@@ -79,7 +80,12 @@ export default function CampaignDetailPage({ params }: { params: { id: string } 
     } catch (error) {
       console.error("Failed to fetch conversations:", error);
     }
-  };
+  }, [params.id]);
+
+  useEffect(() => {
+    void fetchCampaignStats();
+    void fetchConversations();
+  }, [fetchCampaignStats, fetchConversations]);
 
   const handleAction = async (action: string) => {
     setActionLoading(true);
@@ -91,7 +97,7 @@ export default function CampaignDetailPage({ params }: { params: { id: string } 
       const data = await response.json();
 
       if (data.success) {
-        fetchCampaignStats();
+        void fetchCampaignStats();
       }
     } catch (error) {
       console.error(`Failed to ${action} campaign:`, error);
@@ -109,14 +115,14 @@ export default function CampaignDetailPage({ params }: { params: { id: string } 
   }
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+    const variants: Record<string, { label: string; variant: BadgeProps["variant"] }> = {
       draft: { label: "Draft", variant: "secondary" },
       active: { label: "Active", variant: "default" },
       paused: { label: "Paused", variant: "outline" },
       completed: { label: "Completed", variant: "secondary" },
     };
 
-    const config = variants[status] || { label: status, variant: "outline" };
+    const config = variants[status] || { label: status, variant: "outline" as BadgeProps["variant"] };
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 

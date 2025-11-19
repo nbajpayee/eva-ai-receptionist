@@ -60,7 +60,6 @@ export default function AnalyticsPage() {
   }, [selectedRange]);
 
   const hasData = metrics.length > 0;
-  const selectedRangeLabel = DATE_RANGES.find((r) => r.value === selectedRange)?.label || "30 Days";
 
   return (
     <div className="space-y-6">
