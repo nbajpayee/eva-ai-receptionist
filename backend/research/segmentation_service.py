@@ -28,15 +28,6 @@ class SegmentationService:
                 "days_since_last_contact": 7
             }
         },
-        "booking_flow_abandoners": {
-            "name": "Booking Flow Abandoners",
-            "description": "Customers who started booking flow but didn't book",
-            "criteria": {
-                "metadata_key": "visited_booking_page",
-                "has_appointment": False,
-                "days_since_visit": 3
-            }
-        },
         "high_satisfaction_no_repeat": {
             "name": "High Satisfaction, No Repeat",
             "description": "Satisfied customers who haven't returned",
@@ -168,7 +159,6 @@ class SegmentationService:
         needs_conversation = any([
             criteria.get("channel"),
             criteria.get("has_booking_intent"),
-            criteria.get("days_since_last_contact"),
             criteria.get("min_satisfaction_score"),
             criteria.get("max_satisfaction_score"),
             criteria.get("outcome")
@@ -177,7 +167,6 @@ class SegmentationService:
         # Track which filters need Appointment join
         needs_appointment = any([
             criteria.get("has_appointment") is True,
-            criteria.get("days_since_last_appointment"),
             criteria.get("last_appointment_status"),
             criteria.get("days_since_cancellation")
         ])
@@ -186,11 +175,6 @@ class SegmentationService:
         if needs_conversation:
             query = query.join(Conversation, Customer.id == Conversation.customer_id)
             joined_conversation = True
-
-        if criteria.get("has_booking_intent"):
-            if not joined_message:
-                query = query.join(CommunicationMessage, Conversation.id == CommunicationMessage.conversation_id)
-                joined_message = True
 
         if needs_appointment:
             query = query.join(Appointment, Customer.id == Appointment.customer_id)
@@ -206,31 +190,45 @@ class SegmentationService:
         if criteria.get("channel"):
             conditions.append(Conversation.channel == criteria["channel"])
 
-        # Booking intent filter
+        # Booking intent filter - use conversation outcome instead of text search
         if criteria.get("has_booking_intent"):
-            conditions.append(
-                or_(
-                    CommunicationMessage.content.ilike('%book%'),
-                    CommunicationMessage.content.ilike('%schedule%'),
-                    CommunicationMessage.content.ilike('%appointment%')
-                )
-            )
+            # Conversations with booking-related outcomes
+            booking_outcomes = ['appointment_booked', 'booking_in_progress', 'booking_attempted']
+            conditions.append(Conversation.outcome.in_(booking_outcomes))
 
         # Appointment existence filter
         if criteria.get("has_appointment") is False:
             conditions.append(Appointment.id.is_(None))
 
-        # Days since last contact
+        # Days since last contact (use subquery to get LAST contact per customer)
         if criteria.get("days_since_last_contact"):
             days = criteria["days_since_last_contact"]
             cutoff_date = now - timedelta(days=days)
-            conditions.append(Conversation.initiated_at >= cutoff_date)
 
-        # Days since last appointment
+            # Subquery for last conversation date per customer
+            last_contact_subq = db.query(
+                Conversation.customer_id,
+                func.max(Conversation.last_activity_at).label('last_contact')
+            ).group_by(Conversation.customer_id).subquery()
+
+            query = query.join(last_contact_subq, Customer.id == last_contact_subq.c.customer_id)
+            # Filter for contacts OLDER than X days (last_contact <= cutoff_date)
+            conditions.append(last_contact_subq.c.last_contact <= cutoff_date)
+
+        # Days since last appointment (use subquery to get LAST appointment per customer)
         if criteria.get("days_since_last_appointment"):
             days = criteria["days_since_last_appointment"]
             cutoff_date = now - timedelta(days=days)
-            conditions.append(Appointment.appointment_datetime <= cutoff_date)
+
+            # Subquery for last appointment date per customer
+            last_appt_date_subq = db.query(
+                Appointment.customer_id,
+                func.max(Appointment.appointment_datetime).label('last_appt_date')
+            ).group_by(Appointment.customer_id).subquery()
+
+            query = query.join(last_appt_date_subq, Customer.id == last_appt_date_subq.c.customer_id)
+            # Filter for appointments OLDER than X days (last_appt <= cutoff_date)
+            conditions.append(last_appt_date_subq.c.last_appt_date <= cutoff_date)
 
         # Days since last activity (uses subqueries to avoid join conflicts)
         if criteria.get("days_since_last_activity"):

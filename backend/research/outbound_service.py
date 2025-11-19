@@ -88,6 +88,16 @@ class OutboundService:
 
         for customer in customers:
             try:
+                # Check if customer already contacted for this campaign (duplicate prevention)
+                existing_conversation = db.query(Conversation).filter(
+                    Conversation.customer_id == customer.id,
+                    Conversation.campaign_id == campaign_id
+                ).first()
+
+                if existing_conversation:
+                    logger.info(f"Customer {customer.id} already contacted for campaign {campaign_id}, skipping")
+                    continue
+
                 # Execute based on channel
                 if campaign.channel == "sms":
                     self._execute_sms_outbound(db, campaign, customer)
