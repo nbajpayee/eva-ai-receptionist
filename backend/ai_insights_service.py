@@ -7,29 +7,34 @@ Uses GPT-4 to:
 - Compare provider performance
 - Generate personalized coaching recommendations
 """
+
 from __future__ import annotations
 
 import json
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_
+from typing import Any, Dict, List, Optional
 
 import openai
+from sqlalchemy import and_, func, or_
+from sqlalchemy.orm import Session
 
 try:
-    from backend.database import (
-        InPersonConsultation, AIInsight, Provider,
-        ProviderPerformanceMetric
-    )
     from backend.config import get_settings
-except ModuleNotFoundError:
-    from database import (
-        InPersonConsultation, AIInsight, Provider,
-        ProviderPerformanceMetric
+    from backend.database import (
+        AIInsight,
+        InPersonConsultation,
+        Provider,
+        ProviderPerformanceMetric,
     )
+except ModuleNotFoundError:
     from config import get_settings
+    from database import (
+        AIInsight,
+        InPersonConsultation,
+        Provider,
+        ProviderPerformanceMetric,
+    )
 
 settings = get_settings()
 openai.api_key = settings.OPENAI_API_KEY
@@ -50,9 +55,11 @@ class AIInsightsService:
         - Objection handling approaches
         - Strengths and opportunities
         """
-        consultation = self.db.query(InPersonConsultation).filter(
-            InPersonConsultation.id == uuid.UUID(consultation_id)
-        ).first()
+        consultation = (
+            self.db.query(InPersonConsultation)
+            .filter(InPersonConsultation.id == uuid.UUID(consultation_id))
+            .first()
+        )
 
         if not consultation or not consultation.transcript:
             return []
@@ -61,7 +68,7 @@ class AIInsightsService:
         analysis = self._call_gpt4_consultation_analysis(
             transcript=consultation.transcript,
             outcome=consultation.outcome,
-            service_type=consultation.service_type
+            service_type=consultation.service_type,
         )
 
         # Create insight records
@@ -97,7 +104,7 @@ class AIInsightsService:
         self,
         transcript: str,
         outcome: Optional[str] = None,
-        service_type: Optional[str] = None
+        service_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Call GPT-4 to analyze a consultation transcript."""
         prompt = f"""Analyze this in-person consultation transcript between a med spa provider and customer.
@@ -139,11 +146,14 @@ Return only valid JSON, no additional text."""
             response = openai.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are an expert sales coach for medical aesthetics. Analyze consultations and provide actionable coaching insights."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are an expert sales coach for medical aesthetics. Analyze consultations and provide actionable coaching insights.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.7
+                temperature=0.7,
             )
 
             result = json.loads(response.choices[0].message.content)
@@ -151,16 +161,10 @@ Return only valid JSON, no additional text."""
 
         except Exception as e:
             print(f"Error calling GPT-4 for consultation analysis: {e}")
-            return {
-                "summary": "Analysis failed",
-                "insights": []
-            }
+            return {"summary": "Analysis failed", "insights": []}
 
     def compare_providers(
-        self,
-        target_provider_id: str,
-        reference_provider_id: str,
-        days: int = 30
+        self, target_provider_id: str, reference_provider_id: str, days: int = 30
     ) -> List[AIInsight]:
         """
         Compare two providers and generate coaching insights.
@@ -170,21 +174,32 @@ Return only valid JSON, no additional text."""
         # Get recent consultations for both providers
         cutoff_date = datetime.utcnow() - timedelta(days=days)
 
-        target_consultations = self.db.query(InPersonConsultation).filter(
-            and_(
-                InPersonConsultation.provider_id == uuid.UUID(target_provider_id),
-                InPersonConsultation.created_at >= cutoff_date,
-                InPersonConsultation.transcript.isnot(None)
+        target_consultations = (
+            self.db.query(InPersonConsultation)
+            .filter(
+                and_(
+                    InPersonConsultation.provider_id == uuid.UUID(target_provider_id),
+                    InPersonConsultation.created_at >= cutoff_date,
+                    InPersonConsultation.transcript.isnot(None),
+                )
             )
-        ).limit(10).all()
+            .limit(10)
+            .all()
+        )
 
-        reference_consultations = self.db.query(InPersonConsultation).filter(
-            and_(
-                InPersonConsultation.provider_id == uuid.UUID(reference_provider_id),
-                InPersonConsultation.created_at >= cutoff_date,
-                InPersonConsultation.transcript.isnot(None)
+        reference_consultations = (
+            self.db.query(InPersonConsultation)
+            .filter(
+                and_(
+                    InPersonConsultation.provider_id
+                    == uuid.UUID(reference_provider_id),
+                    InPersonConsultation.created_at >= cutoff_date,
+                    InPersonConsultation.transcript.isnot(None),
+                )
             )
-        ).limit(10).all()
+            .limit(10)
+            .all()
+        )
 
         if not target_consultations or not reference_consultations:
             return []
@@ -192,7 +207,7 @@ Return only valid JSON, no additional text."""
         # Call GPT-4 for comparison
         comparison = self._call_gpt4_provider_comparison(
             target_consultations=target_consultations,
-            reference_consultations=reference_consultations
+            reference_consultations=reference_consultations,
         )
 
         # Create comparison insights
@@ -218,24 +233,32 @@ Return only valid JSON, no additional text."""
     def _call_gpt4_provider_comparison(
         self,
         target_consultations: List[InPersonConsultation],
-        reference_consultations: List[InPersonConsultation]
+        reference_consultations: List[InPersonConsultation],
     ) -> Dict[str, Any]:
         """Call GPT-4 to compare provider techniques."""
         # Calculate conversion rates
-        target_booked = sum(1 for c in target_consultations if c.outcome == 'booked')
-        target_rate = target_booked / len(target_consultations) * 100 if target_consultations else 0
+        target_booked = sum(1 for c in target_consultations if c.outcome == "booked")
+        target_rate = (
+            target_booked / len(target_consultations) * 100
+            if target_consultations
+            else 0
+        )
 
-        ref_booked = sum(1 for c in reference_consultations if c.outcome == 'booked')
-        ref_rate = ref_booked / len(reference_consultations) * 100 if reference_consultations else 0
+        ref_booked = sum(1 for c in reference_consultations if c.outcome == "booked")
+        ref_rate = (
+            ref_booked / len(reference_consultations) * 100
+            if reference_consultations
+            else 0
+        )
 
         # Sample transcripts (limit length)
-        target_excerpts = "\n\n---\n\n".join([
-            c.transcript[:1000] for c in target_consultations[:3] if c.transcript
-        ])
+        target_excerpts = "\n\n---\n\n".join(
+            [c.transcript[:1000] for c in target_consultations[:3] if c.transcript]
+        )
 
-        reference_excerpts = "\n\n---\n\n".join([
-            c.transcript[:1000] for c in reference_consultations[:3] if c.transcript
-        ])
+        reference_excerpts = "\n\n---\n\n".join(
+            [c.transcript[:1000] for c in reference_consultations[:3] if c.transcript]
+        )
 
         prompt = f"""Compare these two med spa providers' consultation approaches:
 
@@ -273,11 +296,14 @@ Return only valid JSON."""
             response = openai.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are an expert sales coach comparing provider techniques to improve performance."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are an expert sales coach comparing provider techniques to improve performance.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.7
+                temperature=0.7,
             )
 
             result = json.loads(response.choices[0].message.content)
@@ -287,7 +313,9 @@ Return only valid JSON."""
             print(f"Error calling GPT-4 for provider comparison: {e}")
             return {"insights": []}
 
-    def extract_best_practices(self, days: int = 30, limit: int = 10) -> List[AIInsight]:
+    def extract_best_practices(
+        self, days: int = 30, limit: int = 10
+    ) -> List[AIInsight]:
         """
         Extract best practices from all successful consultations.
 
@@ -296,13 +324,19 @@ Return only valid JSON."""
         cutoff_date = datetime.utcnow() - timedelta(days=days)
 
         # Get successful consultations (outcome = 'booked')
-        successful = self.db.query(InPersonConsultation).filter(
-            and_(
-                InPersonConsultation.outcome == 'booked',
-                InPersonConsultation.created_at >= cutoff_date,
-                InPersonConsultation.transcript.isnot(None)
+        successful = (
+            self.db.query(InPersonConsultation)
+            .filter(
+                and_(
+                    InPersonConsultation.outcome == "booked",
+                    InPersonConsultation.created_at >= cutoff_date,
+                    InPersonConsultation.transcript.isnot(None),
+                )
             )
-        ).order_by(func.random()).limit(limit).all()
+            .order_by(func.random())
+            .limit(limit)
+            .all()
+        )
 
         if not successful:
             return []
@@ -332,14 +366,16 @@ Return only valid JSON."""
         return insights
 
     def _call_gpt4_best_practices(
-        self,
-        consultations: List[InPersonConsultation]
+        self, consultations: List[InPersonConsultation]
     ) -> Dict[str, Any]:
         """Call GPT-4 to extract best practices from successful consultations."""
-        excerpts = "\n\n---\n\n".join([
-            f"Consultation (Service: {c.service_type}):\n{c.transcript[:1500]}"
-            for c in consultations if c.transcript
-        ])
+        excerpts = "\n\n---\n\n".join(
+            [
+                f"Consultation (Service: {c.service_type}):\n{c.transcript[:1500]}"
+                for c in consultations
+                if c.transcript
+            ]
+        )
 
         prompt = f"""Analyze these successful consultation transcripts (all resulted in bookings) and extract common patterns and best practices.
 
@@ -374,11 +410,14 @@ Return only valid JSON."""
             response = openai.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are an expert sales analyst identifying patterns in successful consultations."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are an expert sales analyst identifying patterns in successful consultations.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.7
+                temperature=0.7,
             )
 
             result = json.loads(response.choices[0].message.content)
@@ -393,7 +432,7 @@ Return only valid JSON."""
         provider_id: str,
         insight_type: Optional[str] = None,
         is_positive: Optional[bool] = None,
-        limit: int = 50
+        limit: int = 50,
     ) -> List[AIInsight]:
         """Get AI insights for a specific provider."""
         query = self.db.query(AIInsight).filter(
@@ -405,15 +444,15 @@ Return only valid JSON."""
         if is_positive is not None:
             query = query.filter(AIInsight.is_positive == is_positive)
 
-        return query.order_by(
-            AIInsight.created_at.desc()
-        ).limit(limit).all()
+        return query.order_by(AIInsight.created_at.desc()).limit(limit).all()
 
     def mark_insight_reviewed(self, insight_id: str) -> AIInsight:
         """Mark an insight as reviewed."""
-        insight = self.db.query(AIInsight).filter(
-            AIInsight.id == uuid.UUID(insight_id)
-        ).first()
+        insight = (
+            self.db.query(AIInsight)
+            .filter(AIInsight.id == uuid.UUID(insight_id))
+            .first()
+        )
 
         if insight:
             insight.is_reviewed = True

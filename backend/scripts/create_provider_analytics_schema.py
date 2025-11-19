@@ -11,6 +11,7 @@ Usage:
 
 This script is idempotent and safe to rerun.
 """
+
 from __future__ import annotations
 
 import sys
@@ -32,7 +33,14 @@ else:
     load_dotenv()
 
 from config import get_settings  # noqa: E402
-from database import Base, engine, Provider, InPersonConsultation, AIInsight, ProviderPerformanceMetric  # noqa: E402
+from database import (  # noqa: E402
+    AIInsight,
+    Base,
+    InPersonConsultation,
+    Provider,
+    ProviderPerformanceMetric,
+    engine,
+)
 
 
 def main() -> None:

@@ -2,13 +2,15 @@
 Customer segmentation service for research campaigns.
 Provides pre-built segment templates and dynamic segment building.
 """
+
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
-from sqlalchemy import and_, or_, func
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
-from database import Customer, Conversation, Appointment, CommunicationMessage
 from config import get_settings
+from database import Appointment, CommunicationMessage, Conversation, Customer
 
 settings = get_settings()
 
@@ -25,8 +27,8 @@ class SegmentationService:
                 "channel": "sms",
                 "has_booking_intent": True,
                 "has_appointment": False,
-                "days_since_last_contact": 7
-            }
+                "days_since_last_contact": 7,
+            },
         },
         "booking_flow_abandoners": {
             "name": "Booking Flow Abandoners",
@@ -34,8 +36,8 @@ class SegmentationService:
             "criteria": {
                 "metadata_key": "visited_booking_page",
                 "has_appointment": False,
-                "days_since_visit": 3
-            }
+                "days_since_visit": 3,
+            },
         },
         "high_satisfaction_no_repeat": {
             "name": "High Satisfaction, No Repeat",
@@ -44,8 +46,8 @@ class SegmentationService:
                 "min_satisfaction_score": 8,
                 "has_appointment": True,
                 "days_since_last_appointment": 90,
-                "appointment_count": 1
-            }
+                "appointment_count": 1,
+            },
         },
         "recent_callers_no_booking": {
             "name": "Recent Callers Without Booking",
@@ -54,25 +56,22 @@ class SegmentationService:
                 "channel": "voice",
                 "has_appointment": False,
                 "days_since_last_contact": 30,
-                "outcome": ["info_only", "browsing"]
-            }
+                "outcome": ["info_only", "browsing"],
+            },
         },
         "inactive_customers": {
             "name": "Inactive Customers (90+ days)",
             "description": "No contact or appointment in 90+ days",
-            "criteria": {
-                "has_appointment": True,
-                "days_since_last_activity": 90
-            }
+            "criteria": {"has_appointment": True, "days_since_last_activity": 90},
         },
         "cancelled_appointments": {
             "name": "Cancelled Appointments",
             "description": "Customers who cancelled their last appointment",
             "criteria": {
                 "last_appointment_status": "cancelled",
-                "days_since_cancellation": 14
-            }
-        }
+                "days_since_cancellation": 14,
+            },
+        },
     }
 
     @staticmethod
@@ -81,10 +80,7 @@ class SegmentationService:
         return SegmentationService.SEGMENT_TEMPLATES
 
     @staticmethod
-    def preview_segment(
-        db: Session,
-        criteria: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def preview_segment(db: Session, criteria: Dict[str, Any]) -> Dict[str, Any]:
         """
         Preview segment size and sample customers.
 
@@ -103,21 +99,14 @@ class SegmentationService:
         return {
             "total_count": total_count,
             "sample": [
-                {
-                    "id": c.id,
-                    "name": c.name,
-                    "phone": c.phone,
-                    "email": c.email
-                }
+                {"id": c.id, "name": c.name, "phone": c.phone, "email": c.email}
                 for c in sample_customers
-            ]
+            ],
         }
 
     @staticmethod
     def execute_segment(
-        db: Session,
-        criteria: Dict[str, Any],
-        limit: Optional[int] = None
+        db: Session, criteria: Dict[str, Any], limit: Optional[int] = None
     ) -> List[Customer]:
         """
         Execute segment query and return matching customers.
@@ -170,12 +159,15 @@ class SegmentationService:
         # Booking intent filter (checks for keywords in conversations)
         if criteria.get("has_booking_intent"):
             query = query.join(Conversation, Customer.id == Conversation.customer_id)
-            query = query.join(CommunicationMessage, Conversation.id == CommunicationMessage.conversation_id)
+            query = query.join(
+                CommunicationMessage,
+                Conversation.id == CommunicationMessage.conversation_id,
+            )
             conditions.append(
                 or_(
-                    CommunicationMessage.content.ilike('%book%'),
-                    CommunicationMessage.content.ilike('%schedule%'),
-                    CommunicationMessage.content.ilike('%appointment%')
+                    CommunicationMessage.content.ilike("%book%"),
+                    CommunicationMessage.content.ilike("%schedule%"),
+                    CommunicationMessage.content.ilike("%appointment%"),
                 )
             )
 
@@ -186,7 +178,9 @@ class SegmentationService:
                 query = query.join(Appointment, Customer.id == Appointment.customer_id)
             else:
                 # Use LEFT JOIN and filter for NULL
-                query = query.outerjoin(Appointment, Customer.id == Appointment.customer_id)
+                query = query.outerjoin(
+                    Appointment, Customer.id == Appointment.customer_id
+                )
                 conditions.append(Appointment.id == None)
 
         # Days since last contact
@@ -208,23 +202,37 @@ class SegmentationService:
             days = criteria["days_since_last_activity"]
             cutoff_date = now - timedelta(days=days)
             # Subquery for last conversation date
-            last_conv = db.query(
-                Conversation.customer_id,
-                func.max(Conversation.last_activity_at).label('last_conv')
-            ).group_by(Conversation.customer_id).subquery()
+            last_conv = (
+                db.query(
+                    Conversation.customer_id,
+                    func.max(Conversation.last_activity_at).label("last_conv"),
+                )
+                .group_by(Conversation.customer_id)
+                .subquery()
+            )
 
             # Subquery for last appointment date
-            last_appt = db.query(
-                Appointment.customer_id,
-                func.max(Appointment.appointment_datetime).label('last_appt')
-            ).group_by(Appointment.customer_id).subquery()
+            last_appt = (
+                db.query(
+                    Appointment.customer_id,
+                    func.max(Appointment.appointment_datetime).label("last_appt"),
+                )
+                .group_by(Appointment.customer_id)
+                .subquery()
+            )
 
             query = query.outerjoin(last_conv, Customer.id == last_conv.c.customer_id)
             query = query.outerjoin(last_appt, Customer.id == last_appt.c.customer_id)
             conditions.append(
                 or_(
-                    and_(last_conv.c.last_conv != None, last_conv.c.last_conv <= cutoff_date),
-                    and_(last_appt.c.last_appt != None, last_appt.c.last_appt <= cutoff_date)
+                    and_(
+                        last_conv.c.last_conv != None,
+                        last_conv.c.last_conv <= cutoff_date,
+                    ),
+                    and_(
+                        last_appt.c.last_appt != None,
+                        last_appt.c.last_appt <= cutoff_date,
+                    ),
                 )
             )
 
@@ -241,17 +249,25 @@ class SegmentationService:
 
         # Outcome filter (from conversations)
         if criteria.get("outcome"):
-            outcomes = criteria["outcome"] if isinstance(criteria["outcome"], list) else [criteria["outcome"]]
+            outcomes = (
+                criteria["outcome"]
+                if isinstance(criteria["outcome"], list)
+                else [criteria["outcome"]]
+            )
             query = query.join(Conversation, Customer.id == Conversation.customer_id)
             conditions.append(Conversation.outcome.in_(outcomes))
 
         # Appointment count filter
         if "appointment_count" in criteria:
             count = criteria["appointment_count"]
-            appt_count = db.query(
-                Appointment.customer_id,
-                func.count(Appointment.id).label('count')
-            ).group_by(Appointment.customer_id).having(func.count(Appointment.id) == count).subquery()
+            appt_count = (
+                db.query(
+                    Appointment.customer_id, func.count(Appointment.id).label("count")
+                )
+                .group_by(Appointment.customer_id)
+                .having(func.count(Appointment.id) == count)
+                .subquery()
+            )
 
             query = query.join(appt_count, Customer.id == appt_count.c.customer_id)
 
@@ -259,18 +275,22 @@ class SegmentationService:
         if criteria.get("last_appointment_status"):
             status = criteria["last_appointment_status"]
             # Subquery to get most recent appointment per customer
-            last_appt_subq = db.query(
-                Appointment.customer_id,
-                func.max(Appointment.appointment_datetime).label('max_date')
-            ).group_by(Appointment.customer_id).subquery()
+            last_appt_subq = (
+                db.query(
+                    Appointment.customer_id,
+                    func.max(Appointment.appointment_datetime).label("max_date"),
+                )
+                .group_by(Appointment.customer_id)
+                .subquery()
+            )
 
             query = query.join(Appointment, Customer.id == Appointment.customer_id)
             query = query.join(
                 last_appt_subq,
                 and_(
                     Appointment.customer_id == last_appt_subq.c.customer_id,
-                    Appointment.appointment_datetime == last_appt_subq.c.max_date
-                )
+                    Appointment.appointment_datetime == last_appt_subq.c.max_date,
+                ),
             )
             conditions.append(Appointment.status == status)
 
@@ -293,10 +313,7 @@ class SegmentationService:
 
     @staticmethod
     def save_segment(
-        db: Session,
-        name: str,
-        description: Optional[str],
-        criteria: Dict[str, Any]
+        db: Session, name: str, description: Optional[str], criteria: Dict[str, Any]
     ) -> Any:
         """
         Save a segment definition for reuse.
@@ -310,14 +327,12 @@ class SegmentationService:
         Returns:
             Created CustomerSegment object
         """
-        from database import CustomerSegment
         import uuid
 
+        from database import CustomerSegment
+
         segment = CustomerSegment(
-            id=uuid.uuid4(),
-            name=name,
-            description=description,
-            criteria=criteria
+            id=uuid.uuid4(), name=name, description=description, criteria=criteria
         )
         db.add(segment)
         db.commit()
@@ -328,15 +343,23 @@ class SegmentationService:
     def get_saved_segments(db: Session) -> List[Any]:
         """Get all saved segments."""
         from database import CustomerSegment
-        return db.query(CustomerSegment).order_by(CustomerSegment.created_at.desc()).all()
+
+        return (
+            db.query(CustomerSegment).order_by(CustomerSegment.created_at.desc()).all()
+        )
 
     @staticmethod
     def delete_segment(db: Session, segment_id: str) -> bool:
         """Delete a saved segment."""
-        from database import CustomerSegment
         import uuid
 
-        segment = db.query(CustomerSegment).filter(CustomerSegment.id == uuid.UUID(segment_id)).first()
+        from database import CustomerSegment
+
+        segment = (
+            db.query(CustomerSegment)
+            .filter(CustomerSegment.id == uuid.UUID(segment_id))
+            .first()
+        )
         if segment:
             db.delete(segment)
             db.commit()

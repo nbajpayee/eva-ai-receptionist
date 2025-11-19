@@ -2,6 +2,7 @@
 Create research campaigns schema for outbound/research functionality.
 Run this script to add research tables to your existing Supabase database.
 """
+
 import sys
 from pathlib import Path
 
@@ -9,7 +10,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from sqlalchemy import text
-from backend.database import engine, SessionLocal
+
+from backend.database import SessionLocal, engine
+
 
 def create_research_schema():
     """Create research campaigns tables."""
@@ -32,7 +35,6 @@ def create_research_schema():
             END IF;
         END $$;
         """,
-
         # Add campaign_id column to conversations table
         """
         DO $$
@@ -46,7 +48,6 @@ def create_research_schema():
             END IF;
         END $$;
         """,
-
         # Create research_campaigns table
         """
         CREATE TABLE IF NOT EXISTS research_campaigns (
@@ -85,7 +86,6 @@ def create_research_schema():
         CREATE INDEX IF NOT EXISTS idx_research_campaigns_type ON research_campaigns(campaign_type);
         CREATE INDEX IF NOT EXISTS idx_research_campaigns_created_at ON research_campaigns(created_at DESC);
         """,
-
         # Create customer_segments table (for reusable segment definitions)
         """
         CREATE TABLE IF NOT EXISTS customer_segments (
@@ -102,7 +102,6 @@ def create_research_schema():
 
         CREATE INDEX IF NOT EXISTS idx_customer_segments_name ON customer_segments(name);
         """,
-
         # Create manual_call_logs table (for staff-initiated calls)
         """
         CREATE TABLE IF NOT EXISTS manual_call_logs (
@@ -125,7 +124,6 @@ def create_research_schema():
         CREATE INDEX IF NOT EXISTS idx_manual_call_logs_conversation ON manual_call_logs(conversation_id);
         CREATE INDEX IF NOT EXISTS idx_manual_call_logs_status ON manual_call_logs(transcription_status);
         """,
-
         # Add foreign key constraint for campaign_id
         """
         DO $$
@@ -142,7 +140,6 @@ def create_research_schema():
             END IF;
         END $$;
         """,
-
         # Create updated_at trigger for research_campaigns
         """
         CREATE OR REPLACE FUNCTION update_research_campaigns_updated_at()
@@ -159,7 +156,6 @@ def create_research_schema():
             FOR EACH ROW
             EXECUTE FUNCTION update_research_campaigns_updated_at();
         """,
-
         # Create updated_at trigger for customer_segments
         """
         CREATE OR REPLACE FUNCTION update_customer_segments_updated_at()
@@ -175,7 +171,7 @@ def create_research_schema():
             BEFORE UPDATE ON customer_segments
             FOR EACH ROW
             EXECUTE FUNCTION update_customer_segments_updated_at();
-        """
+        """,
     ]
 
     db = SessionLocal()

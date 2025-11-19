@@ -1,7 +1,9 @@
 """
 Agent configuration templates for research and outbound campaigns.
 """
-from typing import Dict, Any, List
+
+from typing import Any, Dict, List
+
 from config import get_settings
 
 settings = get_settings()
@@ -33,17 +35,20 @@ Remember: You're gathering insights to improve the booking experience.""",
                 "What made you interested in {service_interested} initially?",
                 "Was there anything that made you hesitate to complete your booking?",
                 "Did you find any part of our booking process confusing or difficult?",
-                "Is there anything we could do differently to make booking easier?"
+                "Is there anything we could do differently to make booking easier?",
             ],
             "voice_settings": {
                 "voice": "alloy",
                 "temperature": 0.7,
-                "max_response_tokens": 150
+                "max_response_tokens": 150,
             },
-            "expected_outcomes": ["feedback_gathered", "booking_intent_revived", "complaint"],
-            "success_metrics": ["response_rate", "completion_rate", "sentiment_score"]
+            "expected_outcomes": [
+                "feedback_gathered",
+                "booking_intent_revived",
+                "complaint",
+            ],
+            "success_metrics": ["response_rate", "completion_rate", "sentiment_score"],
         },
-
         "special_offer_outbound": {
             "name": "Limited Time Offer",
             "type": "outbound_sales",
@@ -66,17 +71,24 @@ Your goal: Convert interest into a booked appointment.""",
             "questions": [
                 "Would you like to take advantage of our {offer_details}?",
                 "What dates work best for you this month?",
-                "Do you have any questions about the treatment or the offer?"
+                "Do you have any questions about the treatment or the offer?",
             ],
             "voice_settings": {
                 "voice": "alloy",
                 "temperature": 0.6,
-                "max_response_tokens": 200
+                "max_response_tokens": 200,
             },
-            "expected_outcomes": ["appointment_scheduled", "callback_requested", "not_interested"],
-            "success_metrics": ["conversion_rate", "booking_count", "revenue_generated"]
+            "expected_outcomes": [
+                "appointment_scheduled",
+                "callback_requested",
+                "not_interested",
+            ],
+            "success_metrics": [
+                "conversion_rate",
+                "booking_count",
+                "revenue_generated",
+            ],
         },
-
         "feedback_request": {
             "name": "Post-Visit Feedback",
             "type": "research",
@@ -99,17 +111,24 @@ Your goal: Gather honest feedback and strengthen the relationship.""",
                 "Did {provider_name} meet your expectations?",
                 "Was there anything you particularly enjoyed?",
                 "Is there anything we could have done better?",
-                "Would you be interested in scheduling a follow-up treatment?"
+                "Would you be interested in scheduling a follow-up treatment?",
             ],
             "voice_settings": {
                 "voice": "alloy",
                 "temperature": 0.7,
-                "max_response_tokens": 150
+                "max_response_tokens": 150,
             },
-            "expected_outcomes": ["positive_feedback", "constructive_criticism", "repeat_booking"],
-            "success_metrics": ["satisfaction_score", "response_rate", "repeat_booking_rate"]
+            "expected_outcomes": [
+                "positive_feedback",
+                "constructive_criticism",
+                "repeat_booking",
+            ],
+            "success_metrics": [
+                "satisfaction_score",
+                "response_rate",
+                "repeat_booking_rate",
+            ],
         },
-
         "reactivation_campaign": {
             "name": "Win Back Inactive Customers",
             "type": "outbound_sales",
@@ -131,17 +150,24 @@ Your goal: Reactivate the customer relationship and book an appointment.""",
                 "We noticed you haven't been in for a while - is everything okay?",
                 "Have you heard about our new {new_service}?",
                 "Would you like to schedule an appointment? We have some great availability this month.",
-                "Is there anything we could do to make your next visit more convenient?"
+                "Is there anything we could do to make your next visit more convenient?",
             ],
             "voice_settings": {
                 "voice": "alloy",
                 "temperature": 0.6,
-                "max_response_tokens": 180
+                "max_response_tokens": 180,
             },
-            "expected_outcomes": ["reactivation_success", "scheduling_difficulty", "no_longer_interested"],
-            "success_metrics": ["reactivation_rate", "booking_count", "customer_lifetime_value"]
+            "expected_outcomes": [
+                "reactivation_success",
+                "scheduling_difficulty",
+                "no_longer_interested",
+            ],
+            "success_metrics": [
+                "reactivation_rate",
+                "booking_count",
+                "customer_lifetime_value",
+            ],
         },
-
         "appointment_reminder_upsell": {
             "name": "Appointment Reminder + Upsell",
             "type": "outbound_sales",
@@ -163,17 +189,20 @@ Your goal: Confirm appointment and potentially upgrade the booking.""",
                 "Just confirming your {service_type} appointment on {appointment_date} - all set?",
                 "Do you have any questions before your visit?",
                 "Have you considered adding {complementary_service}? It pairs beautifully with {service_type}.",
-                "Would you like to extend your appointment time to include this?"
+                "Would you like to extend your appointment time to include this?",
             ],
             "voice_settings": {
                 "voice": "alloy",
                 "temperature": 0.6,
-                "max_response_tokens": 150
+                "max_response_tokens": 150,
             },
             "expected_outcomes": ["confirmed", "upgraded", "rescheduled", "cancelled"],
-            "success_metrics": ["confirmation_rate", "upsell_rate", "no_show_reduction"]
+            "success_metrics": [
+                "confirmation_rate",
+                "upsell_rate",
+                "no_show_reduction",
+            ],
         },
-
         "referral_request": {
             "name": "Request Referral",
             "type": "outbound_sales",
@@ -195,16 +224,20 @@ Your goal: Get 1-2 referrals from happy customers.""",
                 "We're so glad you've been happy with our services!",
                 "Do you have friends who might be interested in {service_type}?",
                 "We offer {referral_bonus} when you refer someone. Would you like me to text you a referral link?",
-                "Is there anyone you'd like to share your experience with?"
+                "Is there anyone you'd like to share your experience with?",
             ],
             "voice_settings": {
                 "voice": "alloy",
                 "temperature": 0.7,
-                "max_response_tokens": 150
+                "max_response_tokens": 150,
             },
             "expected_outcomes": ["referral_provided", "maybe_later", "not_interested"],
-            "success_metrics": ["referral_rate", "referral_conversion", "new_customer_acquisition"]
-        }
+            "success_metrics": [
+                "referral_rate",
+                "referral_conversion",
+                "new_customer_acquisition",
+            ],
+        },
     }
 
     @staticmethod
@@ -228,8 +261,7 @@ Your goal: Get 1-2 referrals from happy customers.""",
 
     @staticmethod
     def interpolate_template(
-        template: Dict[str, Any],
-        variables: Dict[str, str]
+        template: Dict[str, Any], variables: Dict[str, str]
     ) -> Dict[str, Any]:
         """
         Fill in template variables with actual values.
@@ -245,7 +277,9 @@ Your goal: Get 1-2 referrals from happy customers.""",
 
         # Interpolate system prompt
         if "system_prompt" in interpolated:
-            interpolated["system_prompt"] = interpolated["system_prompt"].format(**variables)
+            interpolated["system_prompt"] = interpolated["system_prompt"].format(
+                **variables
+            )
 
         # Interpolate questions
         if "questions" in interpolated:
@@ -277,7 +311,9 @@ Your goal: Get 1-2 referrals from happy customers.""",
         if "voice" in voice_settings:
             valid_voices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
             if voice_settings["voice"] not in valid_voices:
-                errors.append(f"Invalid voice. Must be one of: {', '.join(valid_voices)}")
+                errors.append(
+                    f"Invalid voice. Must be one of: {', '.join(valid_voices)}"
+                )
 
         if "temperature" in voice_settings:
             temp = voice_settings["temperature"]
@@ -299,13 +335,13 @@ Be warm, empathetic, and genuinely curious.""",
                 "questions": [
                     "What brought you to us initially?",
                     "How was your experience with our services?",
-                    "What could we do to improve?"
+                    "What could we do to improve?",
                 ],
                 "voice_settings": {
                     "voice": "alloy",
                     "temperature": 0.7,
-                    "max_response_tokens": 150
-                }
+                    "max_response_tokens": 150,
+                },
             }
         else:  # outbound_sales
             return {
@@ -315,11 +351,11 @@ Be friendly, professional, and helpful.""",
                 "questions": [
                     "Would you be interested in scheduling an appointment?",
                     "What dates work best for you?",
-                    "Do you have any questions about our services?"
+                    "Do you have any questions about our services?",
                 ],
                 "voice_settings": {
                     "voice": "alloy",
                     "temperature": 0.6,
-                    "max_response_tokens": 200
-                }
+                    "max_response_tokens": 200,
+                },
             }

@@ -2,21 +2,28 @@
 Outbound execution service for research and sales campaigns.
 Orchestrates multi-channel outreach to customers.
 """
+
 import logging
-from datetime import datetime
-from typing import Dict, Any, List, Optional
-from uuid import UUID
 import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from database import (
-    ResearchCampaign, Customer, Conversation,
-    CommunicationMessage, SMSDetails, EmailDetails, VoiceCallDetails
-)
 from analytics import AnalyticsService
-from messaging_service import MessagingService
 from config import get_settings
+from database import (
+    CommunicationMessage,
+    Conversation,
+    Customer,
+    EmailDetails,
+    ResearchCampaign,
+    SMSDetails,
+    VoiceCallDetails,
+)
+from messaging_service import MessagingService
+
 from .agent_templates import AgentTemplates
 from .campaign_service import CampaignService
 from .segmentation_service import SegmentationService
@@ -36,15 +43,10 @@ class OutboundService:
             db_session_factory: Factory function to create database sessions
         """
         self._db_session_factory = db_session_factory
-        self.messaging_service = MessagingService(
-            db_session_factory=db_session_factory
-        )
+        self.messaging_service = MessagingService(db_session_factory=db_session_factory)
 
     def execute_campaign(
-        self,
-        db: Session,
-        campaign_id: UUID,
-        limit: Optional[int] = None
+        self, db: Session, campaign_id: UUID, limit: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Execute a campaign by sending outbound communications to segment.
@@ -58,21 +60,23 @@ class OutboundService:
             Dictionary with execution results
         """
         # Get campaign
-        campaign = db.query(ResearchCampaign).filter(
-            ResearchCampaign.id == campaign_id
-        ).first()
+        campaign = (
+            db.query(ResearchCampaign)
+            .filter(ResearchCampaign.id == campaign_id)
+            .first()
+        )
 
         if not campaign:
             raise ValueError(f"Campaign not found: {campaign_id}")
 
         if campaign.status != "active":
-            raise ValueError(f"Can only execute active campaigns. Current status: {campaign.status}")
+            raise ValueError(
+                f"Can only execute active campaigns. Current status: {campaign.status}"
+            )
 
         # Get customers in segment
         customers = SegmentationService.execute_segment(
-            db=db,
-            criteria=campaign.segment_criteria,
-            limit=limit
+            db=db, criteria=campaign.segment_criteria, limit=limit
         )
 
         logger.info(f"Executing campaign {campaign.id} for {len(customers)} customers")
@@ -83,7 +87,7 @@ class OutboundService:
             "total_customers": len(customers),
             "successful": 0,
             "failed": 0,
-            "errors": []
+            "errors": [],
         }
 
         for customer in customers:
@@ -102,7 +106,9 @@ class OutboundService:
                     elif customer.email:
                         self._execute_email_outbound(db, campaign, customer)
                     else:
-                        logger.warning(f"Customer {customer.id} has no contact info for multi-channel")
+                        logger.warning(
+                            f"Customer {customer.id} has no contact info for multi-channel"
+                        )
                         continue
 
                 results["successful"] += 1
@@ -111,20 +117,16 @@ class OutboundService:
                 CampaignService.increment_contacted_count(db, campaign_id)
 
             except Exception as e:
-                logger.error(f"Failed to contact customer {customer.id}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to contact customer {customer.id}: {e}", exc_info=True
+                )
                 results["failed"] += 1
-                results["errors"].append({
-                    "customer_id": customer.id,
-                    "error": str(e)
-                })
+                results["errors"].append({"customer_id": customer.id, "error": str(e)})
 
         return results
 
     def _execute_sms_outbound(
-        self,
-        db: Session,
-        campaign: ResearchCampaign,
-        customer: Customer
+        self, db: Session, campaign: ResearchCampaign, customer: Customer
     ):
         """Execute SMS outbound for a customer."""
         if not customer.phone:
@@ -132,9 +134,7 @@ class OutboundService:
 
         # Find or create conversation
         conversation = MessagingService.find_active_conversation(
-            db=db,
-            customer_id=customer.id,
-            channel="sms"
+            db=db, customer_id=customer.id, channel="sms"
         )
 
         if not conversation:
@@ -145,8 +145,8 @@ class OutboundService:
                 channel="sms",
                 metadata={
                     "campaign_id": str(campaign.id),
-                    "campaign_type": campaign.campaign_type
-                }
+                    "campaign_type": campaign.campaign_type,
+                },
             )
 
             # Link to campaign
@@ -162,10 +162,7 @@ class OutboundService:
         # For now, just add the outbound message to conversation
         # In production, this would call Twilio API
         outbound_msg = MessagingService.add_assistant_message(
-            db=db,
-            conversation=conversation,
-            content=initial_message,
-            metadata={}
+            db=db, conversation=conversation, content=initial_message, metadata={}
         )
 
         # Add SMS details
@@ -175,10 +172,12 @@ class OutboundService:
             from_number=settings.MED_SPA_PHONE,
             to_number=customer.phone,
             provider_message_id=f"outbound_{uuid.uuid4()}",
-            delivery_status="sent"
+            delivery_status="sent",
         )
 
-        logger.info(f"Sent SMS to {customer.name} ({customer.phone}) for campaign {campaign.id}")
+        logger.info(
+            f"Sent SMS to {customer.name} ({customer.phone}) for campaign {campaign.id}"
+        )
 
         # TODO: In production, integrate with Twilio:
         # from twilio.rest import Client
@@ -190,10 +189,7 @@ class OutboundService:
         # )
 
     def _execute_email_outbound(
-        self,
-        db: Session,
-        campaign: ResearchCampaign,
-        customer: Customer
+        self, db: Session, campaign: ResearchCampaign, customer: Customer
     ):
         """Execute email outbound for a customer."""
         if not customer.email:
@@ -201,9 +197,7 @@ class OutboundService:
 
         # Find or create conversation
         conversation = MessagingService.find_active_conversation(
-            db=db,
-            customer_id=customer.id,
-            channel="email"
+            db=db, customer_id=customer.id, channel="email"
         )
 
         if not conversation:
@@ -215,8 +209,8 @@ class OutboundService:
                 subject=f"{campaign.name} - {settings.MED_SPA_NAME}",
                 metadata={
                     "campaign_id": str(campaign.id),
-                    "campaign_type": campaign.campaign_type
-                }
+                    "campaign_type": campaign.campaign_type,
+                },
             )
 
             # Link to campaign
@@ -231,10 +225,7 @@ class OutboundService:
 
         # Add outbound message
         outbound_msg = MessagingService.add_assistant_message(
-            db=db,
-            conversation=conversation,
-            content=body,
-            metadata={}
+            db=db, conversation=conversation, content=body, metadata={}
         )
 
         # Add email details
@@ -247,10 +238,12 @@ class OutboundService:
             body_text=body,
             body_html=self._format_email_html(body),
             provider_message_id=f"outbound_{uuid.uuid4()}",
-            delivery_status="sent"
+            delivery_status="sent",
         )
 
-        logger.info(f"Sent email to {customer.name} ({customer.email}) for campaign {campaign.id}")
+        logger.info(
+            f"Sent email to {customer.name} ({customer.email}) for campaign {campaign.id}"
+        )
 
         # TODO: In production, integrate with SendGrid:
         # from sendgrid import SendGridAPIClient
@@ -265,10 +258,7 @@ class OutboundService:
         # response = sg.send(message)
 
     def _execute_voice_outbound(
-        self,
-        db: Session,
-        campaign: ResearchCampaign,
-        customer: Customer
+        self, db: Session, campaign: ResearchCampaign, customer: Customer
     ):
         """Execute voice outbound for a customer."""
         if not customer.phone:
@@ -282,8 +272,8 @@ class OutboundService:
             metadata={
                 "campaign_id": str(campaign.id),
                 "campaign_type": campaign.campaign_type,
-                "outbound_initiated": True
-            }
+                "outbound_initiated": True,
+            },
         )
 
         # Link to campaign
@@ -292,7 +282,9 @@ class OutboundService:
         db.commit()
         db.refresh(conversation)
 
-        logger.info(f"Created voice conversation for {customer.name} ({customer.phone}) - campaign {campaign.id}")
+        logger.info(
+            f"Created voice conversation for {customer.name} ({customer.phone}) - campaign {campaign.id}"
+        )
 
         # TODO: In production, initiate call via Twilio:
         # This would:
@@ -310,12 +302,12 @@ class OutboundService:
         # )
 
         # For now, just mark as pending outbound
-        logger.warning(f"Voice outbound not yet implemented - conversation {conversation.id} created but call not initiated")
+        logger.warning(
+            f"Voice outbound not yet implemented - conversation {conversation.id} created but call not initiated"
+        )
 
     def _format_initial_message(
-        self,
-        campaign: ResearchCampaign,
-        customer: Customer
+        self, campaign: ResearchCampaign, customer: Customer
     ) -> str:
         """
         Format initial outbound message for SMS/Email.
@@ -336,11 +328,7 @@ class OutboundService:
 
         return message
 
-    def _format_email_body(
-        self,
-        campaign: ResearchCampaign,
-        customer: Customer
-    ) -> str:
+    def _format_email_body(self, campaign: ResearchCampaign, customer: Customer) -> str:
         """Format email body text."""
         agent_config = campaign.agent_config
         questions = agent_config.get("questions", [])
@@ -357,15 +345,17 @@ class OutboundService:
         for i, question in enumerate(questions, 1):
             lines.append(f"{i}. {question}")
 
-        lines.extend([
-            "",
-            "We'd love to hear from you! Simply reply to this email.",
-            "",
-            f"Best regards,",
-            f"{settings.AI_ASSISTANT_NAME}",
-            f"{settings.MED_SPA_NAME}",
-            f"{settings.MED_SPA_PHONE}"
-        ])
+        lines.extend(
+            [
+                "",
+                "We'd love to hear from you! Simply reply to this email.",
+                "",
+                f"Best regards,",
+                f"{settings.AI_ASSISTANT_NAME}",
+                f"{settings.MED_SPA_NAME}",
+                f"{settings.MED_SPA_PHONE}",
+            ]
+        )
 
         return "\n".join(lines)
 
@@ -384,11 +374,7 @@ class OutboundService:
         </html>
         """
 
-    def check_customer_response(
-        self,
-        db: Session,
-        conversation_id: UUID
-    ) -> bool:
+    def check_customer_response(self, db: Session, conversation_id: UUID) -> bool:
         """
         Check if customer has responded to outbound message.
         Updates campaign responded count if this is first response.
@@ -400,18 +386,22 @@ class OutboundService:
         Returns:
             True if customer has responded
         """
-        conversation = db.query(Conversation).filter(
-            Conversation.id == conversation_id
-        ).first()
+        conversation = (
+            db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        )
 
         if not conversation or not conversation.campaign_id:
             return False
 
         # Check if there are inbound messages
-        inbound_count = db.query(CommunicationMessage).filter(
-            CommunicationMessage.conversation_id == conversation_id,
-            CommunicationMessage.direction == "inbound"
-        ).count()
+        inbound_count = (
+            db.query(CommunicationMessage)
+            .filter(
+                CommunicationMessage.conversation_id == conversation_id,
+                CommunicationMessage.direction == "inbound",
+            )
+            .count()
+        )
 
         if inbound_count > 0:
             # Check if we've already counted this response

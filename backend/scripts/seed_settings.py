@@ -4,16 +4,21 @@ Seed med spa settings from config.py into database.
 This script migrates hardcoded configuration values to the database.
 """
 import sys
-from pathlib import Path
 from datetime import time
+from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from config import CANCELLATION_POLICY, PROVIDERS, SERVICES, get_settings
 from database import (
-    SessionLocal, MedSpaSettings, Location, BusinessHours, Service, Provider
+    BusinessHours,
+    Location,
+    MedSpaSettings,
+    Provider,
+    Service,
+    SessionLocal,
 )
-from config import get_settings, SERVICES, PROVIDERS, CANCELLATION_POLICY
 
 
 def seed_med_spa_settings():
@@ -36,7 +41,7 @@ def seed_med_spa_settings():
             website="",  # Not in current config
             timezone="America/New_York",
             ai_assistant_name=settings.AI_ASSISTANT_NAME,
-            cancellation_policy=CANCELLATION_POLICY
+            cancellation_policy=CANCELLATION_POLICY,
         )
 
         db.add(settings_record)
@@ -68,7 +73,7 @@ def seed_locations():
             address=settings.MED_SPA_ADDRESS,
             phone=settings.MED_SPA_PHONE,
             is_primary=True,
-            is_active=True
+            is_active=True,
         )
 
         db.add(location)
@@ -94,15 +99,15 @@ def seed_business_hours(db, location_id):
 
     hours_schedule = [
         # Monday-Friday: 9am-7pm
-        (0, time(9, 0), time(19, 0), False),   # Monday
-        (1, time(9, 0), time(19, 0), False),   # Tuesday
-        (2, time(9, 0), time(19, 0), False),   # Wednesday
-        (3, time(9, 0), time(19, 0), False),   # Thursday
-        (4, time(9, 0), time(19, 0), False),   # Friday
+        (0, time(9, 0), time(19, 0), False),  # Monday
+        (1, time(9, 0), time(19, 0), False),  # Tuesday
+        (2, time(9, 0), time(19, 0), False),  # Wednesday
+        (3, time(9, 0), time(19, 0), False),  # Thursday
+        (4, time(9, 0), time(19, 0), False),  # Friday
         # Saturday: 10am-5pm
         (5, time(10, 0), time(17, 0), False),  # Saturday
         # Sunday: Closed
-        (6, None, None, True),                 # Sunday
+        (6, None, None, True),  # Sunday
     ]
 
     for day, open_time, close_time, is_closed in hours_schedule:
@@ -111,7 +116,7 @@ def seed_business_hours(db, location_id):
             day_of_week=day,
             open_time=open_time,
             close_time=close_time,
-            is_closed=is_closed
+            is_closed=is_closed,
         )
         db.add(hours)
 
@@ -140,7 +145,7 @@ def seed_services():
             "microneedling": "skincare",
             "coolsculpting": "body",
             "prp_facial": "skincare",
-            "consultation": "other"
+            "consultation": "other",
         }
 
         display_order = 0
@@ -155,7 +160,7 @@ def seed_services():
                 aftercare_instructions=service_data["aftercare"],
                 category=category_map.get(slug, "other"),
                 is_active=True,
-                display_order=display_order
+                display_order=display_order,
             )
 
             # Parse price_range if it's in format "$X-$Y"
@@ -166,8 +171,12 @@ def seed_services():
                     price_part = price_range.split("per")[0].strip()
                     if "-" in price_part:
                         min_str, max_str = price_part.split("-")
-                        service.price_min = float(min_str.replace("$", "").replace(",", ""))
-                        service.price_max = float(max_str.replace("$", "").replace(",", ""))
+                        service.price_min = float(
+                            min_str.replace("$", "").replace(",", "")
+                        )
+                        service.price_max = float(
+                            max_str.replace("$", "").replace(",", "")
+                        )
                 except:
                     pass  # Keep as None if parsing fails
 
@@ -205,7 +214,7 @@ def seed_providers():
                 credentials=provider_data.get("credentials", ""),
                 bio="",  # Not in current config
                 is_active=True,
-                display_order=display_order
+                display_order=display_order,
             )
 
             db.add(provider)

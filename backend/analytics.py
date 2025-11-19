@@ -970,7 +970,7 @@ Consider:
         db: Session,
         period: str = "week",
         interval: str = "hour",
-        metrics: Optional[List[str]] = None
+        metrics: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get time-series metrics for charting.
@@ -985,13 +985,16 @@ Consider:
             List of time-series data points
         """
         from datetime import timedelta
-        from sqlalchemy import func, cast, Integer
+
+        from sqlalchemy import Integer, cast, func
 
         now = _utcnow()
 
         # Determine date range
         if period == "today":
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
             trunc_format = "hour"
         elif period == "week":
             start_date = now - timedelta(days=7)
@@ -1000,20 +1003,29 @@ Consider:
             start_date = now - timedelta(days=30)
             trunc_format = "day"
         else:
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
             trunc_format = "hour"
 
         # Query conversations grouped by time interval
-        query = db.query(
-            func.date_trunc(trunc_format, Conversation.initiated_at).label('timestamp'),
-            func.count(Conversation.id).label('total_calls'),
-            func.count(func.nullif(Conversation.outcome == 'appointment_scheduled', False)).label('appointments_booked'),
-            func.avg(cast(Conversation.satisfaction_score, Integer)).label('avg_satisfaction_score')
-        ).filter(
-            Conversation.initiated_at >= start_date
-        ).group_by(
-            func.date_trunc(trunc_format, Conversation.initiated_at)
-        ).order_by('timestamp')
+        query = (
+            db.query(
+                func.date_trunc(trunc_format, Conversation.initiated_at).label(
+                    "timestamp"
+                ),
+                func.count(Conversation.id).label("total_calls"),
+                func.count(
+                    func.nullif(Conversation.outcome == "appointment_scheduled", False)
+                ).label("appointments_booked"),
+                func.avg(cast(Conversation.satisfaction_score, Integer)).label(
+                    "avg_satisfaction_score"
+                ),
+            )
+            .filter(Conversation.initiated_at >= start_date)
+            .group_by(func.date_trunc(trunc_format, Conversation.initiated_at))
+            .order_by("timestamp")
+        )
 
         results = query.all()
 
@@ -1022,16 +1034,15 @@ Consider:
                 "timestamp": r.timestamp.isoformat() if r.timestamp else None,
                 "total_calls": r.total_calls or 0,
                 "appointments_booked": r.appointments_booked or 0,
-                "avg_satisfaction_score": round(float(r.avg_satisfaction_score or 0), 2)
+                "avg_satisfaction_score": round(
+                    float(r.avg_satisfaction_score or 0), 2
+                ),
             }
             for r in results
         ]
 
     @staticmethod
-    def get_conversion_funnel(
-        db: Session,
-        period: str = "week"
-    ) -> Dict[str, Any]:
+    def get_conversion_funnel(db: Session, period: str = "week") -> Dict[str, Any]:
         """
         Get conversion funnel metrics.
 
@@ -1048,38 +1059,60 @@ Consider:
 
         # Determine date range
         if period == "today":
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
         elif period == "week":
             start_date = now - timedelta(days=7)
         elif period == "month":
             start_date = now - timedelta(days=30)
         else:
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
 
         # Stage 1: Total inquiries (all conversations)
-        total_inquiries = db.query(func.count(Conversation.id)).filter(
-            Conversation.initiated_at >= start_date
-        ).scalar() or 0
+        total_inquiries = (
+            db.query(func.count(Conversation.id))
+            .filter(Conversation.initiated_at >= start_date)
+            .scalar()
+            or 0
+        )
 
         # Stage 2: Browsing (conversations with check_availability function calls)
-        browsing_count = db.query(func.count(func.distinct(CommunicationEvent.conversation_id))).filter(
-            CommunicationEvent.event_type == 'function_called',
-            CommunicationEvent.timestamp >= start_date,
-            CommunicationEvent.details['tool'].astext == 'check_availability'
-        ).scalar() or 0
+        browsing_count = (
+            db.query(func.count(func.distinct(CommunicationEvent.conversation_id)))
+            .filter(
+                CommunicationEvent.event_type == "function_called",
+                CommunicationEvent.timestamp >= start_date,
+                CommunicationEvent.details["tool"].astext == "check_availability",
+            )
+            .scalar()
+            or 0
+        )
 
         # Stage 3: Booking attempts (book_appointment function called)
-        booking_attempts = db.query(func.count(func.distinct(CommunicationEvent.conversation_id))).filter(
-            CommunicationEvent.event_type == 'function_called',
-            CommunicationEvent.timestamp >= start_date,
-            CommunicationEvent.details['tool'].astext == 'book_appointment'
-        ).scalar() or 0
+        booking_attempts = (
+            db.query(func.count(func.distinct(CommunicationEvent.conversation_id)))
+            .filter(
+                CommunicationEvent.event_type == "function_called",
+                CommunicationEvent.timestamp >= start_date,
+                CommunicationEvent.details["tool"].astext == "book_appointment",
+            )
+            .scalar()
+            or 0
+        )
 
         # Stage 4: Completed bookings (outcome = 'appointment_scheduled')
-        completed_bookings = db.query(func.count(Conversation.id)).filter(
-            Conversation.initiated_at >= start_date,
-            Conversation.outcome == 'appointment_scheduled'
-        ).scalar() or 0
+        completed_bookings = (
+            db.query(func.count(Conversation.id))
+            .filter(
+                Conversation.initiated_at >= start_date,
+                Conversation.outcome == "appointment_scheduled",
+            )
+            .scalar()
+            or 0
+        )
 
         return {
             "period": period,
@@ -1087,31 +1120,28 @@ Consider:
                 {
                     "name": "Total Inquiries",
                     "value": total_inquiries,
-                    "color": "#3b82f6"  # blue-500
+                    "color": "#3b82f6",  # blue-500
                 },
                 {
                     "name": "Checked Availability",
                     "value": browsing_count,
-                    "color": "#8b5cf6"  # violet-500
+                    "color": "#8b5cf6",  # violet-500
                 },
                 {
                     "name": "Attempted Booking",
                     "value": booking_attempts,
-                    "color": "#f59e0b"  # amber-500
+                    "color": "#f59e0b",  # amber-500
                 },
                 {
                     "name": "Booked Successfully",
                     "value": completed_bookings,
-                    "color": "#10b981"  # emerald-500
-                }
-            ]
+                    "color": "#10b981",  # emerald-500
+                },
+            ],
         }
 
     @staticmethod
-    def get_peak_hours(
-        db: Session,
-        period: str = "week"
-    ) -> List[Dict[str, Any]]:
+    def get_peak_hours(db: Session, period: str = "week") -> List[Dict[str, Any]]:
         """
         Get peak hours heatmap data.
 
@@ -1123,6 +1153,7 @@ Consider:
             List of heatmap cells with day/hour/value
         """
         from datetime import timedelta
+
         from sqlalchemy import extract
 
         now = _utcnow()
@@ -1136,31 +1167,28 @@ Consider:
             start_date = now - timedelta(days=7)
 
         # Query conversations grouped by day of week and hour
-        results = db.query(
-            extract('dow', Conversation.initiated_at).label('day'),
-            extract('hour', Conversation.initiated_at).label('hour'),
-            func.count(Conversation.id).label('value')
-        ).filter(
-            Conversation.initiated_at >= start_date
-        ).group_by(
-            extract('dow', Conversation.initiated_at),
-            extract('hour', Conversation.initiated_at)
-        ).all()
+        results = (
+            db.query(
+                extract("dow", Conversation.initiated_at).label("day"),
+                extract("hour", Conversation.initiated_at).label("hour"),
+                func.count(Conversation.id).label("value"),
+            )
+            .filter(Conversation.initiated_at >= start_date)
+            .group_by(
+                extract("dow", Conversation.initiated_at),
+                extract("hour", Conversation.initiated_at),
+            )
+            .all()
+        )
 
         return [
-            {
-                "day": int(r.day),
-                "hour": int(r.hour),
-                "value": r.value or 0
-            }
+            {"day": int(r.day), "hour": int(r.hour), "value": r.value or 0}
             for r in results
         ]
 
     @staticmethod
     def get_customer_timeline(
-        db: Session,
-        customer_id: int,
-        limit: int = 50
+        db: Session, customer_id: int, limit: int = 50
     ) -> Dict[str, Any]:
         """
         Get conversation timeline for a specific customer.
@@ -1181,33 +1209,45 @@ Consider:
             raise ValueError(f"Customer {customer_id} not found")
 
         # Get conversations
-        conversations = db.query(Conversation)\
-            .options(joinedload(Conversation.messages))\
-            .filter(Conversation.customer_id == customer_id)\
-            .order_by(Conversation.initiated_at.desc())\
-            .limit(limit)\
+        conversations = (
+            db.query(Conversation)
+            .options(joinedload(Conversation.messages))
+            .filter(Conversation.customer_id == customer_id)
+            .order_by(Conversation.initiated_at.desc())
+            .limit(limit)
             .all()
+        )
 
         # Serialize timeline
         timeline = []
         for conv in conversations:
-            timeline.append({
-                "id": str(conv.id),
-                "channel": conv.channel,
-                "initiated_at": conv.initiated_at.isoformat() if conv.initiated_at else None,
-                "completed_at": conv.completed_at.isoformat() if conv.completed_at else None,
-                "outcome": conv.outcome,
-                "satisfaction_score": conv.satisfaction_score,
-                "sentiment": conv.sentiment,
-                "ai_summary": conv.ai_summary,
-                "message_count": len(conv.messages),
-                "status": conv.status
-            })
+            timeline.append(
+                {
+                    "id": str(conv.id),
+                    "channel": conv.channel,
+                    "initiated_at": (
+                        conv.initiated_at.isoformat() if conv.initiated_at else None
+                    ),
+                    "completed_at": (
+                        conv.completed_at.isoformat() if conv.completed_at else None
+                    ),
+                    "outcome": conv.outcome,
+                    "satisfaction_score": conv.satisfaction_score,
+                    "sentiment": conv.sentiment,
+                    "ai_summary": conv.ai_summary,
+                    "message_count": len(conv.messages),
+                    "status": conv.status,
+                }
+            )
 
         # Calculate customer stats
         total_conversations = len(conversations)
-        avg_satisfaction = sum(c.satisfaction_score or 0 for c in conversations) / max(total_conversations, 1)
-        total_bookings = sum(1 for c in conversations if c.outcome == 'appointment_scheduled')
+        avg_satisfaction = sum(c.satisfaction_score or 0 for c in conversations) / max(
+            total_conversations, 1
+        )
+        total_bookings = sum(
+            1 for c in conversations if c.outcome == "appointment_scheduled"
+        )
 
         return {
             "customer": {
@@ -1215,21 +1255,22 @@ Consider:
                 "name": customer.name,
                 "phone": customer.phone,
                 "email": customer.email,
-                "created_at": customer.created_at.isoformat() if customer.created_at else None
+                "created_at": (
+                    customer.created_at.isoformat() if customer.created_at else None
+                ),
             },
             "stats": {
                 "total_conversations": total_conversations,
                 "avg_satisfaction_score": round(avg_satisfaction, 2),
                 "total_bookings": total_bookings,
-                "channels_used": list(set(c.channel for c in conversations))
+                "channels_used": list(set(c.channel for c in conversations)),
             },
-            "timeline": timeline
+            "timeline": timeline,
         }
 
     @staticmethod
     def get_channel_distribution(
-        db: Session,
-        period: str = "week"
+        db: Session, period: str = "week"
     ) -> List[Dict[str, Any]]:
         """
         Get conversation count by communication channel.
@@ -1247,7 +1288,9 @@ Consider:
 
         # Determine date range
         if period == "today":
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
         elif period == "week":
             start_date = now - timedelta(days=7)
         elif period == "month":
@@ -1256,32 +1299,31 @@ Consider:
             start_date = now - timedelta(days=7)
 
         # Query channel counts
-        results = db.query(
-            Conversation.channel,
-            func.count(Conversation.id).label('count')
-        ).filter(
-            Conversation.initiated_at >= start_date
-        ).group_by(Conversation.channel).all()
+        results = (
+            db.query(Conversation.channel, func.count(Conversation.id).label("count"))
+            .filter(Conversation.initiated_at >= start_date)
+            .group_by(Conversation.channel)
+            .all()
+        )
 
         channel_colors = {
-            'voice': '#3b82f6',  # blue-500
-            'sms': '#8b5cf6',    # violet-500
-            'email': '#10b981',  # emerald-500
+            "voice": "#3b82f6",  # blue-500
+            "sms": "#8b5cf6",  # violet-500
+            "email": "#10b981",  # emerald-500
         }
 
         return [
             {
                 "name": r.channel.capitalize(),
                 "conversations": r.count,
-                "color": channel_colors.get(r.channel, '#6b7280')
+                "color": channel_colors.get(r.channel, "#6b7280"),
             }
             for r in results
         ]
 
     @staticmethod
     def get_outcome_distribution(
-        db: Session,
-        period: str = "week"
+        db: Session, period: str = "week"
     ) -> List[Dict[str, Any]]:
         """
         Get conversation count by outcome.
@@ -1299,7 +1341,9 @@ Consider:
 
         # Determine date range
         if period == "today":
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
         elif period == "week":
             start_date = now - timedelta(days=7)
         elif period == "month":
@@ -1308,28 +1352,32 @@ Consider:
             start_date = now - timedelta(days=7)
 
         # Query outcome counts
-        results = db.query(
-            Conversation.outcome,
-            func.count(Conversation.id).label('count')
-        ).filter(
-            Conversation.initiated_at >= start_date,
-            Conversation.outcome.isnot(None)
-        ).group_by(Conversation.outcome).all()
+        results = (
+            db.query(Conversation.outcome, func.count(Conversation.id).label("count"))
+            .filter(
+                Conversation.initiated_at >= start_date,
+                Conversation.outcome.isnot(None),
+            )
+            .group_by(Conversation.outcome)
+            .all()
+        )
 
         outcome_names = {
-            'appointment_scheduled': 'Booked',
-            'info_request': 'Info Only',
-            'complaint': 'Complaint',
-            'unresolved': 'Unresolved',
-            'browsing': 'Browsing',
-            'escalated': 'Escalated',
-            'abandoned': 'Abandoned',
+            "appointment_scheduled": "Booked",
+            "info_request": "Info Only",
+            "complaint": "Complaint",
+            "unresolved": "Unresolved",
+            "browsing": "Browsing",
+            "escalated": "Escalated",
+            "abandoned": "Abandoned",
         }
 
         return [
             {
-                "name": outcome_names.get(r.outcome, r.outcome.replace('_', ' ').title()),
-                "count": r.count
+                "name": outcome_names.get(
+                    r.outcome, r.outcome.replace("_", " ").title()
+                ),
+                "count": r.count,
             }
             for r in results
         ]
