@@ -1,6 +1,7 @@
 """
 Agent configuration templates for research and outbound campaigns.
 """
+
 from typing import Any, Dict, List, Tuple
 
 from config import get_settings

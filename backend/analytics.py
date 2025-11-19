@@ -1302,6 +1302,32 @@ Consider:
         }
 
     @staticmethod
+    def _get_period_start_date(period: str) -> datetime:
+        """
+        Helper method to get start date for a period.
+
+        Args:
+            period: Time period (today, week, month)
+
+        Returns:
+            Start datetime for the period
+        """
+        from datetime import timedelta
+
+        now = _utcnow()
+
+        if period == "today":
+            return datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
+        elif period == "week":
+            return now - timedelta(days=7)
+        elif period == "month":
+            return now - timedelta(days=30)
+        else:
+            return now - timedelta(days=7)  # default to week
+
+    @staticmethod
     def get_channel_distribution(
         db: Session, period: str = "week"
     ) -> List[Dict[str, Any]]:
@@ -1315,44 +1341,36 @@ Consider:
         Returns:
             List of channel distribution data
         """
-        from datetime import timedelta
+        try:
+            start_date = AnalyticsService._get_period_start_date(period)
 
-        now = _utcnow()
-
-        # Determine date range
-        if period == "today":
-            start_date = datetime.combine(
-                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            # Query channel counts
+            results = (
+                db.query(
+                    Conversation.channel, func.count(Conversation.id).label("count")
+                )
+                .filter(Conversation.initiated_at >= start_date)
+                .group_by(Conversation.channel)
+                .all()
             )
-        elif period == "week":
-            start_date = now - timedelta(days=7)
-        elif period == "month":
-            start_date = now - timedelta(days=30)
-        else:
-            start_date = now - timedelta(days=7)
 
-        # Query channel counts
-        results = (
-            db.query(Conversation.channel, func.count(Conversation.id).label("count"))
-            .filter(Conversation.initiated_at >= start_date)
-            .group_by(Conversation.channel)
-            .all()
-        )
-
-        channel_colors = {
-            "voice": "#3b82f6",  # blue-500
-            "sms": "#8b5cf6",  # violet-500
-            "email": "#10b981",  # emerald-500
-        }
-
-        return [
-            {
-                "name": r.channel.capitalize(),
-                "conversations": r.count,
-                "color": channel_colors.get(r.channel, "#6b7280"),
+            channel_colors = {
+                "voice": "#3b82f6",  # blue-500
+                "sms": "#8b5cf6",  # violet-500
+                "email": "#10b981",  # emerald-500
             }
-            for r in results
-        ]
+
+            return [
+                {
+                    "name": r.channel.capitalize() if r.channel else "Unknown",
+                    "conversations": r.count,
+                    "color": channel_colors.get(r.channel, "#6b7280"),
+                }
+                for r in results
+            ]
+        except Exception as e:
+            print(f"Error in get_channel_distribution: {e}")
+            return []
 
     @staticmethod
     def get_outcome_distribution(
@@ -1368,49 +1386,44 @@ Consider:
         Returns:
             List of outcome distribution data
         """
-        from datetime import timedelta
+        try:
+            start_date = AnalyticsService._get_period_start_date(period)
 
-        now = _utcnow()
-
-        # Determine date range
-        if period == "today":
-            start_date = datetime.combine(
-                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            # Query outcome counts
+            results = (
+                db.query(
+                    Conversation.outcome, func.count(Conversation.id).label("count")
+                )
+                .filter(
+                    Conversation.initiated_at >= start_date,
+                    Conversation.outcome.isnot(None),
+                )
+                .group_by(Conversation.outcome)
+                .all()
             )
-        elif period == "week":
-            start_date = now - timedelta(days=7)
-        elif period == "month":
-            start_date = now - timedelta(days=30)
-        else:
-            start_date = now - timedelta(days=7)
 
-        # Query outcome counts
-        results = (
-            db.query(Conversation.outcome, func.count(Conversation.id).label("count"))
-            .filter(
-                Conversation.initiated_at >= start_date,
-                Conversation.outcome.isnot(None),
-            )
-            .group_by(Conversation.outcome)
-            .all()
-        )
-
-        outcome_names = {
-            "appointment_scheduled": "Booked",
-            "info_request": "Info Only",
-            "complaint": "Complaint",
-            "unresolved": "Unresolved",
-            "browsing": "Browsing",
-            "escalated": "Escalated",
-            "abandoned": "Abandoned",
-        }
-
-        return [
-            {
-                "name": outcome_names.get(
-                    r.outcome, r.outcome.replace("_", " ").title()
-                ),
-                "count": r.count,
+            outcome_config = {
+                "appointment_scheduled": ("Booked", "#10b981"),  # emerald-500
+                "info_request": ("Info Only", "#3b82f6"),  # blue-500
+                "complaint": ("Complaint", "#ef4444"),  # red-500
+                "unresolved": ("Unresolved", "#f97316"),  # orange-500
+                "browsing": ("Browsing", "#8b5cf6"),  # violet-500
+                "escalated": ("Escalated", "#eab308"),  # yellow-500
+                "abandoned": ("Abandoned", "#6b7280"),  # gray-500
             }
-            for r in results
-        ]
+
+            return [
+                {
+                    "name": outcome_config.get(
+                        r.outcome, (r.outcome.replace("_", " ").title(), "#6b7280")
+                    )[0],
+                    "count": r.count,
+                    "color": outcome_config.get(
+                        r.outcome, (r.outcome.replace("_", " ").title(), "#6b7280")
+                    )[1],
+                }
+                for r in results
+            ]
+        except Exception as e:
+            print(f"Error in get_outcome_distribution: {e}")
+            return []

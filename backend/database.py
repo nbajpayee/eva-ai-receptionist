@@ -1,6 +1,7 @@
 """
 Database models and session management for the Med Spa Voice AI application.
 """
+
 import logging
 import uuid
 from datetime import datetime, time
@@ -8,6 +9,7 @@ from typing import Optional
 
 from sqlalchemy import (
     ARRAY,
+    JSON,
     Boolean,
     CheckConstraint,
     Column,
@@ -15,7 +17,6 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
-    JSON,
     Numeric,
     String,
     Text,
@@ -973,7 +974,9 @@ def _ensure_schema_upgrades() -> None:
 
     try:
         tables = inspector.get_table_names()
-    except Exception as exc:  # noqa: BLE001 - log and exit silently to avoid startup failures
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - log and exit silently to avoid startup failures
         logger.warning("Failed to inspect database schema: %s", exc)
         return
 
@@ -1007,7 +1010,9 @@ def _ensure_schema_upgrades() -> None:
                     )
                 )
                 conn.execute(
-                    text("ALTER TABLE conversations ALTER COLUMN conversation_type SET NOT NULL")
+                    text(
+                        "ALTER TABLE conversations ALTER COLUMN conversation_type SET NOT NULL"
+                    )
                 )
                 conn.execute(
                     text(
