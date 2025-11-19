@@ -1,5 +1,6 @@
-import pytz
 from datetime import datetime
+
+import pytz
 
 from booking.time_utils import (
     EASTERN_TZ,

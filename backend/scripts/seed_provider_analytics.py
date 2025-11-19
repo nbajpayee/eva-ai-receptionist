@@ -6,12 +6,13 @@ Creates:
 - Sample in-person consultations with transcripts
 - AI insights for each provider
 """
+
 from __future__ import annotations
 
 import sys
 import uuid
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 from random import choice, randint, uniform
 
 from dotenv import load_dotenv
@@ -30,8 +31,12 @@ else:
     load_dotenv()
 
 from database import (
-    SessionLocal, Provider, InPersonConsultation,
-    AIInsight, ProviderPerformanceMetric, Customer
+    AIInsight,
+    Customer,
+    InPersonConsultation,
+    Provider,
+    ProviderPerformanceMetric,
+    SessionLocal,
 )
 
 # Sample data
@@ -41,21 +46,21 @@ PROVIDERS = [
         "email": "sarah.chen@example.com",
         "phone": "555-0101",
         "specialties": ["Botox", "Dermal Fillers", "PDO Thread Lift"],
-        "bio": "15+ years experience in aesthetic medicine. Board certified dermatologist."
+        "bio": "15+ years experience in aesthetic medicine. Board certified dermatologist.",
     },
     {
         "name": "Emily Rodriguez",
         "email": "emily.r@example.com",
         "phone": "555-0102",
         "specialties": ["Laser Hair Removal", "Chemical Peels", "Microneedling"],
-        "bio": "Licensed aesthetician specializing in laser treatments and skin rejuvenation."
+        "bio": "Licensed aesthetician specializing in laser treatments and skin rejuvenation.",
     },
     {
         "name": "Jessica Williams",
         "email": "jessica.w@example.com",
         "phone": "555-0103",
         "specialties": ["Hydrafacial", "Body Contouring", "PRP Facial"],
-        "bio": "Passionate about helping clients achieve natural-looking results."
+        "bio": "Passionate about helping clients achieve natural-looking results.",
     },
 ]
 
@@ -72,7 +77,6 @@ Customer: Okay, I'm ready to book. When can we schedule?
 Provider: I have availability next Tuesday at 2pm or Thursday at 10am. Which works better?
 Customer: Tuesday at 2pm works great!
 Provider: Perfect! I'll get you scheduled. You're going to love the results.""",
-
         """Provider: Thanks for coming in! I see you're interested in dermal fillers. Tell me what areas concern you most?
 Customer: I've noticed my cheeks looking more hollow, and I have these lines around my mouth.
 Provider: I completely understand. What we can do is use hyaluronic acid fillers to restore volume in your midface, which will also help soften those nasolabial folds. The great thing about HA fillers is they look very natural and last 12-18 months.
@@ -81,7 +85,7 @@ Provider: We use a numbing cream beforehand, and the fillers contain lidocaine f
 Customer: How much would this cost?
 Provider: For the areas you mentioned, I'd recommend 2 syringes to start. That would be $1,200 total. We also have a membership program that saves 15% on all treatments.
 Customer: The membership sounds interesting. Let's do it!
-Provider: Excellent decision! I'll get you set up with our membership and we can schedule your first session."""
+Provider: Excellent decision! I'll get you set up with our membership and we can schedule your first session.""",
     ],
     "booked_medium_quality": [
         """Provider: Hello! What can I help you with today?
@@ -102,7 +106,6 @@ Provider: It depends on how many units you need. Could be $300-500.
 Customer: That's more than I thought. I need to think about it.
 Provider: Okay, well, let us know if you change your mind.
 Customer: Thanks, I will.""",
-
         """Provider: Welcome! Interested in any treatments?
 Customer: I saw you do laser hair removal. How does that work?
 Provider: We use laser to target hair follicles. It takes multiple sessions.
@@ -112,7 +115,7 @@ Customer: And the cost?
 Provider: Depends on the area. Small areas start at $150 per session.
 Customer: Oh wow, that adds up. I'm not sure I can afford that right now.
 Provider: Yeah, it can be expensive. Maybe look into our financing options?
-Customer: I'll think about it and get back to you."""
+Customer: I'll think about it and get back to you.""",
     ],
     "thinking": [
         """Provider: Thanks for coming in! Tell me about your skincare goals.
@@ -126,7 +129,7 @@ Customer: That's a lot. Can I just do one for now?
 Provider: Sure, which one interests you more?
 Customer: I'm not sure. Can I think about it and call you back?
 Provider: Of course! Take your time."""
-    ]
+    ],
 }
 
 SAMPLE_INSIGHTS = {
@@ -136,21 +139,21 @@ SAMPLE_INSIGHTS = {
             "insight_text": "Provider consistently makes clients feel welcome and comfortable from the first moment.",
             "quote": "Hi! Welcome to the spa. What brings you in today?",
             "recommendation": None,
-            "confidence": 0.9
+            "confidence": 0.9,
         },
         {
             "title": "Clear explanation of procedures",
             "insight_text": "Provider explains treatments in simple terms and addresses safety concerns proactively.",
             "quote": "Let me explain how Botox works. It's a neurotoxin that temporarily relaxes the muscles...",
             "recommendation": None,
-            "confidence": 0.85
+            "confidence": 0.85,
         },
         {
             "title": "Effective price anchoring",
             "insight_text": "Provider introduces pricing naturally in the context of value and expected results.",
             "quote": "The cost for forehead lines is typically $300-400 depending on units needed.",
             "recommendation": None,
-            "confidence": 0.8
+            "confidence": 0.8,
         },
     ],
     "opportunities": [
@@ -159,23 +162,23 @@ SAMPLE_INSIGHTS = {
             "insight_text": "Provider focuses heavily on technical details but could connect more on emotional benefits.",
             "quote": "It depends on how many units you need. Could be $300-500.",
             "recommendation": "Try framing pricing around the confidence and results the client will feel, not just the technical units needed.",
-            "confidence": 0.75
+            "confidence": 0.75,
         },
         {
             "title": "Improve objection handling for price concerns",
             "insight_text": "When clients express price concerns, provider could better demonstrate value instead of suggesting they 'think about it'.",
             "quote": "Yeah, it can be expensive. Maybe look into our financing options?",
             "recommendation": "When price objections arise, reinforce the long-term value and results. Share success stories from similar clients.",
-            "confidence": 0.8
+            "confidence": 0.8,
         },
         {
             "title": "Ask more qualifying questions upfront",
             "insight_text": "Provider sometimes jumps to solutions before fully understanding client's primary goals.",
             "quote": "Okay, we have a few options. Botox, fillers, or chemical peels. Which interests you?",
             "recommendation": "Spend more time in discovery. Ask 'What would success look like for you?' before presenting options.",
-            "confidence": 0.7
+            "confidence": 0.7,
         },
-    ]
+    ],
 }
 
 
@@ -193,7 +196,7 @@ def seed_providers(db):
             specialties=provider_data["specialties"],
             bio=provider_data["bio"],
             hire_date=datetime.utcnow() - timedelta(days=randint(365, 1095)),
-            is_active=True
+            is_active=True,
         )
         db.add(provider)
         created_providers.append(provider)
@@ -244,9 +247,7 @@ def seed_consultations(db, providers, customers):
 
             # Random date in past 30 days
             created_at = datetime.utcnow() - timedelta(
-                days=randint(0, 30),
-                hours=randint(0, 23),
-                minutes=randint(0, 59)
+                days=randint(0, 30), hours=randint(0, 23), minutes=randint(0, 59)
             )
 
             duration = randint(300, 1200)  # 5-20 minutes
@@ -255,7 +256,9 @@ def seed_consultations(db, providers, customers):
                 id=uuid.uuid4(),
                 provider_id=provider.id,
                 customer_id=choice(customers).id if customers else None,
-                service_type=choice(provider.specialties) if provider.specialties else None,
+                service_type=(
+                    choice(provider.specialties) if provider.specialties else None
+                ),
                 duration_seconds=duration,
                 transcript=choice(transcript_pool),
                 outcome=outcome,
@@ -263,7 +266,7 @@ def seed_consultations(db, providers, customers):
                 sentiment=sentiment,
                 ai_summary=f"{'Successful' if outcome == 'booked' else 'Unsuccessful'} consultation for {provider.specialties[0] if provider.specialties else 'treatment'}. Client {'showed strong interest and booked' if outcome == 'booked' else 'expressed concerns about' if outcome == 'thinking' else 'decided not to proceed with'} treatment.",
                 created_at=created_at,
-                ended_at=created_at + timedelta(seconds=duration)
+                ended_at=created_at + timedelta(seconds=duration),
             )
             db.add(consultation)
 
@@ -301,7 +304,7 @@ def seed_insights(db, providers):
                 recommendation=insight_data["recommendation"],
                 confidence_score=insight_data["confidence"],
                 is_positive=True,
-                created_at=datetime.utcnow() - timedelta(days=randint(1, 7))
+                created_at=datetime.utcnow() - timedelta(days=randint(1, 7)),
             )
             db.add(insight)
 
@@ -318,11 +321,13 @@ def seed_insights(db, providers):
                 recommendation=insight_data["recommendation"],
                 confidence_score=insight_data["confidence"],
                 is_positive=False,
-                created_at=datetime.utcnow() - timedelta(days=randint(1, 7))
+                created_at=datetime.utcnow() - timedelta(days=randint(1, 7)),
             )
             db.add(insight)
 
-        print(f"  ✓ Created {num_strengths} strengths and {num_opportunities} opportunities for {provider.name}")
+        print(
+            f"  ✓ Created {num_strengths} strengths and {num_opportunities} opportunities for {provider.name}"
+        )
 
     db.commit()
 
@@ -345,7 +350,7 @@ def main():
                     name=f"Sample Customer {i+1}",
                     phone=f"555-010{i}",
                     email=f"customer{i+1}@example.com",
-                    is_new_client=True
+                    is_new_client=True,
                 )
                 db.add(customer)
             db.commit()
@@ -374,6 +379,7 @@ def main():
     except Exception as e:
         print(f"\n❌ Error during seeding: {e}")
         import traceback
+
         traceback.print_exc()
         db.rollback()
     finally:

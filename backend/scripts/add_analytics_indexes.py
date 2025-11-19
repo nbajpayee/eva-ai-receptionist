@@ -15,9 +15,17 @@ from pathlib import Path
 backend_path = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_path))
 
-from sqlalchemy import text, Index
-from database import engine, Base, Conversation, CommunicationEvent, CommunicationMessage
 import logging
+
+from sqlalchemy import Index, text
+
+from database import (
+    Base,
+    CommunicationEvent,
+    CommunicationMessage,
+    Conversation,
+    engine,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,64 +39,76 @@ def create_indexes():
             # Index 1: Conversations by initiated_at, channel, outcome
             # Used by: timeseries metrics, conversion funnel
             logger.info("Creating index: conversations_analytics_idx...")
-            conn.execute(text(
-                """
+            conn.execute(
+                text(
+                    """
                 CREATE INDEX IF NOT EXISTS conversations_analytics_idx
                 ON conversations (initiated_at, channel, outcome);
                 """
-            ))
+                )
+            )
 
             # Index 2: Conversations by customer_id and initiated_at
             # Used by: customer timeline queries
             logger.info("Creating index: conversations_customer_timeline_idx...")
-            conn.execute(text(
-                """
+            conn.execute(
+                text(
+                    """
                 CREATE INDEX IF NOT EXISTS conversations_customer_timeline_idx
                 ON conversations (customer_id, initiated_at DESC)
                 WHERE customer_id IS NOT NULL;
                 """
-            ))
+                )
+            )
 
             # Index 3: CommunicationEvent by conversation_id, event_type, timestamp
             # Used by: conversion funnel (function_called events)
             logger.info("Creating index: communication_events_funnel_idx...")
-            conn.execute(text(
-                """
+            conn.execute(
+                text(
+                    """
                 CREATE INDEX IF NOT EXISTS communication_events_funnel_idx
                 ON communication_events (conversation_id, event_type, timestamp);
                 """
-            ))
+                )
+            )
 
             # Index 4: CommunicationEvent JSONB GIN index for details
             # Used by: funnel queries filtering on tool name
             logger.info("Creating index: communication_events_details_idx...")
-            conn.execute(text(
-                """
+            conn.execute(
+                text(
+                    """
                 CREATE INDEX IF NOT EXISTS communication_events_details_idx
                 ON communication_events USING GIN (details);
                 """
-            ))
+                )
+            )
 
             # Index 5: Conversations for peak hours analysis (day/hour extraction)
             # Used by: peak hours heatmap queries
             logger.info("Creating index: conversations_peak_hours_idx...")
-            conn.execute(text(
-                """
+            conn.execute(
+                text(
+                    """
                 CREATE INDEX IF NOT EXISTS conversations_peak_hours_idx
                 ON conversations (initiated_at)
                 WHERE initiated_at IS NOT NULL;
                 """
-            ))
+                )
+            )
 
             # Index 6: CommunicationMessage by conversation_id and sent_at
             # Used by: customer timeline message counts
             logger.info("Creating index: communication_messages_timeline_idx...")
-            conn.execute(text(
-                """
+            conn.execute(
+                text(
+                    """
                 CREATE INDEX IF NOT EXISTS communication_messages_timeline_idx
                 ON communication_messages (conversation_id, sent_at DESC);
                 """
-            ))
+                )
+            )
 
             conn.commit()
             logger.info("✅ All analytics indexes created successfully!")
@@ -103,8 +123,9 @@ def show_indexes():
     """Display all indexes on analytics tables."""
 
     with engine.connect() as conn:
-        result = conn.execute(text(
-            """
+        result = conn.execute(
+            text(
+                """
             SELECT
                 tablename,
                 indexname,
@@ -114,7 +135,8 @@ def show_indexes():
             AND tablename IN ('conversations', 'communication_events', 'communication_messages')
             ORDER BY tablename, indexname;
             """
-        ))
+            )
+        )
 
         print("\n📊 Current Indexes:")
         print("-" * 100)

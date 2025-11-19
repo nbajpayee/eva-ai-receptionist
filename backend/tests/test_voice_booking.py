@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timedelta
 
 import pytest
@@ -8,7 +7,7 @@ import pytest
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionManager
 from booking.time_utils import to_eastern
-from database import SessionLocal, Conversation, CommunicationMessage
+from database import CommunicationMessage, Conversation, SessionLocal
 
 
 @pytest.fixture
@@ -30,7 +29,9 @@ def _create_voice_conversation(session, session_id: str) -> Conversation:
     return conversation
 
 
-def _cleanup_entities(session, conversation: Conversation, messages: list[CommunicationMessage]) -> None:
+def _cleanup_entities(
+    session, conversation: Conversation, messages: list[CommunicationMessage]
+) -> None:
     for message in messages:
         refreshed = session.query(CommunicationMessage).get(message.id)
         if refreshed:
@@ -121,7 +122,9 @@ def test_enforce_booking_aligns_with_selected_slot(db_session):
         pending = metadata["pending_slot_offers"]
         pending["selected_option_index"] = 1
         pending["selected_slot"] = pending["slots"][0]
-        SlotSelectionManager.persist_conversation_metadata(db_session, conversation, metadata)
+        SlotSelectionManager.persist_conversation_metadata(
+            db_session, conversation, metadata
+        )
 
         arguments = {
             "customer_name": "Test Caller",
@@ -142,7 +145,9 @@ def test_enforce_booking_aligns_with_selected_slot(db_session):
         # When the requested start already matches the offered slot, adjustments may be empty.
         if adjustments:
             assert "start_time" in adjustments
-            assert adjustments["start_time"]["normalized"] == pending["slots"][0]["start"]
+            assert (
+                adjustments["start_time"]["normalized"] == pending["slots"][0]["start"]
+            )
     finally:
         _cleanup_entities(db_session, conversation, messages)
 
@@ -176,7 +181,9 @@ def test_capture_selection_with_numbered_choice(db_session):
         )
         messages.append(message)
 
-        captured = SlotSelectionManager.capture_selection(db_session, conversation, message)
+        captured = SlotSelectionManager.capture_selection(
+            db_session, conversation, message
+        )
         assert captured is True
 
         db_session.refresh(conversation)
@@ -216,7 +223,9 @@ def test_capture_selection_with_time_phrase(db_session):
         )
         messages.append(message)
 
-        captured = SlotSelectionManager.capture_selection(db_session, conversation, message)
+        captured = SlotSelectionManager.capture_selection(
+            db_session, conversation, message
+        )
         assert captured is True
 
         db_session.refresh(conversation)

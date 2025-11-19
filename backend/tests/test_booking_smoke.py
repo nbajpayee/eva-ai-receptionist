@@ -33,7 +33,9 @@ def _make_conversation(session, *, channel: str) -> Conversation:
     return conversation
 
 
-def _log_message(session, conversation: Conversation, content: str, *, source: str) -> CommunicationMessage:
+def _log_message(
+    session, conversation: Conversation, content: str, *, source: str
+) -> CommunicationMessage:
     message = CommunicationMessage(
         conversation_id=conversation.id,
         direction="inbound",
@@ -68,7 +70,9 @@ def _build_slots(base: datetime) -> list[dict[str, str]]:
 
 
 def _cleanup(session, conversation: Conversation) -> None:
-    session.query(CommunicationMessage).filter(CommunicationMessage.conversation_id == conversation.id).delete()
+    session.query(CommunicationMessage).filter(
+        CommunicationMessage.conversation_id == conversation.id
+    ).delete()
     session.query(Conversation).filter(Conversation.id == conversation.id).delete()
     session.commit()
 
@@ -92,8 +96,13 @@ def test_sms_booking_smoke(db_session):
             },
         )
 
-        message = _log_message(db_session, conversation, "Option 2 works great", source="sms_message")
-        assert SlotSelectionManager.capture_selection(db_session, conversation, message) is True
+        message = _log_message(
+            db_session, conversation, "Option 2 works great", source="sms_message"
+        )
+        assert (
+            SlotSelectionManager.capture_selection(db_session, conversation, message)
+            is True
+        )
 
         normalized, adjustments = SlotSelectionManager.enforce_booking(
             db_session,
@@ -143,7 +152,10 @@ def test_email_booking_smoke(db_session):
             f"Hi there, I can do {selection_phrase} on the 17th.",
             source="email_body",
         )
-        assert SlotSelectionManager.capture_selection(db_session, conversation, message) is True
+        assert (
+            SlotSelectionManager.capture_selection(db_session, conversation, message)
+            is True
+        )
 
         normalized, adjustments = SlotSelectionManager.enforce_booking(
             db_session,
@@ -192,7 +204,10 @@ def test_voice_booking_smoke(db_session):
             "I'll take option 1 please",
             source="voice_transcript",
         )
-        assert SlotSelectionManager.capture_selection(db_session, conversation, message) is True
+        assert (
+            SlotSelectionManager.capture_selection(db_session, conversation, message)
+            is True
+        )
 
         normalized, adjustments = SlotSelectionManager.enforce_booking(
             db_session,

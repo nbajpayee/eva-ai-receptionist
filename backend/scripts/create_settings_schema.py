@@ -9,10 +9,17 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from database import (
-    engine, Base, MedSpaSettings, Location, BusinessHours, Service
-)
 from sqlalchemy import inspect
+
+from database import (
+    Base,
+    BusinessHours,
+    Location,
+    MedSpaSettings,
+    Provider,
+    Service,
+    engine,
+)
 
 
 def create_settings_tables():
@@ -25,12 +32,7 @@ def create_settings_tables():
 
     # Tables we want to create
     # Note: 'providers' table already exists from main branch - not creating it here
-    settings_tables = [
-        'med_spa_settings',
-        'locations',
-        'business_hours',
-        'services'
-    ]
+    settings_tables = ["med_spa_settings", "locations", "business_hours", "services"]
 
     # Check which tables need to be created
     tables_to_create = [t for t in settings_tables if t not in existing_tables]

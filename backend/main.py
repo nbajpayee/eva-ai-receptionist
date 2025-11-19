@@ -1,25 +1,45 @@
 """
 Main FastAPI application for Med Spa Voice AI.
 """
-import uuid
+
 import asyncio
 import logging
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query, Request
-from starlette.websockets import WebSocketState
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
-from typing import Optional, Dict, List
+import uuid
 from datetime import datetime
-from config import get_settings
-from database import get_db, init_db, Customer, Appointment, CallSession, Conversation, CommunicationMessage
-from realtime_client import RealtimeClient
+from typing import Dict, List, Optional
+
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import asc, case, desc, func
+from sqlalchemy.orm import Session, joinedload
+from starlette.websockets import WebSocketState
+
 from analytics import AnalyticsService
-from api_messaging import messaging_router
 from api_customers import customers_router
+from api_messaging import messaging_router
 from api_research import router as research_router
 from calendar_service import check_calendar_credentials
+from config import get_settings
+from database import (
+    Appointment,
+    CallSession,
+    CommunicationMessage,
+    Conversation,
+    Customer,
+    get_db,
+    init_db,
+)
+from realtime_client import RealtimeClient
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -28,7 +48,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="AI-powered voice receptionist for medical spas"
+    description="AI-powered voice receptionist for medical spas",
 )
 
 # Register routers
@@ -70,7 +90,7 @@ async def root():
     return {
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "status": "running"
+        "status": "running",
     }
 
 
@@ -87,14 +107,17 @@ async def get_live_status(db: Session = Depends(get_db)):
     active_session_ids = list(active_connections.keys())
 
     # Get recent call sessions (last 10, including active ones)
-    recent_calls = db.query(CallSession).order_by(
-        CallSession.started_at.desc()
-    ).limit(10).all()
+    recent_calls = (
+        db.query(CallSession).order_by(CallSession.started_at.desc()).limit(10).all()
+    )
 
     # Get active call sessions (not yet ended)
-    active_calls = db.query(CallSession).filter(
-        CallSession.ended_at.is_(None)
-    ).order_by(CallSession.started_at.desc()).all()
+    active_calls = (
+        db.query(CallSession)
+        .filter(CallSession.ended_at.is_(None))
+        .order_by(CallSession.started_at.desc())
+        .all()
+    )
 
     return {
         "active_websocket_count": len(active_session_ids),
@@ -119,17 +142,16 @@ async def get_live_status(db: Session = Depends(get_db)):
                 "outcome": call.outcome,
             }
             for call in recent_calls
-        ]
+        ],
     }
 
 
 # ==================== Voice WebSocket Endpoint ====================
 
+
 @app.websocket("/ws/voice/{session_id}")
 async def voice_websocket(
-    websocket: WebSocket,
-    session_id: str,
-    db: Session = Depends(get_db)
+    websocket: WebSocket, session_id: str, db: Session = Depends(get_db)
 ):
     """
     WebSocket endpoint for voice communication with OpenAI Realtime API.
@@ -145,17 +167,18 @@ async def voice_websocket(
     # DUAL-WRITE: Create both legacy call_session and new conversation
     # Legacy schema (for backward compatibility during migration)
     call_session = AnalyticsService.create_call_session(
-        db=db,
-        session_id=session_id,
-        phone_number=None  # Will be updated if collected
+        db=db, session_id=session_id, phone_number=None  # Will be updated if collected
     )
 
     # New omnichannel schema
     conversation = AnalyticsService.create_conversation(
         db=db,
         customer_id=None,  # Will be updated if identified
-        channel='voice',
-        metadata={'session_id': session_id, 'legacy_call_session_id': str(call_session.id)}
+        channel="voice",
+        metadata={
+            "session_id": session_id,
+            "legacy_call_session_id": str(call_session.id),
+        },
     )
 
     # Initialize OpenAI Realtime client
@@ -179,8 +202,10 @@ async def voice_websocket(
             active_connections.pop(session_id, None)
 
             session_data = realtime_client.get_session_data()
-            transcript_entries = session_data.get('transcript', [])
-            print(f"🧾 Transcript entries captured for {session_id}: {len(transcript_entries)}")
+            transcript_entries = session_data.get("transcript", [])
+            print(
+                f"🧾 Transcript entries captured for {session_id}: {len(transcript_entries)}"
+            )
             if not transcript_entries:
                 print("🧾 Transcript data (empty or missing)")
             else:
@@ -191,26 +216,30 @@ async def voice_websocket(
                 # DUAL-WRITE: Update both legacy and new schemas
 
                 # Extract customer data once for reuse
-                customer_data = session_data.get('customer_data', {})
+                customer_data = session_data.get("customer_data", {})
 
                 # 1. Update legacy call_session (this also looks up/links customer)
                 updated_call_session = AnalyticsService.end_call_session(
                     db=db,
                     session_id=session_id,
-                    transcript=session_data.get('transcript', []),
-                    function_calls=session_data.get('function_calls', []),
-                    customer_data=customer_data
+                    transcript=session_data.get("transcript", []),
+                    function_calls=session_data.get("function_calls", []),
+                    customer_data=customer_data,
                 )
 
                 # 2. Update new conversation schema
                 # Extract customer ID from the updated call_session
                 # (end_call_session already looked up customer by phone)
-                customer_id = updated_call_session.customer_id if updated_call_session else None
+                customer_id = (
+                    updated_call_session.customer_id if updated_call_session else None
+                )
 
                 # Update conversation with customer ID if identified
                 if customer_id:
                     conversation.customer_id = customer_id
-                    print(f"🔗 Linked conversation {conversation.id} to customer {customer_id}")
+                    print(
+                        f"🔗 Linked conversation {conversation.id} to customer {customer_id}"
+                    )
                     db.commit()
                 else:
                     print(f"⚠️  No customer linked for session {session_id}")
@@ -218,34 +247,52 @@ async def voice_websocket(
                 # Add message with human-readable summary (not raw JSON)
                 # The actual transcript goes in voice_details.transcript_segments
                 import json
-                summary_text = f"Voice call - {len(transcript_entries)} transcript segments"
+
+                summary_text = (
+                    f"Voice call - {len(transcript_entries)} transcript segments"
+                )
                 if transcript_entries:
                     # Include first and last message for context
-                    first_msg = transcript_entries[0].get('text', '') if transcript_entries else ''
+                    first_msg = (
+                        transcript_entries[0].get("text", "")
+                        if transcript_entries
+                        else ""
+                    )
                     summary_text = f"Voice call starting with: {first_msg[:100]}..."
 
                 message = AnalyticsService.add_message(
                     db=db,
                     conversation_id=conversation.id,
-                    direction='inbound',
+                    direction="inbound",
                     content=summary_text,  # Human-readable summary, not JSON dump
                     sent_at=conversation.initiated_at,
                     metadata={
-                        'customer_interruptions': customer_data.get('interruptions', 0),
-                        'ai_clarifications_needed': 0,
-                        'transcript_entry_count': len(transcript_entries)
-                    }
+                        "customer_interruptions": customer_data.get("interruptions", 0),
+                        "ai_clarifications_needed": 0,
+                        "transcript_entry_count": len(transcript_entries),
+                    },
                 )
 
                 # Add voice call details
-                duration = int((datetime.utcnow() - conversation.initiated_at.replace(tzinfo=None)).total_seconds()) if conversation.initiated_at else 0
+                duration = (
+                    int(
+                        (
+                            datetime.utcnow()
+                            - conversation.initiated_at.replace(tzinfo=None)
+                        ).total_seconds()
+                    )
+                    if conversation.initiated_at
+                    else 0
+                )
                 AnalyticsService.add_voice_details(
                     db=db,
                     message_id=message.id,
                     duration_seconds=duration,
                     transcript_segments=transcript_entries,
-                    function_calls=session_data.get('function_calls', []),
-                    interruption_count=session_data.get('customer_data', {}).get('interruptions', 0)
+                    function_calls=session_data.get("function_calls", []),
+                    interruption_count=session_data.get("customer_data", {}).get(
+                        "interruptions", 0
+                    ),
                 )
 
                 # Complete conversation
@@ -264,7 +311,9 @@ async def voice_websocket(
                     try:
                         await realtime_client.disconnect()
                     except Exception as disconnect_exc:  # noqa: BLE001
-                        logger.warning("Failed to disconnect realtime client: %s", disconnect_exc)
+                        logger.warning(
+                            "Failed to disconnect realtime client: %s", disconnect_exc
+                        )
                 realtime_client.close()
 
     try:
@@ -279,30 +328,30 @@ async def voice_websocket(
             db=db,
             call_session_id=call_session.id,
             event_type="session_started",
-            data={"session_id": session_id}
+            data={"session_id": session_id},
         )
         # New schema
         AnalyticsService.add_communication_event(
             db=db,
             conversation_id=conversation.id,
             event_type="session_started",
-            details={"session_id": session_id}
+            details={"session_id": session_id},
         )
         print("✅ Session logged to both schemas, about to define audio_callback")
 
         # Define callback for audio output
         print("✅ Defining audio_callback function")
+
         async def audio_callback(audio_b64: str):
             """Send audio from OpenAI back to client."""
             if websocket.client_state != WebSocketState.CONNECTED:
                 print("📤 Skipping audio send; websocket no longer connected")
                 return
 
-            print(f"📤 Audio callback called, sending {len(audio_b64)} chars to browser")
-            await websocket.send_json({
-                "type": "audio",
-                "data": audio_b64
-            })
+            print(
+                f"📤 Audio callback called, sending {len(audio_b64)} chars to browser"
+            )
+            await websocket.send_json({"type": "audio", "data": audio_b64})
             print("📤 Audio sent to browser")
 
         print("✅ audio_callback defined, about to define handle_client_messages")
@@ -335,7 +384,9 @@ async def voice_websocket(
                         try:
                             await websocket.close(code=1000)
                         except Exception as close_err:
-                            print(f"📱 Error closing client websocket after end_session: {close_err}")
+                            print(
+                                f"📱 Error closing client websocket after end_session: {close_err}"
+                            )
                         break
 
                     elif msg_type == "ping":
@@ -355,11 +406,16 @@ async def voice_websocket(
             except Exception as e:
                 print(f"📱 Error in client handler: {e}")
                 import traceback
+
                 traceback.print_exc()
             finally:
-                print("📱 Client handler exiting; realtime client will be closed during finalization")
+                print(
+                    "📱 Client handler exiting; realtime client will be closed during finalization"
+                )
 
-        print("✅ handle_client_messages defined, about to define handle_openai_messages")
+        print(
+            "✅ handle_client_messages defined, about to define handle_openai_messages"
+        )
 
         async def handle_openai_messages():
             """Handle incoming messages from OpenAI."""
@@ -372,9 +428,12 @@ async def voice_websocket(
             except Exception as e:
                 print(f"🤖 Error in OpenAI handler: {e}")
                 import traceback
+
                 traceback.print_exc()
 
-        print("✅ handle_openai_messages defined, about to import asyncio and start handlers")
+        print(
+            "✅ handle_openai_messages defined, about to import asyncio and start handlers"
+        )
 
         try:
             client_task = asyncio.create_task(handle_client_messages())
@@ -393,10 +452,14 @@ async def voice_websocket(
                 grace_start = asyncio.get_event_loop().time()
                 grace_timeout = 3.0
                 while pending_tasks:
-                    remaining = grace_timeout - (asyncio.get_event_loop().time() - grace_start)
+                    remaining = grace_timeout - (
+                        asyncio.get_event_loop().time() - grace_start
+                    )
                     if remaining <= 0:
                         break
-                    done_extra, pending_tasks = await asyncio.wait(pending_tasks, timeout=min(0.5, remaining))
+                    done_extra, pending_tasks = await asyncio.wait(
+                        pending_tasks, timeout=min(0.5, remaining)
+                    )
                     done_tasks.update(done_extra)
 
             # Ensure OpenAI connection is torn down once either side completes
@@ -420,11 +483,13 @@ async def voice_websocket(
         except Exception as orchestration_error:
             print(f"❌ Error orchestrating realtime handlers: {orchestration_error}")
             import traceback
+
             traceback.print_exc()
             raise
     except Exception as orchestration_error:
         print(f"❌ Unhandled error in voice_websocket: {orchestration_error}")
         import traceback
+
         traceback.print_exc()
         await finalize_session("exception")
         raise
@@ -436,26 +501,23 @@ async def voice_websocket(
         except Exception as cleanup_err:
             print(f"⚠️  Error during realtime client cleanup: {cleanup_err}")
 
+
 # ==================== Customer Management Endpoints ====================
+
 
 @app.post("/api/customers")
 async def create_customer(
-    name: str,
-    phone: str,
-    email: Optional[str] = None,
-    db: Session = Depends(get_db)
+    name: str, phone: str, email: Optional[str] = None, db: Session = Depends(get_db)
 ):
     """Create a new customer."""
     # Check if customer exists
     existing = db.query(Customer).filter(Customer.phone == phone).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Customer with this phone already exists")
+        raise HTTPException(
+            status_code=400, detail="Customer with this phone already exists"
+        )
 
-    customer = Customer(
-        name=name,
-        phone=phone,
-        email=email
-    )
+    customer = Customer(name=name, phone=phone, email=email)
     db.add(customer)
     db.commit()
     db.refresh(customer)
@@ -480,19 +542,21 @@ async def get_customer_history(customer_id: int, db: Session = Depends(get_db)):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    appointments = db.query(Appointment).filter(
-        Appointment.customer_id == customer_id
-    ).order_by(Appointment.appointment_datetime.desc()).all()
+    appointments = (
+        db.query(Appointment)
+        .filter(Appointment.customer_id == customer_id)
+        .order_by(Appointment.appointment_datetime.desc())
+        .all()
+    )
 
-    calls = db.query(CallSession).filter(
-        CallSession.customer_id == customer_id
-    ).order_by(CallSession.started_at.desc()).all()
+    calls = (
+        db.query(CallSession)
+        .filter(CallSession.customer_id == customer_id)
+        .order_by(CallSession.started_at.desc())
+        .all()
+    )
 
-    return {
-        "customer": customer,
-        "appointments": appointments,
-        "calls": calls
-    }
+    return {"customer": customer, "appointments": appointments, "calls": calls}
 
 
 @app.put("/api/admin/customers/{customer_id}")
@@ -505,7 +569,7 @@ async def update_customer(
     has_allergies: Optional[bool] = None,
     is_pregnant: Optional[bool] = None,
     notes: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Update customer information with audit logging."""
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
@@ -515,37 +579,44 @@ async def update_customer(
     # Track changes for audit log
     changes = {}
     if name is not None and name != customer.name:
-        changes['name'] = {'old': customer.name, 'new': name}
+        changes["name"] = {"old": customer.name, "new": name}
     if phone is not None and phone != customer.phone:
-        changes['phone'] = {'old': customer.phone, 'new': phone}
+        changes["phone"] = {"old": customer.phone, "new": phone}
     if email is not None and email != customer.email:
-        changes['email'] = {'old': customer.email, 'new': email}
+        changes["email"] = {"old": customer.email, "new": email}
     if is_new_client is not None and is_new_client != customer.is_new_client:
-        changes['is_new_client'] = {'old': customer.is_new_client, 'new': is_new_client}
+        changes["is_new_client"] = {"old": customer.is_new_client, "new": is_new_client}
     if has_allergies is not None and has_allergies != customer.has_allergies:
-        changes['has_allergies'] = {'old': customer.has_allergies, 'new': has_allergies}
+        changes["has_allergies"] = {"old": customer.has_allergies, "new": has_allergies}
     if is_pregnant is not None and is_pregnant != customer.is_pregnant:
-        changes['is_pregnant'] = {'old': customer.is_pregnant, 'new': is_pregnant}
+        changes["is_pregnant"] = {"old": customer.is_pregnant, "new": is_pregnant}
     if notes is not None and notes != customer.notes:
-        changes['notes'] = {'old': customer.notes, 'new': notes}
+        changes["notes"] = {"old": customer.notes, "new": notes}
 
     # Check if phone is being changed and if it's already in use
     if phone and phone != customer.phone:
-        existing = db.query(Customer).filter(
-            Customer.phone == phone,
-            Customer.id != customer_id
-        ).first()
+        existing = (
+            db.query(Customer)
+            .filter(Customer.phone == phone, Customer.id != customer_id)
+            .first()
+        )
         if existing:
-            raise HTTPException(status_code=400, detail="Phone number already in use by another customer")
+            raise HTTPException(
+                status_code=400,
+                detail="Phone number already in use by another customer",
+            )
 
     # Check if email is being changed and if it's already in use
     if email and email != customer.email:
-        existing = db.query(Customer).filter(
-            Customer.email == email,
-            Customer.id != customer_id
-        ).first()
+        existing = (
+            db.query(Customer)
+            .filter(Customer.email == email, Customer.id != customer_id)
+            .first()
+        )
         if existing:
-            raise HTTPException(status_code=400, detail="Email already in use by another customer")
+            raise HTTPException(
+                status_code=400, detail="Email already in use by another customer"
+            )
 
     # Update fields that were provided
     if name is not None:
@@ -586,18 +657,24 @@ async def update_customer(
             "has_allergies": customer.has_allergies,
             "is_pregnant": customer.is_pregnant,
             "notes": customer.notes,
-            "created_at": customer.created_at.isoformat() if customer.created_at else None,
-            "updated_at": customer.updated_at.isoformat() if customer.updated_at else None
+            "created_at": (
+                customer.created_at.isoformat() if customer.created_at else None
+            ),
+            "updated_at": (
+                customer.updated_at.isoformat() if customer.updated_at else None
+            ),
         }
     }
 
 
 # ==================== Configuration Endpoints ====================
 
+
 @app.get("/api/config/services")
 async def get_services():
     """Get available med spa services."""
     from config import SERVICES
+
     return {"services": SERVICES}
 
 
@@ -605,10 +682,12 @@ async def get_services():
 async def get_providers():
     """Get available providers."""
     from config import PROVIDERS
+
     return {"providers": PROVIDERS}
 
 
 # ==================== Appointment Booking Endpoint ====================
+
 
 @app.post("/api/admin/appointments")
 async def create_appointment(
@@ -617,7 +696,7 @@ async def create_appointment(
     appointment_datetime: str,
     provider: Optional[str] = None,
     special_requests: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Create a new appointment for a customer."""
     from calendar_service import CalendarService
@@ -630,11 +709,13 @@ async def create_appointment(
 
     # Verify service exists
     if service_type not in SERVICES:
-        raise HTTPException(status_code=400, detail=f"Invalid service type: {service_type}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid service type: {service_type}"
+        )
 
     # Parse datetime
     try:
-        appt_dt = datetime.fromisoformat(appointment_datetime.replace('Z', '+00:00'))
+        appt_dt = datetime.fromisoformat(appointment_datetime.replace("Z", "+00:00"))
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid datetime format")
 
@@ -649,10 +730,12 @@ async def create_appointment(
             summary=f"{service_info['name']} - {customer.name}",
             description=f"Service: {service_info['name']}\nCustomer: {customer.name}\nPhone: {customer.phone}\nProvider: {provider or 'TBD'}\n{special_requests or ''}",
             start_time=appt_dt,
-            duration_minutes=duration
+            duration_minutes=duration,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create calendar event: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create calendar event: {str(e)}"
+        )
 
     # Create appointment in database
     appointment = Appointment(
@@ -664,7 +747,7 @@ async def create_appointment(
         duration_minutes=duration,
         status="scheduled",
         booked_by="staff",
-        special_requests=special_requests
+        special_requests=special_requests,
     )
 
     db.add(appointment)
@@ -680,71 +763,85 @@ async def create_appointment(
             "provider": appointment.provider,
             "duration_minutes": appointment.duration_minutes,
             "status": appointment.status,
-            "special_requests": appointment.special_requests
+            "special_requests": appointment.special_requests,
         }
     }
 
 
 # ==================== Export Endpoints ====================
 
+
 @app.get("/api/admin/customers/export/csv")
 async def export_customers_csv(request: Request, db: Session = Depends(get_db)):
     """Export customers to CSV format with rate limiting."""
     import csv
     from io import StringIO
+
     from fastapi.responses import StreamingResponse
+
     from rate_limiter import rate_limiter
 
     # Rate limit: 3 exports per minute per IP to prevent abuse
     rate_limiter.check_rate_limit(request, max_requests=3, window_seconds=60)
 
     # Fetch all customers with their stats
-    customers = db.query(
-        Customer,
-        func.count(Appointment.id).label('total_appointments'),
-        func.count(Conversation.id).label('total_conversations'),
-        func.avg(Conversation.satisfaction_score).label('avg_satisfaction_score')
-    ).outerjoin(Appointment, Customer.id == Appointment.customer_id)\
-     .outerjoin(Conversation, Customer.id == Conversation.customer_id)\
-     .group_by(Customer.id)\
-     .all()
+    customers = (
+        db.query(
+            Customer,
+            func.count(Appointment.id).label("total_appointments"),
+            func.count(Conversation.id).label("total_conversations"),
+            func.avg(Conversation.satisfaction_score).label("avg_satisfaction_score"),
+        )
+        .outerjoin(Appointment, Customer.id == Appointment.customer_id)
+        .outerjoin(Conversation, Customer.id == Conversation.customer_id)
+        .group_by(Customer.id)
+        .all()
+    )
 
     # Create CSV in memory
     output = StringIO()
     writer = csv.writer(output)
 
     # Write header
-    writer.writerow([
-        'ID',
-        'Name',
-        'Phone',
-        'Email',
-        'Is New Client',
-        'Has Allergies',
-        'Is Pregnant',
-        'Total Appointments',
-        'Total Conversations',
-        'Avg Satisfaction Score',
-        'Created At',
-        'Notes'
-    ])
+    writer.writerow(
+        [
+            "ID",
+            "Name",
+            "Phone",
+            "Email",
+            "Is New Client",
+            "Has Allergies",
+            "Is Pregnant",
+            "Total Appointments",
+            "Total Conversations",
+            "Avg Satisfaction Score",
+            "Created At",
+            "Notes",
+        ]
+    )
 
     # Write data
     for customer, total_appts, total_convs, avg_satisfaction in customers:
-        writer.writerow([
-            customer.id,
-            customer.name,
-            customer.phone,
-            customer.email or '',
-            'Yes' if customer.is_new_client else 'No',
-            'Yes' if customer.has_allergies else 'No',
-            'Yes' if customer.is_pregnant else 'No',
-            total_appts or 0,
-            total_convs or 0,
-            round(avg_satisfaction, 1) if avg_satisfaction else '',
-            customer.created_at.strftime('%Y-%m-%d %H:%M:%S') if customer.created_at else '',
-            customer.notes or ''
-        ])
+        writer.writerow(
+            [
+                customer.id,
+                customer.name,
+                customer.phone,
+                customer.email or "",
+                "Yes" if customer.is_new_client else "No",
+                "Yes" if customer.has_allergies else "No",
+                "Yes" if customer.is_pregnant else "No",
+                total_appts or 0,
+                total_convs or 0,
+                round(avg_satisfaction, 1) if avg_satisfaction else "",
+                (
+                    customer.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                    if customer.created_at
+                    else ""
+                ),
+                customer.notes or "",
+            ]
+        )
 
     # Return CSV as download
     output.seek(0)
@@ -753,16 +850,17 @@ async def export_customers_csv(request: Request, db: Session = Depends(get_db)):
         media_type="text/csv",
         headers={
             "Content-Disposition": f"attachment; filename=customers_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
-        }
+        },
     )
 
 
 # ==================== Admin Dashboard Endpoints ====================
 
+
 @app.get("/api/admin/metrics/overview")
 async def get_metrics_overview(
     period: str = Query("today", regex="^(today|week|month)$"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get overview metrics for dashboard."""
     return AnalyticsService.get_dashboard_overview(db, period)
@@ -773,9 +871,11 @@ async def get_call_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     search: Optional[str] = None,
-    sort_by: str = Query("started_at", regex="^(started_at|duration_seconds|satisfaction_score)$"),
+    sort_by: str = Query(
+        "started_at", regex="^(started_at|duration_seconds|satisfaction_score)$"
+    ),
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get paginated call history."""
     return AnalyticsService.get_call_history(
@@ -784,7 +884,7 @@ async def get_call_history(
         page_size=page_size,
         search=search,
         sort_by=sort_by,
-        sort_order=sort_order
+        sort_order=sort_order,
     )
 
 
@@ -802,11 +902,16 @@ async def get_call_details(call_id: int, db: Session = Depends(get_db)):
 
     # Get call events
     from database import CallEvent
-    events = db.query(CallEvent).filter(
-        CallEvent.call_session_id == call_id
-    ).order_by(CallEvent.timestamp.asc()).all()
+
+    events = (
+        db.query(CallEvent)
+        .filter(CallEvent.call_session_id == call_id)
+        .order_by(CallEvent.timestamp.asc())
+        .all()
+    )
 
     import json
+
     transcript = json.loads(call.transcript) if call.transcript else []
 
     return {
@@ -821,11 +926,11 @@ async def get_call_details(call_id: int, db: Session = Depends(get_db)):
             "sentiment": call.sentiment,
             "outcome": call.outcome,
             "escalated": call.escalated,
-            "escalation_reason": call.escalation_reason
+            "escalation_reason": call.escalation_reason,
         },
         "customer": customer,
         "transcript": transcript,
-        "events": events
+        "events": events,
     }
 
 
@@ -837,28 +942,29 @@ async def get_call_transcript(call_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Call not found")
 
     import json
+
     transcript = json.loads(call.transcript) if call.transcript else []
 
-    return {
-        "call_id": call_id,
-        "transcript": transcript
-    }
+    return {"call_id": call_id, "transcript": transcript}
 
 
 @app.get("/api/admin/analytics/daily")
 async def get_daily_analytics(
-    days: int = Query(30, ge=1, le=90),
-    db: Session = Depends(get_db)
+    days: int = Query(30, ge=1, le=90), db: Session = Depends(get_db)
 ):
     """Get daily analytics for the specified number of days."""
-    from database import DailyMetric
     from datetime import timedelta
+
+    from database import DailyMetric
 
     start_date = datetime.utcnow().date() - timedelta(days=days)
 
-    metrics = db.query(DailyMetric).filter(
-        DailyMetric.date >= start_date
-    ).order_by(DailyMetric.date.asc()).all()
+    metrics = (
+        db.query(DailyMetric)
+        .filter(DailyMetric.date >= start_date)
+        .order_by(DailyMetric.date.asc())
+        .all()
+    )
 
     return {
         "metrics": [
@@ -868,7 +974,7 @@ async def get_daily_analytics(
                 "appointments_booked": m.appointments_booked,
                 "avg_satisfaction_score": m.avg_satisfaction_score,
                 "conversion_rate": m.conversion_rate,
-                "avg_call_duration_minutes": round(m.avg_call_duration_seconds / 60, 2)
+                "avg_call_duration_minutes": round(m.avg_call_duration_seconds / 60, 2),
             }
             for m in metrics
         ]
@@ -879,20 +985,18 @@ async def get_daily_analytics(
 async def get_timeseries_analytics(
     period: str = Query("week", regex="^(today|week|month)$"),
     interval: str = Query("hour", regex="^(hour|day)$"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get time-series metrics for charting."""
     return AnalyticsService.get_timeseries_metrics(
-        db=db,
-        period=period,
-        interval=interval
+        db=db, period=period, interval=interval
     )
 
 
 @app.get("/api/admin/analytics/funnel")
 async def get_conversion_funnel(
     period: str = Query("week", regex="^(today|week|month)$"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get conversion funnel metrics."""
     return AnalyticsService.get_conversion_funnel(db=db, period=period)
@@ -900,8 +1004,7 @@ async def get_conversion_funnel(
 
 @app.get("/api/admin/analytics/peak-hours")
 async def get_peak_hours(
-    period: str = Query("week", regex="^(week|month)$"),
-    db: Session = Depends(get_db)
+    period: str = Query("week", regex="^(week|month)$"), db: Session = Depends(get_db)
 ):
     """Get peak hours heatmap data."""
     return AnalyticsService.get_peak_hours(db=db, period=period)
@@ -910,7 +1013,7 @@ async def get_peak_hours(
 @app.get("/api/admin/analytics/channel-distribution")
 async def get_channel_distribution(
     period: str = Query("week", regex="^(today|week|month)$"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get channel distribution data."""
     return AnalyticsService.get_channel_distribution(db=db, period=period)
@@ -919,7 +1022,7 @@ async def get_channel_distribution(
 @app.get("/api/admin/analytics/outcome-distribution")
 async def get_outcome_distribution(
     period: str = Query("week", regex="^(today|week|month)$"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get outcome distribution data."""
     return AnalyticsService.get_outcome_distribution(db=db, period=period)
@@ -927,25 +1030,26 @@ async def get_outcome_distribution(
 
 # ==================== Appointments Endpoints ====================
 
+
 @app.get("/api/appointments")
 async def get_appointments(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get appointments with optional filters."""
     query = db.query(Appointment)
 
     if start_date:
         # Replace 'Z' with '+00:00' for Python 3.8 compatibility
-        start_date_normalized = start_date.replace('Z', '+00:00')
+        start_date_normalized = start_date.replace("Z", "+00:00")
         start = datetime.fromisoformat(start_date_normalized)
         query = query.filter(Appointment.appointment_datetime >= start)
 
     if end_date:
         # Replace 'Z' with '+00:00' for Python 3.8 compatibility
-        end_date_normalized = end_date.replace('Z', '+00:00')
+        end_date_normalized = end_date.replace("Z", "+00:00")
         end = datetime.fromisoformat(end_date_normalized)
         query = query.filter(Appointment.appointment_datetime <= end)
 
@@ -958,6 +1062,7 @@ async def get_appointments(
 
 # ==================== Admin Customer Endpoints ====================
 
+
 @app.get("/api/admin/customers")
 async def get_customers(
     page: int = Query(1, ge=1),
@@ -967,35 +1072,42 @@ async def get_customers(
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
     is_new_client: Optional[bool] = None,
     has_medical_flags: Optional[bool] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get paginated customer list with aggregations."""
-    from sqlalchemy import case, desc, asc
     from datetime import datetime
 
+    from sqlalchemy import asc, case, desc
+
     # Base query with aggregations
-    query = db.query(
-        Customer,
-        func.count(Appointment.id).label('total_appointments'),
-        func.count(Conversation.id).label('total_conversations'),
-        func.max(
-            case(
-                (Conversation.last_activity_at > Appointment.updated_at, Conversation.last_activity_at),
-                else_=Appointment.updated_at
-            )
-        ).label('last_activity_at'),
-        func.avg(Conversation.satisfaction_score).label('avg_satisfaction_score')
-    ).outerjoin(Appointment, Customer.id == Appointment.customer_id)\
-     .outerjoin(Conversation, Customer.id == Conversation.customer_id)\
-     .group_by(Customer.id)
+    query = (
+        db.query(
+            Customer,
+            func.count(Appointment.id).label("total_appointments"),
+            func.count(Conversation.id).label("total_conversations"),
+            func.max(
+                case(
+                    (
+                        Conversation.last_activity_at > Appointment.updated_at,
+                        Conversation.last_activity_at,
+                    ),
+                    else_=Appointment.updated_at,
+                )
+            ).label("last_activity_at"),
+            func.avg(Conversation.satisfaction_score).label("avg_satisfaction_score"),
+        )
+        .outerjoin(Appointment, Customer.id == Appointment.customer_id)
+        .outerjoin(Conversation, Customer.id == Conversation.customer_id)
+        .group_by(Customer.id)
+    )
 
     # Apply filters
     if search:
         search_pattern = f"%{search}%"
         query = query.filter(
-            (Customer.name.ilike(search_pattern)) |
-            (Customer.phone.ilike(search_pattern)) |
-            (Customer.email.ilike(search_pattern))
+            (Customer.name.ilike(search_pattern))
+            | (Customer.phone.ilike(search_pattern))
+            | (Customer.email.ilike(search_pattern))
         )
 
     if is_new_client is not None:
@@ -1003,8 +1115,7 @@ async def get_customers(
 
     if has_medical_flags:
         query = query.filter(
-            (Customer.has_allergies == True) |
-            (Customer.is_pregnant == True)
+            (Customer.has_allergies == True) | (Customer.is_pregnant == True)
         )
 
     # Get total count
@@ -1012,11 +1123,21 @@ async def get_customers(
 
     # Apply sorting
     if sort_by == "name":
-        query = query.order_by(desc(Customer.name) if sort_order == "desc" else asc(Customer.name))
+        query = query.order_by(
+            desc(Customer.name) if sort_order == "desc" else asc(Customer.name)
+        )
     elif sort_by == "last_activity":
-        query = query.order_by(desc('last_activity_at') if sort_order == "desc" else asc('last_activity_at'))
+        query = query.order_by(
+            desc("last_activity_at")
+            if sort_order == "desc"
+            else asc("last_activity_at")
+        )
     else:  # created_at
-        query = query.order_by(desc(Customer.created_at) if sort_order == "desc" else asc(Customer.created_at))
+        query = query.order_by(
+            desc(Customer.created_at)
+            if sort_order == "desc"
+            else asc(Customer.created_at)
+        )
 
     # Apply pagination
     offset = (page - 1) * page_size
@@ -1024,41 +1145,55 @@ async def get_customers(
 
     # Calculate preferred channel for each customer
     customers_data = []
-    for customer, total_appointments, total_conversations, last_activity, avg_satisfaction in results:
+    for (
+        customer,
+        total_appointments,
+        total_conversations,
+        last_activity,
+        avg_satisfaction,
+    ) in results:
         # Get channel distribution
-        channel_counts = db.query(
-            Conversation.channel,
-            func.count(Conversation.id)
-        ).filter(
-            Conversation.customer_id == customer.id
-        ).group_by(Conversation.channel).all()
+        channel_counts = (
+            db.query(Conversation.channel, func.count(Conversation.id))
+            .filter(Conversation.customer_id == customer.id)
+            .group_by(Conversation.channel)
+            .all()
+        )
 
         preferred_channel = "voice"  # default
         if channel_counts:
             preferred_channel = max(channel_counts, key=lambda x: x[1])[0]
 
-        customers_data.append({
-            "id": customer.id,
-            "name": customer.name,
-            "phone": customer.phone,
-            "email": customer.email,
-            "is_new_client": customer.is_new_client,
-            "has_allergies": customer.has_allergies,
-            "is_pregnant": customer.is_pregnant,
-            "created_at": customer.created_at.isoformat() if customer.created_at else None,
-            "total_appointments": total_appointments or 0,
-            "total_conversations": total_conversations or 0,
-            "last_activity_at": last_activity.isoformat() if last_activity else None,
-            "avg_satisfaction_score": round(avg_satisfaction, 1) if avg_satisfaction else None,
-            "preferred_channel": preferred_channel
-        })
+        customers_data.append(
+            {
+                "id": customer.id,
+                "name": customer.name,
+                "phone": customer.phone,
+                "email": customer.email,
+                "is_new_client": customer.is_new_client,
+                "has_allergies": customer.has_allergies,
+                "is_pregnant": customer.is_pregnant,
+                "created_at": (
+                    customer.created_at.isoformat() if customer.created_at else None
+                ),
+                "total_appointments": total_appointments or 0,
+                "total_conversations": total_conversations or 0,
+                "last_activity_at": (
+                    last_activity.isoformat() if last_activity else None
+                ),
+                "avg_satisfaction_score": (
+                    round(avg_satisfaction, 1) if avg_satisfaction else None
+                ),
+                "preferred_channel": preferred_channel,
+            }
+        )
 
     return {
         "customers": customers_data,
         "total": total,
         "page": page,
         "page_size": page_size,
-        "total_pages": (total + page_size - 1) // page_size
+        "total_pages": (total + page_size - 1) // page_size,
     }
 
 
@@ -1072,74 +1207,95 @@ async def get_customers_analytics(db: Session = Depends(get_db)):
 
     # New customers this month
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    new_this_month = db.query(func.count(Customer.id)).filter(
-        Customer.created_at >= thirty_days_ago
-    ).scalar() or 0
+    new_this_month = (
+        db.query(func.count(Customer.id))
+        .filter(Customer.created_at >= thirty_days_ago)
+        .scalar()
+        or 0
+    )
 
     # New vs returning split
-    new_clients = db.query(func.count(Customer.id)).filter(
-        Customer.is_new_client == True
-    ).scalar() or 0
+    new_clients = (
+        db.query(func.count(Customer.id))
+        .filter(Customer.is_new_client == True)
+        .scalar()
+        or 0
+    )
 
     # Top customers by appointments
-    top_customers = db.query(
-        Customer,
-        func.count(Appointment.id).label('appointment_count')
-    ).join(Appointment, Customer.id == Appointment.customer_id)\
-     .group_by(Customer.id)\
-     .order_by(desc('appointment_count'))\
-     .limit(10)\
-     .all()
+    top_customers = (
+        db.query(Customer, func.count(Appointment.id).label("appointment_count"))
+        .join(Appointment, Customer.id == Appointment.customer_id)
+        .group_by(Customer.id)
+        .order_by(desc("appointment_count"))
+        .limit(10)
+        .all()
+    )
 
     top_customers_data = [
         {
             "id": customer.id,
             "name": customer.name,
             "phone": customer.phone,
-            "appointment_count": count
+            "appointment_count": count,
         }
         for customer, count in top_customers
     ]
 
     # At-risk customers (no activity in 90+ days)
     ninety_days_ago = datetime.utcnow() - timedelta(days=90)
-    at_risk = db.query(Customer).outerjoin(Conversation).outerjoin(Appointment)\
-        .group_by(Customer.id)\
+    at_risk = (
+        db.query(Customer)
+        .outerjoin(Conversation)
+        .outerjoin(Appointment)
+        .group_by(Customer.id)
         .having(
             func.max(
                 case(
-                    (Conversation.last_activity_at > Appointment.updated_at, Conversation.last_activity_at),
-                    else_=Appointment.updated_at
+                    (
+                        Conversation.last_activity_at > Appointment.updated_at,
+                        Conversation.last_activity_at,
+                    ),
+                    else_=Appointment.updated_at,
                 )
-            ) < ninety_days_ago
-        ).limit(10).all()
+            )
+            < ninety_days_ago
+        )
+        .limit(10)
+        .all()
+    )
 
     at_risk_data = [
         {
             "id": customer.id,
             "name": customer.name,
             "phone": customer.phone,
-            "email": customer.email
+            "email": customer.email,
         }
         for customer in at_risk
     ]
 
     # Channel distribution
-    channel_distribution = db.query(
-        Conversation.channel,
-        func.count(Conversation.id)
-    ).group_by(Conversation.channel).all()
+    channel_distribution = (
+        db.query(Conversation.channel, func.count(Conversation.id))
+        .group_by(Conversation.channel)
+        .all()
+    )
 
     channel_data = {channel: count for channel, count in channel_distribution}
 
     # Medical screening stats
-    has_allergies_count = db.query(func.count(Customer.id)).filter(
-        Customer.has_allergies == True
-    ).scalar() or 0
+    has_allergies_count = (
+        db.query(func.count(Customer.id))
+        .filter(Customer.has_allergies == True)
+        .scalar()
+        or 0
+    )
 
-    is_pregnant_count = db.query(func.count(Customer.id)).filter(
-        Customer.is_pregnant == True
-    ).scalar() or 0
+    is_pregnant_count = (
+        db.query(func.count(Customer.id)).filter(Customer.is_pregnant == True).scalar()
+        or 0
+    )
 
     return {
         "total_customers": total_customers,
@@ -1151,8 +1307,8 @@ async def get_customers_analytics(db: Session = Depends(get_db)):
         "channel_distribution": channel_data,
         "medical_screening": {
             "has_allergies": has_allergies_count,
-            "is_pregnant": is_pregnant_count
-        }
+            "is_pregnant": is_pregnant_count,
+        },
     }
 
 
@@ -1164,26 +1320,38 @@ async def get_customer_detail(customer_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Customer not found")
 
     # Get aggregated stats
-    total_appointments = db.query(func.count(Appointment.id)).filter(
-        Appointment.customer_id == customer_id
-    ).scalar() or 0
+    total_appointments = (
+        db.query(func.count(Appointment.id))
+        .filter(Appointment.customer_id == customer_id)
+        .scalar()
+        or 0
+    )
 
-    total_conversations = db.query(func.count(Conversation.id)).filter(
-        Conversation.customer_id == customer_id
-    ).scalar() or 0
+    total_conversations = (
+        db.query(func.count(Conversation.id))
+        .filter(Conversation.customer_id == customer_id)
+        .scalar()
+        or 0
+    )
 
-    avg_satisfaction = db.query(func.avg(Conversation.satisfaction_score)).filter(
-        Conversation.customer_id == customer_id
-    ).scalar()
+    avg_satisfaction = (
+        db.query(func.avg(Conversation.satisfaction_score))
+        .filter(Conversation.customer_id == customer_id)
+        .scalar()
+    )
 
     # Get last activity
-    last_conversation = db.query(func.max(Conversation.last_activity_at)).filter(
-        Conversation.customer_id == customer_id
-    ).scalar()
+    last_conversation = (
+        db.query(func.max(Conversation.last_activity_at))
+        .filter(Conversation.customer_id == customer_id)
+        .scalar()
+    )
 
-    last_appointment = db.query(func.max(Appointment.updated_at)).filter(
-        Appointment.customer_id == customer_id
-    ).scalar()
+    last_appointment = (
+        db.query(func.max(Appointment.updated_at))
+        .filter(Appointment.customer_id == customer_id)
+        .scalar()
+    )
 
     last_activity = None
     if last_conversation and last_appointment:
@@ -1194,12 +1362,12 @@ async def get_customer_detail(customer_id: int, db: Session = Depends(get_db)):
         last_activity = last_appointment
 
     # Get channel distribution
-    channel_counts = db.query(
-        Conversation.channel,
-        func.count(Conversation.id)
-    ).filter(
-        Conversation.customer_id == customer_id
-    ).group_by(Conversation.channel).all()
+    channel_counts = (
+        db.query(Conversation.channel, func.count(Conversation.id))
+        .filter(Conversation.customer_id == customer_id)
+        .group_by(Conversation.channel)
+        .all()
+    )
 
     preferred_channel = "voice"  # default
     if channel_counts:
@@ -1215,16 +1383,22 @@ async def get_customer_detail(customer_id: int, db: Session = Depends(get_db)):
             "has_allergies": customer.has_allergies,
             "is_pregnant": customer.is_pregnant,
             "notes": customer.notes,
-            "created_at": customer.created_at.isoformat() if customer.created_at else None,
-            "updated_at": customer.updated_at.isoformat() if customer.updated_at else None
+            "created_at": (
+                customer.created_at.isoformat() if customer.created_at else None
+            ),
+            "updated_at": (
+                customer.updated_at.isoformat() if customer.updated_at else None
+            ),
         },
         "stats": {
             "total_appointments": total_appointments,
             "total_conversations": total_conversations,
-            "avg_satisfaction_score": round(avg_satisfaction, 1) if avg_satisfaction else None,
+            "avg_satisfaction_score": (
+                round(avg_satisfaction, 1) if avg_satisfaction else None
+            ),
             "last_activity_at": last_activity.isoformat() if last_activity else None,
-            "preferred_channel": preferred_channel
-        }
+            "preferred_channel": preferred_channel,
+        },
     }
 
 
@@ -1234,7 +1408,7 @@ async def get_customer_timeline(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     channel: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get unified timeline of customer interactions."""
     # Verify customer exists
@@ -1253,27 +1427,36 @@ async def get_customer_timeline(
 
     for conv in conversations:
         # Get first message for content preview
-        first_message = db.query(CommunicationMessage).filter(
-            CommunicationMessage.conversation_id == conv.id
-        ).order_by(CommunicationMessage.sent_at.asc()).first()
+        first_message = (
+            db.query(CommunicationMessage)
+            .filter(CommunicationMessage.conversation_id == conv.id)
+            .order_by(CommunicationMessage.sent_at.asc())
+            .first()
+        )
 
         content_preview = ""
         if first_message:
-            content_preview = first_message.content[:200] if first_message.content else ""
+            content_preview = (
+                first_message.content[:200] if first_message.content else ""
+            )
 
-        timeline_items.append({
-            "id": str(conv.id),
-            "type": "conversation",
-            "channel": conv.channel,
-            "timestamp": conv.initiated_at.isoformat() if conv.initiated_at else None,
-            "status": conv.status,
-            "summary": conv.ai_summary or conv.subject or "Conversation",
-            "satisfaction_score": conv.satisfaction_score,
-            "outcome": conv.outcome,
-            "sentiment": conv.sentiment,
-            "content_preview": content_preview,
-            "duration": None  # Will be calculated from messages if needed
-        })
+        timeline_items.append(
+            {
+                "id": str(conv.id),
+                "type": "conversation",
+                "channel": conv.channel,
+                "timestamp": (
+                    conv.initiated_at.isoformat() if conv.initiated_at else None
+                ),
+                "status": conv.status,
+                "summary": conv.ai_summary or conv.subject or "Conversation",
+                "satisfaction_score": conv.satisfaction_score,
+                "outcome": conv.outcome,
+                "sentiment": conv.sentiment,
+                "content_preview": content_preview,
+                "duration": None,  # Will be calculated from messages if needed
+            }
+        )
 
     # Get appointments
     appt_query = db.query(Appointment).filter(Appointment.customer_id == customer_id)
@@ -1286,19 +1469,27 @@ async def get_customer_timeline(
         appointments = appt_query.all()
 
         for appt in appointments:
-            timeline_items.append({
-                "id": appt.id,
-                "type": "appointment",
-                "channel": None,
-                "timestamp": appt.appointment_datetime.isoformat() if appt.appointment_datetime else None,
-                "status": appt.status,
-                "summary": appt.service_type,
-                "provider": appt.provider,
-                "duration_minutes": appt.duration_minutes,
-                "special_requests": appt.special_requests,
-                "booked_by": appt.booked_by,
-                "cancellation_reason": appt.cancellation_reason if appt.status == "cancelled" else None
-            })
+            timeline_items.append(
+                {
+                    "id": appt.id,
+                    "type": "appointment",
+                    "channel": None,
+                    "timestamp": (
+                        appt.appointment_datetime.isoformat()
+                        if appt.appointment_datetime
+                        else None
+                    ),
+                    "status": appt.status,
+                    "summary": appt.service_type,
+                    "provider": appt.provider,
+                    "duration_minutes": appt.duration_minutes,
+                    "special_requests": appt.special_requests,
+                    "booked_by": appt.booked_by,
+                    "cancellation_reason": (
+                        appt.cancellation_reason if appt.status == "cancelled" else None
+                    ),
+                }
+            )
 
     # Sort by timestamp descending
     timeline_items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
@@ -1314,7 +1505,7 @@ async def get_customer_timeline(
         "total": total,
         "page": page,
         "page_size": page_size,
-        "total_pages": (total + page_size - 1) // page_size
+        "total_pages": (total + page_size - 1) // page_size,
     }
 
 
@@ -1335,7 +1526,7 @@ async def get_customer_stats(customer_id: int, db: Session = Depends(get_db)):
         "completed": len([a for a in appts if a.status == "completed"]),
         "cancelled": len([a for a in appts if a.status == "cancelled"]),
         "no_show": len([a for a in appts if a.status == "no_show"]),
-        "rescheduled": len([a for a in appts if a.status == "rescheduled"])
+        "rescheduled": len([a for a in appts if a.status == "rescheduled"]),
     }
 
     # Favorite services
@@ -1347,13 +1538,13 @@ async def get_customer_stats(customer_id: int, db: Session = Depends(get_db)):
     favorite_services = sorted(
         [{"service": k, "count": v} for k, v in service_counts.items()],
         key=lambda x: x["count"],
-        reverse=True
+        reverse=True,
     )[:3]
 
     # Communication statistics
-    conversations = db.query(Conversation).filter(
-        Conversation.customer_id == customer_id
-    ).all()
+    conversations = (
+        db.query(Conversation).filter(Conversation.customer_id == customer_id).all()
+    )
 
     channel_stats = {}
     satisfaction_by_channel = {}
@@ -1385,12 +1576,13 @@ async def get_customer_stats(customer_id: int, db: Session = Depends(get_db)):
             "total_conversations": len(conversations),
             "by_channel": channel_stats,
             "avg_satisfaction_by_channel": avg_satisfaction_by_channel,
-            "outcomes": outcome_counts
-        }
+            "outcomes": outcome_counts,
+        },
     }
 
 
 # ==================== Omnichannel Communications Endpoints (Phase 2) ====================
+
 
 @app.get("/api/admin/communications")
 async def get_communications(
@@ -1399,13 +1591,14 @@ async def get_communications(
     status: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Get conversations with filtering and pagination.
     Replaces /api/admin/calls for omnichannel support.
     """
     from sqlalchemy.orm import joinedload
+
     from database import Conversation, Customer
 
     query = db.query(Conversation).options(joinedload(Conversation.customer))
@@ -1423,66 +1616,77 @@ async def get_communications(
 
     # Apply pagination and sorting
     offset = (page - 1) * page_size
-    conversations = query.order_by(Conversation.last_activity_at.desc())\
-        .offset(offset)\
-        .limit(page_size)\
+    conversations = (
+        query.order_by(Conversation.last_activity_at.desc())
+        .offset(offset)
+        .limit(page_size)
         .all()
+    )
 
     # Serialize conversations
     serialized = []
     for conv in conversations:
-        serialized.append({
-            "id": str(conv.id),
-            "customer_id": conv.customer_id,
-            "customer_name": conv.customer.name if conv.customer else None,
-            "customer_phone": conv.customer.phone if conv.customer else None,
-            "channel": conv.channel,
-            "status": conv.status,
-            "initiated_at": conv.initiated_at.isoformat() if conv.initiated_at else None,
-            "last_activity_at": conv.last_activity_at.isoformat() if conv.last_activity_at else None,
-            "completed_at": conv.completed_at.isoformat() if conv.completed_at else None,
-            "satisfaction_score": conv.satisfaction_score,
-            "sentiment": conv.sentiment,
-            "outcome": conv.outcome,
-            "subject": conv.subject,
-            "ai_summary": conv.ai_summary,
-            "metadata": conv.custom_metadata,
-        })
+        serialized.append(
+            {
+                "id": str(conv.id),
+                "customer_id": conv.customer_id,
+                "customer_name": conv.customer.name if conv.customer else None,
+                "customer_phone": conv.customer.phone if conv.customer else None,
+                "channel": conv.channel,
+                "status": conv.status,
+                "initiated_at": (
+                    conv.initiated_at.isoformat() if conv.initiated_at else None
+                ),
+                "last_activity_at": (
+                    conv.last_activity_at.isoformat() if conv.last_activity_at else None
+                ),
+                "completed_at": (
+                    conv.completed_at.isoformat() if conv.completed_at else None
+                ),
+                "satisfaction_score": conv.satisfaction_score,
+                "sentiment": conv.sentiment,
+                "outcome": conv.outcome,
+                "subject": conv.subject,
+                "ai_summary": conv.ai_summary,
+                "metadata": conv.custom_metadata,
+            }
+        )
 
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
         "total_pages": (total + page_size - 1) // page_size,
-        "conversations": serialized
+        "conversations": serialized,
     }
 
 
 @app.get("/api/admin/communications/{conversation_id}")
-async def get_conversation_detail(
-    conversation_id: str,
-    db: Session = Depends(get_db)
-):
+async def get_conversation_detail(conversation_id: str, db: Session = Depends(get_db)):
     """
     Get full conversation with all messages, events, and channel-specific details.
     """
-    from sqlalchemy.orm import joinedload
-    from database import Conversation
     from uuid import UUID
+
+    from sqlalchemy.orm import joinedload
+
+    from database import Conversation
 
     try:
         conv_uuid = UUID(conversation_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid conversation ID format")
 
-    conversation = db.query(Conversation)\
+    conversation = (
+        db.query(Conversation)
         .options(
             joinedload(Conversation.messages),
             joinedload(Conversation.events),
-            joinedload(Conversation.customer)
-        )\
-        .filter(Conversation.id == conv_uuid)\
+            joinedload(Conversation.customer),
+        )
+        .filter(Conversation.id == conv_uuid)
         .first()
+    )
 
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -1500,31 +1704,39 @@ async def get_conversation_detail(
         }
 
         # Add channel-specific details
-        if conversation.channel == 'voice' and msg.voice_details:
-            msg_data['voice'] = {
-                'duration_seconds': msg.voice_details.duration_seconds,
-                'recording_url': msg.voice_details.recording_url,
-                'transcript_segments': msg.voice_details.transcript_segments,
-                'function_calls': msg.voice_details.function_calls,
-                'interruption_count': msg.voice_details.interruption_count,
+        if conversation.channel == "voice" and msg.voice_details:
+            msg_data["voice"] = {
+                "duration_seconds": msg.voice_details.duration_seconds,
+                "recording_url": msg.voice_details.recording_url,
+                "transcript_segments": msg.voice_details.transcript_segments,
+                "function_calls": msg.voice_details.function_calls,
+                "interruption_count": msg.voice_details.interruption_count,
             }
-        elif conversation.channel == 'sms' and msg.sms_details:
-            msg_data['sms'] = {
-                'from_number': msg.sms_details.from_number,
-                'to_number': msg.sms_details.to_number,
-                'provider_message_id': msg.sms_details.provider_message_id,
-                'delivery_status': msg.sms_details.delivery_status,
-                'segments': msg.sms_details.segments,
-                'delivered_at': msg.sms_details.delivered_at.isoformat() if msg.sms_details.delivered_at else None,
+        elif conversation.channel == "sms" and msg.sms_details:
+            msg_data["sms"] = {
+                "from_number": msg.sms_details.from_number,
+                "to_number": msg.sms_details.to_number,
+                "provider_message_id": msg.sms_details.provider_message_id,
+                "delivery_status": msg.sms_details.delivery_status,
+                "segments": msg.sms_details.segments,
+                "delivered_at": (
+                    msg.sms_details.delivered_at.isoformat()
+                    if msg.sms_details.delivered_at
+                    else None
+                ),
             }
-        elif conversation.channel == 'email' and msg.email_details:
-            msg_data['email'] = {
-                'subject': msg.email_details.subject,
-                'from_address': msg.email_details.from_address,
-                'to_address': msg.email_details.to_address,
-                'body_html': msg.email_details.body_html,
-                'attachments': msg.email_details.attachments,
-                'opened_at': msg.email_details.opened_at.isoformat() if msg.email_details.opened_at else None,
+        elif conversation.channel == "email" and msg.email_details:
+            msg_data["email"] = {
+                "subject": msg.email_details.subject,
+                "from_address": msg.email_details.from_address,
+                "to_address": msg.email_details.to_address,
+                "body_html": msg.email_details.body_html,
+                "attachments": msg.email_details.attachments,
+                "opened_at": (
+                    msg.email_details.opened_at.isoformat()
+                    if msg.email_details.opened_at
+                    else None
+                ),
             }
 
         messages.append(msg_data)
@@ -1532,28 +1744,46 @@ async def get_conversation_detail(
     # Serialize events
     events = []
     for event in sorted(conversation.events, key=lambda e: e.timestamp):
-        events.append({
-            "id": str(event.id),
-            "event_type": event.event_type,
-            "timestamp": event.timestamp.isoformat() if event.timestamp else None,
-            "details": event.details,
-            "message_id": str(event.message_id) if event.message_id else None,
-        })
+        events.append(
+            {
+                "id": str(event.id),
+                "event_type": event.event_type,
+                "timestamp": event.timestamp.isoformat() if event.timestamp else None,
+                "details": event.details,
+                "message_id": str(event.message_id) if event.message_id else None,
+            }
+        )
 
     return {
         "conversation": {
             "id": str(conversation.id),
-            "customer": {
-                "id": conversation.customer.id,
-                "name": conversation.customer.name,
-                "phone": conversation.customer.phone,
-                "email": conversation.customer.email,
-            } if conversation.customer else None,
+            "customer": (
+                {
+                    "id": conversation.customer.id,
+                    "name": conversation.customer.name,
+                    "phone": conversation.customer.phone,
+                    "email": conversation.customer.email,
+                }
+                if conversation.customer
+                else None
+            ),
             "channel": conversation.channel,
             "status": conversation.status,
-            "initiated_at": conversation.initiated_at.isoformat() if conversation.initiated_at else None,
-            "last_activity_at": conversation.last_activity_at.isoformat() if conversation.last_activity_at else None,
-            "completed_at": conversation.completed_at.isoformat() if conversation.completed_at else None,
+            "initiated_at": (
+                conversation.initiated_at.isoformat()
+                if conversation.initiated_at
+                else None
+            ),
+            "last_activity_at": (
+                conversation.last_activity_at.isoformat()
+                if conversation.last_activity_at
+                else None
+            ),
+            "completed_at": (
+                conversation.completed_at.isoformat()
+                if conversation.completed_at
+                else None
+            ),
             "satisfaction_score": conversation.satisfaction_score,
             "sentiment": conversation.sentiment,
             "outcome": conversation.outcome,
@@ -1562,15 +1792,18 @@ async def get_conversation_detail(
             "metadata": conversation.custom_metadata,
         },
         "messages": messages,
-        "events": events
+        "events": events,
     }
 
 
 # ==================== Settings Management Endpoints (Phase 3) ====================
 
-from settings_service import SettingsService
-from pydantic import BaseModel, Field
 from decimal import Decimal
+
+from pydantic import BaseModel, Field
+
+from settings_service import SettingsService
+
 
 # Pydantic models for request validation
 class MedSpaSettingsUpdate(BaseModel):
@@ -1582,12 +1815,14 @@ class MedSpaSettingsUpdate(BaseModel):
     ai_assistant_name: Optional[str] = None
     cancellation_policy: Optional[str] = None
 
+
 class LocationCreate(BaseModel):
     name: str
     address: str
     phone: Optional[str] = None
     is_primary: bool = False
     is_active: bool = True
+
 
 class LocationUpdate(BaseModel):
     name: Optional[str] = None
@@ -1596,11 +1831,13 @@ class LocationUpdate(BaseModel):
     is_primary: Optional[bool] = None
     is_active: Optional[bool] = None
 
+
 class BusinessHoursUpdate(BaseModel):
     day_of_week: int = Field(..., ge=0, le=6)
     open_time: Optional[str] = None  # "09:00" format
     close_time: Optional[str] = None  # "17:00" format
     is_closed: bool = False
+
 
 class ServiceCreate(BaseModel):
     name: str
@@ -1615,6 +1852,7 @@ class ServiceCreate(BaseModel):
     category: Optional[str] = None
     is_active: bool = True
 
+
 class ServiceUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
@@ -1628,6 +1866,7 @@ class ServiceUpdate(BaseModel):
     is_active: Optional[bool] = None
     display_order: Optional[int] = None
 
+
 class ProviderCreate(BaseModel):
     name: str
     email: str
@@ -1637,6 +1876,7 @@ class ProviderCreate(BaseModel):
     is_active: bool = True
     hire_date: Optional[str] = None  # ISO format date string
     avatar_url: Optional[str] = None
+
 
 class ProviderUpdate(BaseModel):
     name: Optional[str] = None
@@ -1648,13 +1888,16 @@ class ProviderUpdate(BaseModel):
     hire_date: Optional[str] = None  # ISO format date string
     avatar_url: Optional[str] = None
 
+
 # Settings endpoints
 @app.get("/api/admin/settings")
 async def get_settings(db: Session = Depends(get_db)):
     """Get med spa settings."""
     settings = SettingsService.get_settings(db)
     if not settings:
-        raise HTTPException(status_code=404, detail="Settings not found. Please run seed_settings.py")
+        raise HTTPException(
+            status_code=404, detail="Settings not found. Please run seed_settings.py"
+        )
 
     return {
         "id": settings.id,
@@ -1668,10 +1911,10 @@ async def get_settings(db: Session = Depends(get_db)):
         "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
     }
 
+
 @app.put("/api/admin/settings")
 async def update_settings(
-    settings_data: MedSpaSettingsUpdate,
-    db: Session = Depends(get_db)
+    settings_data: MedSpaSettingsUpdate, db: Session = Depends(get_db)
 ):
     """Update med spa settings."""
     data_dict = settings_data.dict(exclude_unset=True)
@@ -1689,24 +1932,28 @@ async def update_settings(
         "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
     }
 
+
 # Location endpoints
 @app.get("/api/admin/locations")
 async def get_locations(
-    active_only: bool = Query(False),
-    db: Session = Depends(get_db)
+    active_only: bool = Query(False), db: Session = Depends(get_db)
 ):
     """Get all locations."""
     locations = SettingsService.get_all_locations(db, active_only=active_only)
 
-    return [{
-        "id": loc.id,
-        "name": loc.name,
-        "address": loc.address,
-        "phone": loc.phone,
-        "is_primary": loc.is_primary,
-        "is_active": loc.is_active,
-        "created_at": loc.created_at.isoformat() if loc.created_at else None,
-    } for loc in locations]
+    return [
+        {
+            "id": loc.id,
+            "name": loc.name,
+            "address": loc.address,
+            "phone": loc.phone,
+            "is_primary": loc.is_primary,
+            "is_active": loc.is_active,
+            "created_at": loc.created_at.isoformat() if loc.created_at else None,
+        }
+        for loc in locations
+    ]
+
 
 @app.get("/api/admin/locations/{location_id}")
 async def get_location(location_id: int, db: Session = Depends(get_db)):
@@ -1725,11 +1972,9 @@ async def get_location(location_id: int, db: Session = Depends(get_db)):
         "created_at": location.created_at.isoformat() if location.created_at else None,
     }
 
+
 @app.post("/api/admin/locations")
-async def create_location(
-    location_data: LocationCreate,
-    db: Session = Depends(get_db)
-):
+async def create_location(location_data: LocationCreate, db: Session = Depends(get_db)):
     """Create a new location."""
     data_dict = location_data.dict()
     location = SettingsService.create_location(db, data_dict)
@@ -1743,11 +1988,10 @@ async def create_location(
         "is_active": location.is_active,
     }
 
+
 @app.put("/api/admin/locations/{location_id}")
 async def update_location(
-    location_id: int,
-    location_data: LocationUpdate,
-    db: Session = Depends(get_db)
+    location_id: int, location_data: LocationUpdate, db: Session = Depends(get_db)
 ):
     """Update a location."""
     data_dict = location_data.dict(exclude_unset=True)
@@ -1765,6 +2009,7 @@ async def update_location(
         "is_active": location.is_active,
     }
 
+
 @app.delete("/api/admin/locations/{location_id}")
 async def delete_location(location_id: int, db: Session = Depends(get_db)):
     """Delete (deactivate) a location."""
@@ -1776,25 +2021,30 @@ async def delete_location(location_id: int, db: Session = Depends(get_db)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
 # Business hours endpoints
 @app.get("/api/admin/locations/{location_id}/hours")
 async def get_business_hours(location_id: int, db: Session = Depends(get_db)):
     """Get business hours for a location."""
     hours = SettingsService.get_business_hours(db, location_id)
 
-    return [{
-        "id": h.id,
-        "day_of_week": h.day_of_week,
-        "open_time": h.open_time.strftime("%H:%M") if h.open_time else None,
-        "close_time": h.close_time.strftime("%H:%M") if h.close_time else None,
-        "is_closed": h.is_closed,
-    } for h in hours]
+    return [
+        {
+            "id": h.id,
+            "day_of_week": h.day_of_week,
+            "open_time": h.open_time.strftime("%H:%M") if h.open_time else None,
+            "close_time": h.close_time.strftime("%H:%M") if h.close_time else None,
+            "is_closed": h.is_closed,
+        }
+        for h in hours
+    ]
+
 
 @app.put("/api/admin/locations/{location_id}/hours")
 async def update_business_hours(
     location_id: int,
     hours_data: List[BusinessHoursUpdate],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Update business hours for a location (bulk update)."""
     from datetime import time as dt_time
@@ -1820,39 +2070,49 @@ async def update_business_hours(
 
     hours = SettingsService.update_business_hours(db, location_id, hours_list)
 
-    return [{
-        "id": h.id,
-        "day_of_week": h.day_of_week,
-        "open_time": h.open_time.strftime("%H:%M") if h.open_time else None,
-        "close_time": h.close_time.strftime("%H:%M") if h.close_time else None,
-        "is_closed": h.is_closed,
-    } for h in hours]
+    return [
+        {
+            "id": h.id,
+            "day_of_week": h.day_of_week,
+            "open_time": h.open_time.strftime("%H:%M") if h.open_time else None,
+            "close_time": h.close_time.strftime("%H:%M") if h.close_time else None,
+            "is_closed": h.is_closed,
+        }
+        for h in hours
+    ]
+
 
 # Service endpoints
 @app.get("/api/admin/services")
 async def get_services(
     active_only: bool = Query(False),
     category: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get all services."""
-    services = SettingsService.get_all_services(db, active_only=active_only, category=category)
+    services = SettingsService.get_all_services(
+        db, active_only=active_only, category=category
+    )
 
-    return [{
-        "id": svc.id,
-        "name": svc.name,
-        "slug": svc.slug,
-        "description": svc.description,
-        "duration_minutes": svc.duration_minutes,
-        "price_min": float(svc.price_min) if svc.price_min else None,
-        "price_max": float(svc.price_max) if svc.price_max else None,
-        "price_display": svc.price_display,
-        "prep_instructions": svc.prep_instructions,
-        "aftercare_instructions": svc.aftercare_instructions,
-        "category": svc.category,
-        "is_active": svc.is_active,
-        "display_order": svc.display_order,
-    } for svc in services]
+    return [
+        {
+            "id": svc.id,
+            "name": svc.name,
+            "slug": svc.slug,
+            "description": svc.description,
+            "duration_minutes": svc.duration_minutes,
+            "price_min": float(svc.price_min) if svc.price_min else None,
+            "price_max": float(svc.price_max) if svc.price_max else None,
+            "price_display": svc.price_display,
+            "prep_instructions": svc.prep_instructions,
+            "aftercare_instructions": svc.aftercare_instructions,
+            "category": svc.category,
+            "is_active": svc.is_active,
+            "display_order": svc.display_order,
+        }
+        for svc in services
+    ]
+
 
 @app.get("/api/admin/services/{service_id}")
 async def get_service(service_id: int, db: Session = Depends(get_db)):
@@ -1877,11 +2137,9 @@ async def get_service(service_id: int, db: Session = Depends(get_db)):
         "display_order": service.display_order,
     }
 
+
 @app.post("/api/admin/services")
-async def create_service(
-    service_data: ServiceCreate,
-    db: Session = Depends(get_db)
-):
+async def create_service(service_data: ServiceCreate, db: Session = Depends(get_db)):
     """Create a new service."""
     from sqlalchemy.exc import IntegrityError
 
@@ -1902,14 +2160,15 @@ async def create_service(
     except IntegrityError as e:
         db.rollback()
         if "slug" in str(e):
-            raise HTTPException(status_code=400, detail="Service with this slug already exists")
+            raise HTTPException(
+                status_code=400, detail="Service with this slug already exists"
+            )
         raise HTTPException(status_code=400, detail="Database integrity error")
+
 
 @app.put("/api/admin/services/{service_id}")
 async def update_service(
-    service_id: int,
-    service_data: ServiceUpdate,
-    db: Session = Depends(get_db)
+    service_id: int, service_data: ServiceUpdate, db: Session = Depends(get_db)
 ):
     """Update a service."""
     from sqlalchemy.exc import IntegrityError
@@ -1934,8 +2193,11 @@ async def update_service(
     except IntegrityError as e:
         db.rollback()
         if "slug" in str(e):
-            raise HTTPException(status_code=400, detail="Service with this slug already exists")
+            raise HTTPException(
+                status_code=400, detail="Service with this slug already exists"
+            )
         raise HTTPException(status_code=400, detail="Database integrity error")
+
 
 @app.delete("/api/admin/services/{service_id}")
 async def delete_service(service_id: int, db: Session = Depends(get_db)):
@@ -1945,35 +2207,37 @@ async def delete_service(service_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Service not found")
     return {"message": "Service deleted successfully"}
 
+
 @app.post("/api/admin/services/reorder")
-async def reorder_services(
-    service_orders: List[dict],
-    db: Session = Depends(get_db)
-):
+async def reorder_services(service_orders: List[dict], db: Session = Depends(get_db)):
     """Reorder services. Expects list of {id: int, display_order: int}."""
     SettingsService.reorder_services(db, service_orders)
     return {"message": "Services reordered successfully"}
 
+
 # Provider endpoints
 @app.get("/api/admin/providers")
 async def get_providers(
-    active_only: bool = Query(False),
-    db: Session = Depends(get_db)
+    active_only: bool = Query(False), db: Session = Depends(get_db)
 ):
     """Get all providers."""
     providers = SettingsService.get_all_providers(db, active_only=active_only)
 
-    return [{
-        "id": str(p.id),
-        "name": p.name,
-        "email": p.email,
-        "phone": p.phone,
-        "specialties": p.specialties,
-        "bio": p.bio,
-        "is_active": p.is_active,
-        "hire_date": p.hire_date.isoformat() if p.hire_date else None,
-        "avatar_url": p.avatar_url,
-    } for p in providers]
+    return [
+        {
+            "id": str(p.id),
+            "name": p.name,
+            "email": p.email,
+            "phone": p.phone,
+            "specialties": p.specialties,
+            "bio": p.bio,
+            "is_active": p.is_active,
+            "hire_date": p.hire_date.isoformat() if p.hire_date else None,
+            "avatar_url": p.avatar_url,
+        }
+        for p in providers
+    ]
+
 
 @app.get("/api/admin/providers/{provider_id}")
 async def get_provider(provider_id: str, db: Session = Depends(get_db)):
@@ -1994,11 +2258,9 @@ async def get_provider(provider_id: str, db: Session = Depends(get_db)):
         "avatar_url": provider.avatar_url,
     }
 
+
 @app.post("/api/admin/providers")
-async def create_provider(
-    provider_data: ProviderCreate,
-    db: Session = Depends(get_db)
-):
+async def create_provider(provider_data: ProviderCreate, db: Session = Depends(get_db)):
     """Create a new provider."""
     from sqlalchemy.exc import IntegrityError
 
@@ -2018,14 +2280,15 @@ async def create_provider(
     except IntegrityError as e:
         db.rollback()
         if "email" in str(e):
-            raise HTTPException(status_code=400, detail="Provider with this email already exists")
+            raise HTTPException(
+                status_code=400, detail="Provider with this email already exists"
+            )
         raise HTTPException(status_code=400, detail="Database integrity error")
+
 
 @app.put("/api/admin/providers/{provider_id}")
 async def update_provider(
-    provider_id: str,
-    provider_data: ProviderUpdate,
-    db: Session = Depends(get_db)
+    provider_id: str, provider_data: ProviderUpdate, db: Session = Depends(get_db)
 ):
     """Update a provider."""
     from sqlalchemy.exc import IntegrityError
@@ -2049,8 +2312,11 @@ async def update_provider(
     except IntegrityError as e:
         db.rollback()
         if "email" in str(e):
-            raise HTTPException(status_code=400, detail="Provider with this email already exists")
+            raise HTTPException(
+                status_code=400, detail="Provider with this email already exists"
+            )
         raise HTTPException(status_code=400, detail="Database integrity error")
+
 
 @app.delete("/api/admin/providers/{provider_id}")
 async def delete_provider(provider_id: str, db: Session = Depends(get_db)):
@@ -2063,18 +2329,20 @@ async def delete_provider(provider_id: str, db: Session = Depends(get_db)):
 
 # ==================== Webhook Endpoints (Phase 2) ====================
 
+
 @app.post("/api/webhooks/twilio/sms")
-async def handle_twilio_sms(
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
     """
     Twilio SMS webhook handler.
     Receives incoming SMS, finds or creates conversation, generates AI response.
     """
-    from twilio.twiml.messaging_response import MessagingResponse
-    from research.outbound_service import OutboundService
     import logging
+
+    from twilio.twiml.messaging_response import MessagingResponse
+
+    from database import SessionLocal
+    from messaging_service import MessagingService
+    from research.outbound_service import OutboundService
 
     logger = logging.getLogger(__name__)
 
@@ -2100,7 +2368,7 @@ async def handle_twilio_sms(
             customer = Customer(
                 name=f"Customer {from_number[-4:]}",  # Temp name
                 phone=from_number,
-                created_at=datetime.utcnow()
+                created_at=datetime.utcnow(),
             )
             db.add(customer)
             db.commit()
@@ -2109,9 +2377,7 @@ async def handle_twilio_sms(
 
         # Find active SMS conversation (non-campaign) or create new
         conversation = MessagingService.find_active_conversation(
-            db=db,
-            customer_id=customer.id,
-            channel="sms"
+            db=db, customer_id=customer.id, channel="sms"
         )
 
         # If no active conversation, create one
@@ -2120,7 +2386,7 @@ async def handle_twilio_sms(
                 db=db,
                 customer_id=customer.id,
                 channel="sms",
-                metadata={"twilio_from": to_number}
+                metadata={"twilio_from": to_number},
             )
             logger.info(f"Created new SMS conversation {conversation.id}")
 
@@ -2130,7 +2396,7 @@ async def handle_twilio_sms(
             conversation_id=conversation.id,
             direction="inbound",
             content=message_body,
-            metadata={"message_sid": message_sid}
+            metadata={"message_sid": message_sid},
         )
 
         # Add SMS details
@@ -2140,7 +2406,7 @@ async def handle_twilio_sms(
             from_number=from_number,
             to_number=to_number,
             provider_message_id=message_sid,
-            delivery_status="received"
+            delivery_status="received",
         )
 
         # Update conversation last activity
@@ -2155,17 +2421,12 @@ async def handle_twilio_sms(
 
         # Generate AI response
         ai_response_text = MessagingService.generate_ai_response(
-            db=db,
-            conversation_id=conversation.id,
-            user_message=message_body
+            db=db, conversation_id=conversation.id, user_message=message_body
         )
 
         # Add outbound message to database
         outbound_msg = MessagingService.add_assistant_message(
-            db=db,
-            conversation=conversation,
-            content=ai_response_text,
-            metadata={}
+            db=db, conversation=conversation, content=ai_response_text, metadata={}
         )
 
         # TODO: In production, send SMS via Twilio:
@@ -2197,21 +2458,23 @@ async def handle_twilio_sms(
         logger.error(f"Error handling SMS webhook: {str(e)}", exc_info=True)
         # Return generic error response
         resp = MessagingResponse()
-        resp.message(f"We're experiencing technical difficulties. Please call us at {settings.MED_SPA_PHONE}")
+        resp.message(
+            f"We're experiencing technical difficulties. Please call us at {settings.MED_SPA_PHONE}"
+        )
         return Response(content=str(resp), media_type="application/xml")
 
 
 @app.post("/api/webhooks/sendgrid/email")
-async def handle_sendgrid_email(
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db)):
     """
     SendGrid inbound email webhook handler.
     Receives incoming emails, finds or creates conversation, generates AI response.
     """
-    from research.outbound_service import OutboundService
     import logging
+
+    from database import SessionLocal
+    from messaging_service import MessagingService
+    from research.outbound_service import OutboundService
 
     logger = logging.getLogger(__name__)
 
@@ -2232,7 +2495,8 @@ async def handle_sendgrid_email(
 
         # Extract plain email address (remove name if present)
         import re
-        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', from_email)
+
+        email_match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", from_email)
         from_email_clean = email_match.group(0) if email_match else from_email
 
         # Find or create customer by email
@@ -2242,7 +2506,7 @@ async def handle_sendgrid_email(
             customer = Customer(
                 name=f"Customer ({from_email_clean})",  # Temp name
                 email=from_email_clean,
-                created_at=datetime.utcnow()
+                created_at=datetime.utcnow(),
             )
             db.add(customer)
             db.commit()
@@ -2251,9 +2515,7 @@ async def handle_sendgrid_email(
 
         # Find active email conversation or create new
         conversation = MessagingService.find_active_conversation(
-            db=db,
-            customer_id=customer.id,
-            channel="email"
+            db=db, customer_id=customer.id, channel="email"
         )
 
         # If no active conversation, create one
@@ -2263,7 +2525,7 @@ async def handle_sendgrid_email(
                 customer_id=customer.id,
                 channel="email",
                 subject=subject,
-                metadata={"original_subject": subject}
+                metadata={"original_subject": subject},
             )
             logger.info(f"Created new email conversation {conversation.id}")
 
@@ -2274,7 +2536,7 @@ async def handle_sendgrid_email(
             conversation_id=conversation.id,
             direction="inbound",
             content=message_content,
-            metadata={"subject": subject}
+            metadata={"subject": subject},
         )
 
         # Add email details
@@ -2287,7 +2549,7 @@ async def handle_sendgrid_email(
             body_text=text_body,
             body_html=html_body,
             provider_message_id=form_data.get("message-id", f"sg_{inbound_msg.id}"),
-            delivery_status="received"
+            delivery_status="received",
         )
 
         # Update conversation last activity
@@ -2302,9 +2564,7 @@ async def handle_sendgrid_email(
 
         # Generate AI response
         ai_response_text = MessagingService.generate_ai_response(
-            db=db,
-            conversation_id=conversation.id,
-            user_message=message_content
+            db=db, conversation_id=conversation.id, user_message=message_content
         )
 
         # Add outbound message to database
@@ -2313,7 +2573,7 @@ async def handle_sendgrid_email(
             db=db,
             conversation=conversation,
             content=ai_response_text,
-            metadata={"subject": reply_subject}
+            metadata={"subject": reply_subject},
         )
 
         # TODO: In production, send email via SendGrid:
@@ -2345,26 +2605,25 @@ async def handle_sendgrid_email(
         return {
             "status": "success",
             "conversation_id": str(conversation.id),
-            "message": "Email received and response generated"
+            "message": "Email received and response generated",
         }
 
     except Exception as e:
         logger.error(f"Error handling email webhook: {str(e)}", exc_info=True)
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return {"status": "error", "message": str(e)}
 
 
 # ==================== Provider Analytics Endpoints ====================
 
-from consultation_service import ConsultationService
-from ai_insights_service import AIInsightsService
-from provider_analytics_service import ProviderAnalyticsService
-from database import Provider, InPersonConsultation, AIInsight
-from fastapi import UploadFile, File, Form
-from pydantic import BaseModel
 from typing import List as TypingList
+
+from fastapi import File, Form, UploadFile
+from pydantic import BaseModel
+
+from ai_insights_service import AIInsightsService
+from consultation_service import ConsultationService
+from database import AIInsight, InPersonConsultation, Provider
+from provider_analytics_service import ProviderAnalyticsService
 
 
 # Request/Response models
@@ -2390,32 +2649,30 @@ class ProviderCreateRequest(BaseModel):
 
 # ===== Consultation Endpoints =====
 
+
 @app.post("/api/consultations")
 async def create_consultation(
-    request: ConsultationCreateRequest,
-    db: Session = Depends(get_db)
+    request: ConsultationCreateRequest, db: Session = Depends(get_db)
 ):
     """Create a new consultation session."""
     service = ConsultationService(db)
     consultation = service.create_consultation(
         provider_id=request.provider_id,
         customer_id=request.customer_id,
-        service_type=request.service_type
+        service_type=request.service_type,
     )
     return {
         "id": str(consultation.id),
         "provider_id": str(consultation.provider_id),
         "customer_id": consultation.customer_id,
         "service_type": consultation.service_type,
-        "created_at": consultation.created_at.isoformat()
+        "created_at": consultation.created_at.isoformat(),
     }
 
 
 @app.post("/api/consultations/{consultation_id}/upload-audio")
 async def upload_consultation_audio(
-    consultation_id: str,
-    audio: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    consultation_id: str, audio: UploadFile = File(...), db: Session = Depends(get_db)
 ):
     """Upload audio recording for a consultation."""
     service = ConsultationService(db)
@@ -2424,7 +2681,7 @@ async def upload_consultation_audio(
     file_path = service.upload_audio(
         consultation_id=consultation_id,
         audio_file=audio.file,
-        filename=audio.filename or "recording.wav"
+        filename=audio.filename or "recording.wav",
     )
 
     # Update consultation record
@@ -2438,15 +2695,13 @@ async def upload_consultation_audio(
     return {
         "consultation_id": consultation_id,
         "recording_url": file_path,
-        "status": "uploaded"
+        "status": "uploaded",
     }
 
 
 @app.post("/api/consultations/{consultation_id}/end")
 async def end_consultation(
-    consultation_id: str,
-    request: ConsultationEndRequest,
-    db: Session = Depends(get_db)
+    consultation_id: str, request: ConsultationEndRequest, db: Session = Depends(get_db)
 ):
     """End a consultation and trigger AI analysis."""
     service = ConsultationService(db)
@@ -2454,7 +2709,7 @@ async def end_consultation(
         consultation_id=consultation_id,
         outcome=request.outcome,
         appointment_id=request.appointment_id,
-        notes=request.notes
+        notes=request.notes,
     )
 
     # Trigger AI analysis
@@ -2463,13 +2718,17 @@ async def end_consultation(
 
     return {
         "id": str(consultation.id),
-        "ended_at": consultation.ended_at.isoformat() if consultation.ended_at else None,
+        "ended_at": (
+            consultation.ended_at.isoformat() if consultation.ended_at else None
+        ),
         "duration_seconds": consultation.duration_seconds,
         "outcome": consultation.outcome,
-        "transcript_length": len(consultation.transcript) if consultation.transcript else 0,
+        "transcript_length": (
+            len(consultation.transcript) if consultation.transcript else 0
+        ),
         "insights_generated": len(insights),
         "satisfaction_score": consultation.satisfaction_score,
-        "sentiment": consultation.sentiment
+        "sentiment": consultation.sentiment,
     }
 
 
@@ -2481,7 +2740,7 @@ async def list_consultations(
     service_type: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """List consultations with filters."""
     service = ConsultationService(db)
@@ -2493,7 +2752,7 @@ async def list_consultations(
         outcome=outcome,
         service_type=service_type,
         limit=page_size,
-        offset=offset
+        offset=offset,
     )
 
     return {
@@ -2515,52 +2774,51 @@ async def list_consultations(
         "total": total,
         "page": page,
         "page_size": page_size,
-        "total_pages": (total + page_size - 1) // page_size
+        "total_pages": (total + page_size - 1) // page_size,
     }
 
 
 @app.get("/api/consultations/{consultation_id}")
-async def get_consultation_details(
-    consultation_id: str,
-    db: Session = Depends(get_db)
-):
+async def get_consultation_details(consultation_id: str, db: Session = Depends(get_db)):
     """Get detailed consultation information."""
-    consultation = db.query(InPersonConsultation).filter(
-        InPersonConsultation.id == uuid.UUID(consultation_id)
-    ).first()
+    consultation = (
+        db.query(InPersonConsultation)
+        .filter(InPersonConsultation.id == uuid.UUID(consultation_id))
+        .first()
+    )
 
     if not consultation:
         raise HTTPException(status_code=404, detail="Consultation not found")
 
     # Get provider
-    provider = db.query(Provider).filter(
-        Provider.id == consultation.provider_id
-    ).first()
+    provider = (
+        db.query(Provider).filter(Provider.id == consultation.provider_id).first()
+    )
 
     # Get customer
     customer = None
     if consultation.customer_id:
-        customer = db.query(Customer).filter(
-            Customer.id == consultation.customer_id
-        ).first()
+        customer = (
+            db.query(Customer).filter(Customer.id == consultation.customer_id).first()
+        )
 
     # Get insights
-    insights = db.query(AIInsight).filter(
-        AIInsight.consultation_id == consultation.id
-    ).all()
+    insights = (
+        db.query(AIInsight).filter(AIInsight.consultation_id == consultation.id).all()
+    )
 
     return {
         "id": str(consultation.id),
-        "provider": {
-            "id": str(provider.id),
-            "name": provider.name,
-            "email": provider.email
-        } if provider else None,
-        "customer": {
-            "id": customer.id,
-            "name": customer.name,
-            "phone": customer.phone
-        } if customer else None,
+        "provider": (
+            {"id": str(provider.id), "name": provider.name, "email": provider.email}
+            if provider
+            else None
+        ),
+        "customer": (
+            {"id": customer.id, "name": customer.name, "phone": customer.phone}
+            if customer
+            else None
+        ),
         "service_type": consultation.service_type,
         "outcome": consultation.outcome,
         "duration_seconds": consultation.duration_seconds,
@@ -2570,7 +2828,9 @@ async def get_consultation_details(
         "sentiment": consultation.sentiment,
         "ai_summary": consultation.ai_summary,
         "created_at": consultation.created_at.isoformat(),
-        "ended_at": consultation.ended_at.isoformat() if consultation.ended_at else None,
+        "ended_at": (
+            consultation.ended_at.isoformat() if consultation.ended_at else None
+        ),
         "insights": [
             {
                 "id": str(i.id),
@@ -2580,19 +2840,19 @@ async def get_consultation_details(
                 "supporting_quote": i.supporting_quote,
                 "recommendation": i.recommendation,
                 "confidence_score": i.confidence_score,
-                "is_positive": i.is_positive
+                "is_positive": i.is_positive,
             }
             for i in insights
-        ]
+        ],
     }
 
 
 # ===== Provider Endpoints =====
 
+
 @app.post("/api/providers")
 async def create_provider(
-    request: ProviderCreateRequest,
-    db: Session = Depends(get_db)
+    request: ProviderCreateRequest, db: Session = Depends(get_db)
 ):
     """Create a new provider."""
     provider = Provider(
@@ -2602,7 +2862,7 @@ async def create_provider(
         phone=request.phone,
         specialties=request.specialties,
         bio=request.bio,
-        is_active=True
+        is_active=True,
     )
     db.add(provider)
     db.commit()
@@ -2612,15 +2872,12 @@ async def create_provider(
         "id": str(provider.id),
         "name": provider.name,
         "email": provider.email,
-        "specialties": provider.specialties or []
+        "specialties": provider.specialties or [],
     }
 
 
 @app.get("/api/providers")
-async def list_providers(
-    active_only: bool = True,
-    db: Session = Depends(get_db)
-):
+async def list_providers(active_only: bool = True, db: Session = Depends(get_db)):
     """List all providers."""
     query = db.query(Provider)
     if active_only:
@@ -2637,7 +2894,7 @@ async def list_providers(
                 "phone": p.phone,
                 "specialties": p.specialties or [],
                 "avatar_url": p.avatar_url,
-                "is_active": p.is_active
+                "is_active": p.is_active,
             }
             for p in providers
         ]
@@ -2646,31 +2903,25 @@ async def list_providers(
 
 @app.get("/api/providers/summary")
 async def get_providers_summary(
-    days: int = Query(30, ge=1, le=365),
-    db: Session = Depends(get_db)
+    days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)
 ):
     """Get performance summary for all providers."""
     from datetime import timedelta
+
     service = ProviderAnalyticsService(db)
 
     start_date = datetime.utcnow() - timedelta(days=days)
     summaries = service.get_all_providers_summary(
-        start_date=start_date,
-        end_date=datetime.utcnow()
+        start_date=start_date, end_date=datetime.utcnow()
     )
 
     return {"providers": summaries, "period_days": days}
 
 
 @app.get("/api/providers/{provider_id}")
-async def get_provider_details(
-    provider_id: str,
-    db: Session = Depends(get_db)
-):
+async def get_provider_details(provider_id: str, db: Session = Depends(get_db)):
     """Get detailed provider information."""
-    provider = db.query(Provider).filter(
-        Provider.id == uuid.UUID(provider_id)
-    ).first()
+    provider = db.query(Provider).filter(Provider.id == uuid.UUID(provider_id)).first()
 
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
@@ -2686,30 +2937,27 @@ async def get_provider_details(
         "bio": provider.bio,
         "is_active": provider.is_active,
         "created_at": provider.created_at.isoformat(),
-        "updated_at": provider.updated_at.isoformat()
+        "updated_at": provider.updated_at.isoformat(),
     }
 
 
 @app.get("/api/providers/{provider_id}/metrics")
 async def get_provider_metrics(
-    provider_id: str,
-    days: int = Query(30, ge=1, le=365),
-    db: Session = Depends(get_db)
+    provider_id: str, days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)
 ):
     """Get performance metrics for a provider."""
     from datetime import timedelta
+
     service = ProviderAnalyticsService(db)
 
     # Get summary metrics
     start_date = datetime.utcnow() - timedelta(days=days)
     summaries = service.get_all_providers_summary(
-        start_date=start_date,
-        end_date=datetime.utcnow()
+        start_date=start_date, end_date=datetime.utcnow()
     )
 
     provider_summary = next(
-        (s for s in summaries if s["provider_id"] == provider_id),
-        None
+        (s for s in summaries if s["provider_id"] == provider_id), None
     )
 
     if not provider_summary:
@@ -2717,38 +2965,29 @@ async def get_provider_metrics(
 
     # Get trend data
     conversion_trend = service.get_provider_performance_trend(
-        provider_id=provider_id,
-        metric="conversion_rate",
-        days=days
+        provider_id=provider_id, metric="conversion_rate", days=days
     )
 
     revenue_trend = service.get_provider_performance_trend(
-        provider_id=provider_id,
-        metric="revenue",
-        days=days
+        provider_id=provider_id, metric="revenue", days=days
     )
 
     # Get outcomes breakdown
     outcomes = service.get_consultation_outcomes_breakdown(
-        provider_id=provider_id,
-        days=days
+        provider_id=provider_id, days=days
     )
 
     # Get service performance
     service_performance = service.get_service_performance(
-        provider_id=provider_id,
-        days=days
+        provider_id=provider_id, days=days
     )
 
     return {
         "summary": provider_summary,
-        "trends": {
-            "conversion_rate": conversion_trend,
-            "revenue": revenue_trend
-        },
+        "trends": {"conversion_rate": conversion_trend, "revenue": revenue_trend},
         "outcomes": outcomes,
         "service_performance": service_performance,
-        "period_days": days
+        "period_days": days,
     }
 
 
@@ -2758,7 +2997,7 @@ async def get_provider_insights(
     insight_type: Optional[str] = None,
     is_positive: Optional[bool] = None,
     limit: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get AI insights for a provider."""
     service = AIInsightsService(db)
@@ -2767,7 +3006,7 @@ async def get_provider_insights(
         provider_id=provider_id,
         insight_type=insight_type,
         is_positive=is_positive,
-        limit=limit
+        limit=limit,
     )
 
     return {
@@ -2783,10 +3022,10 @@ async def get_provider_insights(
                 "confidence_score": i.confidence_score,
                 "is_positive": i.is_positive,
                 "is_reviewed": i.is_reviewed,
-                "created_at": i.created_at.isoformat()
+                "created_at": i.created_at.isoformat(),
             }
             for i in insights
-        ]
+        ],
     }
 
 
@@ -2794,14 +3033,13 @@ async def get_provider_insights(
 async def get_provider_consultations(
     provider_id: str,
     limit: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get recent consultations for a provider."""
     service = ConsultationService(db)
 
     consultations = service.get_provider_consultations(
-        provider_id=provider_id,
-        limit=limit
+        provider_id=provider_id, limit=limit
     )
 
     return {
@@ -2817,19 +3055,19 @@ async def get_provider_consultations(
                 "sentiment": c.sentiment,
                 "ai_summary": c.ai_summary,
                 "created_at": c.created_at.isoformat(),
-                "ended_at": c.ended_at.isoformat() if c.ended_at else None
+                "ended_at": c.ended_at.isoformat() if c.ended_at else None,
             }
             for c in consultations
-        ]
+        ],
     }
 
 
 # ===== AI Insights Endpoints =====
 
+
 @app.post("/api/insights/analyze/{consultation_id}")
 async def analyze_consultation_endpoint(
-    consultation_id: str,
-    db: Session = Depends(get_db)
+    consultation_id: str, db: Session = Depends(get_db)
 ):
     """Trigger AI analysis for a consultation."""
     service = AIInsightsService(db)
@@ -2844,10 +3082,10 @@ async def analyze_consultation_endpoint(
                 "type": i.insight_type,
                 "title": i.title,
                 "is_positive": i.is_positive,
-                "confidence_score": i.confidence_score
+                "confidence_score": i.confidence_score,
             }
             for i in insights
-        ]
+        ],
     }
 
 
@@ -2856,7 +3094,7 @@ async def compare_providers_endpoint(
     target_provider_id: str = Query(...),
     reference_provider_id: str = Query(...),
     days: int = Query(30, ge=1, le=365),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Compare two providers and generate insights."""
     service = AIInsightsService(db)
@@ -2864,7 +3102,7 @@ async def compare_providers_endpoint(
     insights = service.compare_providers(
         target_provider_id=target_provider_id,
         reference_provider_id=reference_provider_id,
-        days=days
+        days=days,
     )
 
     return {
@@ -2877,10 +3115,10 @@ async def compare_providers_endpoint(
                 "title": i.title,
                 "insight_text": i.insight_text,
                 "recommendation": i.recommendation,
-                "confidence_score": i.confidence_score
+                "confidence_score": i.confidence_score,
             }
             for i in insights
-        ]
+        ],
     }
 
 
@@ -2888,7 +3126,7 @@ async def compare_providers_endpoint(
 async def extract_best_practices_endpoint(
     days: int = Query(30, ge=1, le=365),
     limit: int = Query(10, ge=1, le=50),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Extract best practices from successful consultations."""
     service = AIInsightsService(db)
@@ -2905,18 +3143,15 @@ async def extract_best_practices_endpoint(
                 "insight_text": i.insight_text,
                 "supporting_quote": i.supporting_quote,
                 "recommendation": i.recommendation,
-                "confidence_score": i.confidence_score
+                "confidence_score": i.confidence_score,
             }
             for i in insights
-        ]
+        ],
     }
 
 
 @app.put("/api/insights/{insight_id}/review")
-async def mark_insight_reviewed(
-    insight_id: str,
-    db: Session = Depends(get_db)
-):
+async def mark_insight_reviewed(insight_id: str, db: Session = Depends(get_db)):
     """Mark an insight as reviewed."""
     service = AIInsightsService(db)
     insight = service.mark_insight_reviewed(insight_id)
@@ -2927,22 +3162,22 @@ async def mark_insight_reviewed(
     return {
         "id": str(insight.id),
         "is_reviewed": insight.is_reviewed,
-        "reviewed_at": insight.reviewed_at.isoformat() if insight.reviewed_at else None
+        "reviewed_at": insight.reviewed_at.isoformat() if insight.reviewed_at else None,
     }
 
 
 @app.get("/api/insights/best-practices")
 async def get_best_practices(
-    limit: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db)
+    limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)
 ):
     """Get all best practice insights."""
-    insights = db.query(AIInsight).filter(
-        AIInsight.insight_type == 'best_practice'
-    ).order_by(
-        desc(AIInsight.confidence_score),
-        desc(AIInsight.created_at)
-    ).limit(limit).all()
+    insights = (
+        db.query(AIInsight)
+        .filter(AIInsight.insight_type == "best_practice")
+        .order_by(desc(AIInsight.confidence_score), desc(AIInsight.created_at))
+        .limit(limit)
+        .all()
+    )
 
     return {
         "best_practices": [
@@ -2953,7 +3188,7 @@ async def get_best_practices(
                 "supporting_quote": i.supporting_quote,
                 "recommendation": i.recommendation,
                 "confidence_score": i.confidence_score,
-                "created_at": i.created_at.isoformat()
+                "created_at": i.created_at.isoformat(),
             }
             for i in insights
         ]
@@ -2962,9 +3197,5 @@ async def get_best_practices(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.DEBUG
-    )
+
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=settings.DEBUG)

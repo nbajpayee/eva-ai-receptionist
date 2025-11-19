@@ -1,4 +1,5 @@
 """Core slot-selection logic shared across booking channels."""
+
 from __future__ import annotations
 
 import json
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from database import CommunicationMessage, Conversation
+
 from .time_utils import parse_iso_datetime
 
 logger = logging.getLogger(__name__)
@@ -65,7 +67,9 @@ class SlotSelectionCore:
 
         if not slots:
             if metadata.pop("pending_slot_offers", None) is not None:
-                SlotSelectionCore.persist_conversation_metadata(db, conversation, metadata)
+                SlotSelectionCore.persist_conversation_metadata(
+                    db, conversation, metadata
+                )
             return
 
         offer_timestamp = datetime.utcnow().replace(tzinfo=UTC)
@@ -107,7 +111,9 @@ class SlotSelectionCore:
 
             if matched_slot is None:
                 existing_index = existing_pending.get("selected_option_index")
-                if isinstance(existing_index, int) and 1 <= existing_index <= len(slots):
+                if isinstance(existing_index, int) and 1 <= existing_index <= len(
+                    slots
+                ):
                     matched_slot = slots[existing_index - 1]
                     matched_index = existing_index
 
@@ -122,7 +128,9 @@ class SlotSelectionCore:
                 ]:
                     if key in existing_pending:
                         offer_payload[key] = existing_pending[key]
-            elif existing_pending.get("selected_slot") or existing_pending.get("selected_option_index"):
+            elif existing_pending.get("selected_slot") or existing_pending.get(
+                "selected_option_index"
+            ):
                 logger.info(
                     "Clearing stale slot selection for conversation_id=%s after refreshed availability.",
                     conversation.id,
@@ -177,12 +185,16 @@ class SlotSelectionCore:
                 expires_at = None
             if expires_at and expires_at < datetime.utcnow().replace(tzinfo=UTC):
                 metadata.pop("pending_slot_offers", None)
-                SlotSelectionCore.persist_conversation_metadata(db, conversation, metadata)
+                SlotSelectionCore.persist_conversation_metadata(
+                    db, conversation, metadata
+                )
                 return None
         return pending
 
     @staticmethod
-    def pending_slot_summary(db: Session, conversation: Conversation) -> List[Dict[str, Any]]:
+    def pending_slot_summary(
+        db: Session, conversation: Conversation
+    ) -> List[Dict[str, Any]]:
         pending = SlotSelectionCore.get_pending_slot_offers(
             db, conversation, enforce_expiry=False
         )
@@ -239,7 +251,9 @@ class SlotSelectionCore:
             "Captured slot selection: conversation_id=%s, choice=%d, slot=%s",
             conversation.id,
             choice_index,
-            slots[choice_index - 1].get("start_time", slots[choice_index - 1].get("start")),
+            slots[choice_index - 1].get(
+                "start_time", slots[choice_index - 1].get("start")
+            ),
         )
 
         SlotSelectionCore.persist_conversation_metadata(db, conversation, metadata)
@@ -336,13 +350,17 @@ class SlotSelectionCore:
 
         if isinstance(choice_index, int) and 1 <= choice_index <= len(slots):
             candidate_slot = slots[choice_index - 1]
-            candidate_label = candidate_slot.get("start_time", candidate_slot.get("start"))
+            candidate_label = candidate_slot.get(
+                "start_time", candidate_slot.get("start")
+            )
 
             # When a user has explicitly selected an option, ALWAYS honor that selection
             # even if the AI passes a different time in the booking arguments.
             # The selection takes precedence over the requested time.
             selected_slot = candidate_slot
-            if requested_start and not SlotSelectionCore.slot_matches_request(candidate_slot, requested_start):
+            if requested_start and not SlotSelectionCore.slot_matches_request(
+                candidate_slot, requested_start
+            ):
                 logger.info(
                     "Numbered selection takes precedence for conversation_id=%s: choice_index=%d is %s, AI requested %s. Using selection.",
                     conversation.id,
@@ -363,7 +381,9 @@ class SlotSelectionCore:
                     selected_slot = slot
                     pending["selected_option_index"] = idx
                     pending["selected_slot"] = slot
-                    pending.setdefault("selected_at", datetime.utcnow().replace(tzinfo=UTC).isoformat())
+                    pending.setdefault(
+                        "selected_at", datetime.utcnow().replace(tzinfo=UTC).isoformat()
+                    )
                     logger.info(
                         "Slot selection via time match: conversation_id=%s, requested=%s, matched_slot=%s",
                         conversation.id,

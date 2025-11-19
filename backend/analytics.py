@@ -1,19 +1,30 @@
 """
 Analytics service for call tracking, sentiment analysis, and satisfaction scoring.
 """
+
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, Optional, List
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from typing import Any, Dict, List, Optional
+
 from openai import OpenAI
-from database import (
-    CallSession, CallEvent, Customer, Appointment, DailyMetric,
-    Conversation, CommunicationMessage, VoiceCallDetails, EmailDetails, SMSDetails,
-    CommunicationEvent
-)
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 from config import get_settings
+from database import (
+    Appointment,
+    CallEvent,
+    CallSession,
+    CommunicationEvent,
+    CommunicationMessage,
+    Conversation,
+    Customer,
+    DailyMetric,
+    EmailDetails,
+    SMSDetails,
+    VoiceCallDetails,
+)
 
 settings = get_settings()
 openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
@@ -38,9 +49,7 @@ class AnalyticsService:
 
     @staticmethod
     def create_call_session(
-        db: Session,
-        session_id: str,
-        phone_number: Optional[str] = None
+        db: Session, session_id: str, phone_number: Optional[str] = None
     ) -> CallSession:
         """
         Create a new call session record.
@@ -54,9 +63,7 @@ class AnalyticsService:
             Created CallSession object
         """
         call_session = CallSession(
-            session_id=session_id,
-            phone_number=phone_number,
-            started_at=_utcnow()
+            session_id=session_id, phone_number=phone_number, started_at=_utcnow()
         )
         db.add(call_session)
         db.commit()
@@ -69,7 +76,7 @@ class AnalyticsService:
         session_id: str,
         transcript: List[Dict[str, Any]],
         function_calls: List[Dict[str, Any]],
-        customer_data: Dict[str, Any]
+        customer_data: Dict[str, Any],
     ) -> CallSession:
         """
         End a call session and analyze it.
@@ -84,9 +91,9 @@ class AnalyticsService:
         Returns:
             Updated CallSession object
         """
-        call_session = db.query(CallSession).filter(
-            CallSession.session_id == session_id
-        ).first()
+        call_session = (
+            db.query(CallSession).filter(CallSession.session_id == session_id).first()
+        )
 
         if not call_session:
             raise ValueError(f"Call session not found: {session_id}")
@@ -108,18 +115,20 @@ class AnalyticsService:
         call_session.function_calls_made = len(function_calls)
 
         # Link to customer if identified (create if doesn't exist)
-        if customer_data.get('phone'):
-            customer = db.query(Customer).filter(
-                Customer.phone == customer_data['phone']
-            ).first()
+        if customer_data.get("phone"):
+            customer = (
+                db.query(Customer)
+                .filter(Customer.phone == customer_data["phone"])
+                .first()
+            )
 
             if not customer:
                 # Create new customer
                 customer = Customer(
-                    name=customer_data.get('name', 'Unknown'),
-                    phone=customer_data.get('phone'),
-                    email=customer_data.get('email'),
-                    is_new_client=True
+                    name=customer_data.get("name", "Unknown"),
+                    phone=customer_data.get("phone"),
+                    email=customer_data.get("email"),
+                    is_new_client=True,
                 )
                 db.add(customer)
                 db.flush()  # Get the ID without committing
@@ -132,8 +141,8 @@ class AnalyticsService:
 
         # Analyze sentiment and satisfaction
         sentiment_analysis = AnalyticsService.analyze_call_sentiment(transcript)
-        call_session.sentiment = sentiment_analysis['sentiment']
-        call_session.satisfaction_score = sentiment_analysis['satisfaction_score']
+        call_session.sentiment = sentiment_analysis["sentiment"]
+        call_session.satisfaction_score = sentiment_analysis["satisfaction_score"]
 
         db.commit()
         db.refresh(call_session)
@@ -149,7 +158,7 @@ class AnalyticsService:
         if not function_calls:
             return "info_only"
 
-        function_names = [fc['function'] for fc in function_calls]
+        function_names = [fc["function"] for fc in function_calls]
 
         if "book_appointment" in function_names:
             return "booked"
@@ -170,17 +179,16 @@ class AnalyticsService:
             Dictionary with sentiment and satisfaction score
         """
         if not transcript:
-            return {
-                'sentiment': 'neutral',
-                'satisfaction_score': 5.0
-            }
+            return {"sentiment": "neutral", "satisfaction_score": 5.0}
 
         # Format transcript for analysis
-        conversation_text = "\n".join([
-            f"{entry['speaker']}: {entry['text']}"
-            for entry in transcript
-            if entry.get('text')
-        ])
+        conversation_text = "\n".join(
+            [
+                f"{entry['speaker']}: {entry['text']}"
+                for entry in transcript
+                if entry.get("text")
+            ]
+        )
 
         # Use GPT-4 for sentiment analysis
         try:
@@ -205,38 +213,32 @@ Consider these factors:
 - Did the customer express gratitude or positive feedback?
 - Were there negative words or tone indicators?
 - Was the conversation efficient or drawn out?
-"""
+""",
                     },
-                    {
-                        "role": "user",
-                        "content": conversation_text
-                    }
+                    {"role": "user", "content": conversation_text},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.2
+                temperature=0.2,
             )
 
             analysis_content = response.choices[0].message.content
             analysis = json.loads(analysis_content)
             return {
-                'sentiment': analysis.get('sentiment', 'neutral'),
-                'satisfaction_score': float(analysis.get('satisfaction_score', 5.0)),
-                'analysis_details': analysis
+                "sentiment": analysis.get("sentiment", "neutral"),
+                "satisfaction_score": float(analysis.get("satisfaction_score", 5.0)),
+                "analysis_details": analysis,
             }
 
         except Exception as e:
             print(f"Error analyzing sentiment: {e}")
-            return {
-                'sentiment': 'neutral',
-                'satisfaction_score': 5.0
-            }
+            return {"sentiment": "neutral", "satisfaction_score": 5.0}
 
     @staticmethod
     def log_call_event(
         db: Session,
         call_session_id: int,
         event_type: str,
-        data: Optional[Dict[str, Any]] = None
+        data: Optional[Dict[str, Any]] = None,
     ):
         """
         Log an event during a call.
@@ -251,7 +253,7 @@ Consider these factors:
             call_session_id=call_session_id,
             event_type=event_type,
             data=data,
-            timestamp=_utcnow()
+            timestamp=_utcnow(),
         )
         db.add(event)
         db.commit()
@@ -273,9 +275,11 @@ Consider these factors:
         )
 
         while True:
-            daily_metric = db.query(DailyMetric).filter(
-                DailyMetric.date == normalized_date
-            ).first()
+            daily_metric = (
+                db.query(DailyMetric)
+                .filter(DailyMetric.date == normalized_date)
+                .first()
+            )
 
             if not daily_metric:
                 daily_metric = DailyMetric(
@@ -288,7 +292,7 @@ Consider these factors:
                     appointments_cancelled=0,
                     avg_satisfaction_score=0.0,
                     calls_escalated=0,
-                    conversion_rate=0.0
+                    conversion_rate=0.0,
                 )
                 db.add(daily_metric)
 
@@ -314,21 +318,29 @@ Consider these factors:
                 )
 
             # Update average satisfaction score
-            all_sessions_today = db.query(CallSession).filter(
-                CallSession.started_at >= normalized_date,
-                CallSession.started_at < normalized_date + timedelta(days=1),
-                CallSession.satisfaction_score.isnot(None)
-            ).all()
+            all_sessions_today = (
+                db.query(CallSession)
+                .filter(
+                    CallSession.started_at >= normalized_date,
+                    CallSession.started_at < normalized_date + timedelta(days=1),
+                    CallSession.satisfaction_score.isnot(None),
+                )
+                .all()
+            )
 
             if all_sessions_today:
                 total_score = sum(s.satisfaction_score for s in all_sessions_today)
-                daily_metric.avg_satisfaction_score = total_score / len(all_sessions_today)
+                daily_metric.avg_satisfaction_score = total_score / len(
+                    all_sessions_today
+                )
 
             try:
                 db.commit()
                 break
             except IntegrityError:
-                print("IntegrityError updating daily metrics; retrying with fresh state")
+                print(
+                    "IntegrityError updating daily metrics; retrying with fresh state"
+                )
                 db.rollback()
                 continue
 
@@ -356,9 +368,9 @@ Consider these factors:
             start_date = datetime.combine(now.date(), datetime.min.time())
 
         # Get metrics from daily aggregates (lightweight)
-        daily_metrics = db.query(DailyMetric).filter(
-            DailyMetric.date >= start_date.date()
-        ).all()
+        daily_metrics = (
+            db.query(DailyMetric).filter(DailyMetric.date >= start_date.date()).all()
+        )
 
         total_calls = sum(m.total_calls for m in daily_metrics)
         total_talk_time = sum(m.total_talk_time_seconds for m in daily_metrics)
@@ -366,36 +378,52 @@ Consider these factors:
         total_escalated = sum(m.calls_escalated for m in daily_metrics)
 
         avg_satisfaction = (
-            sum(m.avg_satisfaction_score * m.total_calls for m in daily_metrics) / total_calls
-            if total_calls > 0 else 0.0
+            sum(m.avg_satisfaction_score * m.total_calls for m in daily_metrics)
+            / total_calls
+            if total_calls > 0
+            else 0.0
         )
 
         conversion_rate = (total_booked / total_calls * 100) if total_calls > 0 else 0.0
 
         # Count unique customers engaged (filtered by period for performance)
         from database import Conversation
-        customers_engaged = db.query(func.count(func.distinct(Conversation.customer_id))).filter(
-            Conversation.initiated_at >= start_date,
-            Conversation.customer_id.isnot(None)
-        ).scalar() or 0
+
+        customers_engaged = (
+            db.query(func.count(func.distinct(Conversation.customer_id)))
+            .filter(
+                Conversation.initiated_at >= start_date,
+                Conversation.customer_id.isnot(None),
+            )
+            .scalar()
+            or 0
+        )
 
         # Count total messages sent (filtered by period for performance)
         from database import CommunicationMessage
-        total_messages = db.query(func.count(CommunicationMessage.id)).filter(
-            CommunicationMessage.sent_at >= start_date
-        ).scalar() or 0
+
+        total_messages = (
+            db.query(func.count(CommunicationMessage.id))
+            .filter(CommunicationMessage.sent_at >= start_date)
+            .scalar()
+            or 0
+        )
 
         return {
             "period": period,
             "total_calls": total_calls,
             "total_talk_time_hours": round(total_talk_time / 3600, 2),
             "total_talk_time_minutes": int(total_talk_time / 60),  # For new UI
-            "avg_call_duration_minutes": round(total_talk_time / total_calls / 60, 2) if total_calls > 0 else 0,
+            "avg_call_duration_minutes": (
+                round(total_talk_time / total_calls / 60, 2) if total_calls > 0 else 0
+            ),
             "appointments_booked": total_booked,
             "conversion_rate": round(conversion_rate, 2),
             "avg_satisfaction_score": round(avg_satisfaction, 2),
             "calls_escalated": total_escalated,
-            "escalation_rate": round(total_escalated / total_calls * 100, 2) if total_calls > 0 else 0,
+            "escalation_rate": (
+                round(total_escalated / total_calls * 100, 2) if total_calls > 0 else 0
+            ),
             "customers_engaged": customers_engaged,  # New metric
             "total_messages_sent": total_messages,  # New metric
         }
@@ -407,7 +435,7 @@ Consider these factors:
         page_size: int = 50,
         search: Optional[str] = None,
         sort_by: str = "started_at",
-        sort_order: str = "desc"
+        sort_order: str = "desc",
     ) -> Dict[str, Any]:
         """
         Get paginated call history.
@@ -427,10 +455,12 @@ Consider these factors:
 
         # Apply search filter
         if search:
-            query = query.join(Customer, CallSession.customer_id == Customer.id, isouter=True)
+            query = query.join(
+                Customer, CallSession.customer_id == Customer.id, isouter=True
+            )
             query = query.filter(
-                (CallSession.phone_number.contains(search)) |
-                (Customer.name.contains(search))
+                (CallSession.phone_number.contains(search))
+                | (Customer.name.contains(search))
             )
 
         # Apply sorting
@@ -449,29 +479,33 @@ Consider these factors:
 
         serialized_calls: List[Dict[str, Any]] = []
         for call in calls:
-            serialized_calls.append({
-                "id": call.id,
-                "session_id": call.session_id,
-                "started_at": call.started_at.isoformat() if call.started_at else None,
-                "ended_at": call.ended_at.isoformat() if call.ended_at else None,
-                "duration_seconds": call.duration_seconds or 0,
-                "phone_number": call.phone_number,
-                "customer_name": call.customer.name if call.customer else None,
-                "channel": "voice",
-                "customer_id": call.customer_id,
-                "satisfaction_score": call.satisfaction_score,
-                "sentiment": call.sentiment,
-                "outcome": call.outcome,
-                "escalated": call.escalated,
-                "escalation_reason": call.escalation_reason,
-            })
+            serialized_calls.append(
+                {
+                    "id": call.id,
+                    "session_id": call.session_id,
+                    "started_at": (
+                        call.started_at.isoformat() if call.started_at else None
+                    ),
+                    "ended_at": call.ended_at.isoformat() if call.ended_at else None,
+                    "duration_seconds": call.duration_seconds or 0,
+                    "phone_number": call.phone_number,
+                    "customer_name": call.customer.name if call.customer else None,
+                    "channel": "voice",
+                    "customer_id": call.customer_id,
+                    "satisfaction_score": call.satisfaction_score,
+                    "sentiment": call.sentiment,
+                    "outcome": call.outcome,
+                    "escalated": call.escalated,
+                    "escalation_reason": call.escalation_reason,
+                }
+            )
 
         return {
             "total": total,
             "page": page,
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size,
-            "calls": serialized_calls
+            "calls": serialized_calls,
         }
 
     # ==================== Omnichannel Communications Methods (Phase 2) ====================
@@ -481,7 +515,7 @@ Consider these factors:
         db: Session,
         customer_id: Optional[int],
         channel: str,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Conversation:
         """
         Create a new omnichannel conversation.
@@ -501,10 +535,10 @@ Consider these factors:
             id=uuid.uuid4(),
             customer_id=customer_id,
             channel=channel,
-            status='active',
+            status="active",
             initiated_at=_utcnow(),
             last_activity_at=_utcnow(),
-            custom_metadata=metadata or {}
+            custom_metadata=metadata or {},
         )
         db.add(conversation)
         db.commit()
@@ -518,7 +552,7 @@ Consider these factors:
         direction: str,
         content: str,
         sent_at: Optional[datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> CommunicationMessage:
         """
         Add a message to a conversation.
@@ -547,7 +581,9 @@ Consider these factors:
         )
         db.add(message)
 
-        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        conversation = (
+            db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        )
         if conversation:
             conversation.last_activity_at = message.sent_at or _utcnow()
 
@@ -563,7 +599,7 @@ Consider these factors:
         recording_url: Optional[str] = None,
         transcript_segments: Optional[List[Dict]] = None,
         function_calls: Optional[List[Dict]] = None,
-        interruption_count: int = 0
+        interruption_count: int = 0,
     ) -> VoiceCallDetails:
         """
         Add voice call details to a message.
@@ -587,7 +623,7 @@ Consider these factors:
             transcript_segments=transcript_segments or [],
             function_calls=function_calls or [],
             audio_quality_score=None,
-            interruption_count=interruption_count
+            interruption_count=interruption_count,
         )
         db.add(voice_details)
         db.commit()
@@ -603,7 +639,7 @@ Consider these factors:
         provider_message_id: str,
         delivery_status: Optional[str] = None,
         segments: int = 1,
-        **kwargs
+        **kwargs,
     ) -> SMSDetails:
         """
         Add SMS details to a message.
@@ -628,7 +664,7 @@ Consider these factors:
             provider_message_id=provider_message_id,
             delivery_status=delivery_status,
             segments=segments,
-            **kwargs
+            **kwargs,
         )
         db.add(sms_details)
         db.commit()
@@ -644,7 +680,7 @@ Consider these factors:
         to_address: str,
         body_text: str,
         body_html: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> EmailDetails:
         """
         Add email details to a message.
@@ -669,7 +705,7 @@ Consider these factors:
             to_address=to_address,
             body_text=body_text,
             body_html=body_html,
-            **kwargs
+            **kwargs,
         )
         db.add(email_details)
         db.commit()
@@ -678,9 +714,7 @@ Consider these factors:
 
     @staticmethod
     def complete_conversation(
-        db: Session,
-        conversation_id: Any,  # UUID
-        outcome: Optional[str] = None
+        db: Session, conversation_id: Any, outcome: Optional[str] = None  # UUID
     ):
         """
         Mark a conversation as completed.
@@ -690,9 +724,11 @@ Consider these factors:
             conversation_id: Conversation UUID
             outcome: Optional outcome (appointment_scheduled, complaint, etc.)
         """
-        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        conversation = (
+            db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        )
         if conversation:
-            conversation.status = 'completed'
+            conversation.status = "completed"
             conversation.completed_at = _utcnow()
             if outcome:
                 conversation.outcome = outcome
@@ -700,8 +736,7 @@ Consider these factors:
 
     @staticmethod
     def score_conversation_satisfaction(
-        db: Session,
-        conversation_id: Any  # UUID
+        db: Session, conversation_id: Any  # UUID
     ) -> Dict[str, Any]:
         """
         Use GPT-4 to analyze conversation and generate satisfaction metrics.
@@ -716,10 +751,12 @@ Consider these factors:
         """
         from sqlalchemy.orm import joinedload
 
-        conversation = db.query(Conversation)\
-            .options(joinedload(Conversation.messages))\
-            .filter(Conversation.id == conversation_id)\
+        conversation = (
+            db.query(Conversation)
+            .options(joinedload(Conversation.messages))
+            .filter(Conversation.id == conversation_id)
             .first()
+        )
 
         if not conversation:
             raise ValueError(f"Conversation {conversation_id} not found")
@@ -728,18 +765,18 @@ Consider these factors:
 
         if not messages:
             return {
-                'satisfaction_score': 5,
-                'sentiment': 'neutral',
-                'outcome': 'unresolved',
-                'summary': ''
+                "satisfaction_score": 5,
+                "sentiment": "neutral",
+                "outcome": "unresolved",
+                "summary": "",
             }
 
         # Build context for GPT-4
         context_lines = [f"Channel: {conversation.channel}"]
 
         for msg in messages:
-            speaker = "Customer" if msg.direction == 'inbound' else "Ava"
-            content = msg.content or ''
+            speaker = "Customer" if msg.direction == "inbound" else "Ava"
+            content = msg.content or ""
             context_lines.append(f"{speaker}: {content}")
 
         context = "\n".join(context_lines)
@@ -766,23 +803,20 @@ Consider:
 - Did the customer express gratitude or positive feedback?
 - Were there negative words or frustration indicators?
 - Was the conversation efficient or drawn out?
-"""
+""",
                     },
-                    {
-                        "role": "user",
-                        "content": context
-                    }
+                    {"role": "user", "content": context},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.3
+                temperature=0.3,
             )
 
             result = json.loads(response.choices[0].message.content)
 
-            score = result.get('satisfaction_score', 5)
-            sentiment = result.get('sentiment', 'neutral')
-            outcome = result.get('outcome', 'unresolved')
-            summary = result.get('summary', '')
+            score = result.get("satisfaction_score", 5)
+            sentiment = result.get("sentiment", "neutral")
+            outcome = result.get("outcome", "unresolved")
+            summary = result.get("summary", "")
 
             # Update conversation
             conversation.satisfaction_score = int(score)
@@ -792,24 +826,24 @@ Consider:
             db.commit()
 
             return {
-                'satisfaction_score': score,
-                'sentiment': sentiment,
-                'outcome': outcome,
-                'summary': summary
+                "satisfaction_score": score,
+                "sentiment": sentiment,
+                "outcome": outcome,
+                "summary": summary,
             }
         except Exception as exc:  # noqa: BLE001
             print(f"Error analyzing conversation satisfaction: {exc}")
             # Fallback to neutral values
             conversation.satisfaction_score = 5
-            conversation.sentiment = 'neutral'
-            conversation.outcome = 'unresolved'
+            conversation.sentiment = "neutral"
+            conversation.outcome = "unresolved"
             db.commit()
 
             return {
-                'satisfaction_score': 5,
-                'sentiment': 'neutral',
-                'outcome': 'unresolved',
-                'summary': ''
+                "satisfaction_score": 5,
+                "sentiment": "neutral",
+                "outcome": "unresolved",
+                "summary": "",
             }
 
     @staticmethod
@@ -936,7 +970,7 @@ Consider:
         db: Session,
         period: str = "week",
         interval: str = "hour",
-        metrics: Optional[List[str]] = None
+        metrics: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get time-series metrics for charting.
@@ -951,13 +985,16 @@ Consider:
             List of time-series data points
         """
         from datetime import timedelta
-        from sqlalchemy import func, cast, Integer
+
+        from sqlalchemy import Integer, cast, func
 
         now = _utcnow()
 
         # Determine date range
         if period == "today":
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
             trunc_format = "hour"
         elif period == "week":
             start_date = now - timedelta(days=7)
@@ -966,20 +1003,29 @@ Consider:
             start_date = now - timedelta(days=30)
             trunc_format = "day"
         else:
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
             trunc_format = "hour"
 
         # Query conversations grouped by time interval
-        query = db.query(
-            func.date_trunc(trunc_format, Conversation.initiated_at).label('timestamp'),
-            func.count(Conversation.id).label('total_calls'),
-            func.count(func.nullif(Conversation.outcome == 'appointment_scheduled', False)).label('appointments_booked'),
-            func.avg(cast(Conversation.satisfaction_score, Integer)).label('avg_satisfaction_score')
-        ).filter(
-            Conversation.initiated_at >= start_date
-        ).group_by(
-            func.date_trunc(trunc_format, Conversation.initiated_at)
-        ).order_by('timestamp')
+        query = (
+            db.query(
+                func.date_trunc(trunc_format, Conversation.initiated_at).label(
+                    "timestamp"
+                ),
+                func.count(Conversation.id).label("total_calls"),
+                func.count(
+                    func.nullif(Conversation.outcome == "appointment_scheduled", False)
+                ).label("appointments_booked"),
+                func.avg(cast(Conversation.satisfaction_score, Integer)).label(
+                    "avg_satisfaction_score"
+                ),
+            )
+            .filter(Conversation.initiated_at >= start_date)
+            .group_by(func.date_trunc(trunc_format, Conversation.initiated_at))
+            .order_by("timestamp")
+        )
 
         results = query.all()
 
@@ -988,16 +1034,15 @@ Consider:
                 "timestamp": r.timestamp.isoformat() if r.timestamp else None,
                 "total_calls": r.total_calls or 0,
                 "appointments_booked": r.appointments_booked or 0,
-                "avg_satisfaction_score": round(float(r.avg_satisfaction_score or 0), 2)
+                "avg_satisfaction_score": round(
+                    float(r.avg_satisfaction_score or 0), 2
+                ),
             }
             for r in results
         ]
 
     @staticmethod
-    def get_conversion_funnel(
-        db: Session,
-        period: str = "week"
-    ) -> Dict[str, Any]:
+    def get_conversion_funnel(db: Session, period: str = "week") -> Dict[str, Any]:
         """
         Get conversion funnel metrics.
 
@@ -1014,38 +1059,60 @@ Consider:
 
         # Determine date range
         if period == "today":
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
         elif period == "week":
             start_date = now - timedelta(days=7)
         elif period == "month":
             start_date = now - timedelta(days=30)
         else:
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
 
         # Stage 1: Total inquiries (all conversations)
-        total_inquiries = db.query(func.count(Conversation.id)).filter(
-            Conversation.initiated_at >= start_date
-        ).scalar() or 0
+        total_inquiries = (
+            db.query(func.count(Conversation.id))
+            .filter(Conversation.initiated_at >= start_date)
+            .scalar()
+            or 0
+        )
 
         # Stage 2: Browsing (conversations with check_availability function calls)
-        browsing_count = db.query(func.count(func.distinct(CommunicationEvent.conversation_id))).filter(
-            CommunicationEvent.event_type == 'function_called',
-            CommunicationEvent.timestamp >= start_date,
-            CommunicationEvent.details['tool'].astext == 'check_availability'
-        ).scalar() or 0
+        browsing_count = (
+            db.query(func.count(func.distinct(CommunicationEvent.conversation_id)))
+            .filter(
+                CommunicationEvent.event_type == "function_called",
+                CommunicationEvent.timestamp >= start_date,
+                CommunicationEvent.details["tool"].astext == "check_availability",
+            )
+            .scalar()
+            or 0
+        )
 
         # Stage 3: Booking attempts (book_appointment function called)
-        booking_attempts = db.query(func.count(func.distinct(CommunicationEvent.conversation_id))).filter(
-            CommunicationEvent.event_type == 'function_called',
-            CommunicationEvent.timestamp >= start_date,
-            CommunicationEvent.details['tool'].astext == 'book_appointment'
-        ).scalar() or 0
+        booking_attempts = (
+            db.query(func.count(func.distinct(CommunicationEvent.conversation_id)))
+            .filter(
+                CommunicationEvent.event_type == "function_called",
+                CommunicationEvent.timestamp >= start_date,
+                CommunicationEvent.details["tool"].astext == "book_appointment",
+            )
+            .scalar()
+            or 0
+        )
 
         # Stage 4: Completed bookings (outcome = 'appointment_scheduled')
-        completed_bookings = db.query(func.count(Conversation.id)).filter(
-            Conversation.initiated_at >= start_date,
-            Conversation.outcome == 'appointment_scheduled'
-        ).scalar() or 0
+        completed_bookings = (
+            db.query(func.count(Conversation.id))
+            .filter(
+                Conversation.initiated_at >= start_date,
+                Conversation.outcome == "appointment_scheduled",
+            )
+            .scalar()
+            or 0
+        )
 
         return {
             "period": period,
@@ -1053,31 +1120,28 @@ Consider:
                 {
                     "name": "Total Inquiries",
                     "value": total_inquiries,
-                    "color": "#3b82f6"  # blue-500
+                    "color": "#3b82f6",  # blue-500
                 },
                 {
                     "name": "Checked Availability",
                     "value": browsing_count,
-                    "color": "#8b5cf6"  # violet-500
+                    "color": "#8b5cf6",  # violet-500
                 },
                 {
                     "name": "Attempted Booking",
                     "value": booking_attempts,
-                    "color": "#f59e0b"  # amber-500
+                    "color": "#f59e0b",  # amber-500
                 },
                 {
                     "name": "Booked Successfully",
                     "value": completed_bookings,
-                    "color": "#10b981"  # emerald-500
-                }
-            ]
+                    "color": "#10b981",  # emerald-500
+                },
+            ],
         }
 
     @staticmethod
-    def get_peak_hours(
-        db: Session,
-        period: str = "week"
-    ) -> List[Dict[str, Any]]:
+    def get_peak_hours(db: Session, period: str = "week") -> List[Dict[str, Any]]:
         """
         Get peak hours heatmap data.
 
@@ -1089,6 +1153,7 @@ Consider:
             List of heatmap cells with day/hour/value
         """
         from datetime import timedelta
+
         from sqlalchemy import extract
 
         now = _utcnow()
@@ -1102,31 +1167,28 @@ Consider:
             start_date = now - timedelta(days=7)
 
         # Query conversations grouped by day of week and hour
-        results = db.query(
-            extract('dow', Conversation.initiated_at).label('day'),
-            extract('hour', Conversation.initiated_at).label('hour'),
-            func.count(Conversation.id).label('value')
-        ).filter(
-            Conversation.initiated_at >= start_date
-        ).group_by(
-            extract('dow', Conversation.initiated_at),
-            extract('hour', Conversation.initiated_at)
-        ).all()
+        results = (
+            db.query(
+                extract("dow", Conversation.initiated_at).label("day"),
+                extract("hour", Conversation.initiated_at).label("hour"),
+                func.count(Conversation.id).label("value"),
+            )
+            .filter(Conversation.initiated_at >= start_date)
+            .group_by(
+                extract("dow", Conversation.initiated_at),
+                extract("hour", Conversation.initiated_at),
+            )
+            .all()
+        )
 
         return [
-            {
-                "day": int(r.day),
-                "hour": int(r.hour),
-                "value": r.value or 0
-            }
+            {"day": int(r.day), "hour": int(r.hour), "value": r.value or 0}
             for r in results
         ]
 
     @staticmethod
     def get_customer_timeline(
-        db: Session,
-        customer_id: int,
-        limit: int = 50
+        db: Session, customer_id: int, limit: int = 50
     ) -> Dict[str, Any]:
         """
         Get conversation timeline for a specific customer.
@@ -1147,33 +1209,45 @@ Consider:
             raise ValueError(f"Customer {customer_id} not found")
 
         # Get conversations
-        conversations = db.query(Conversation)\
-            .options(joinedload(Conversation.messages))\
-            .filter(Conversation.customer_id == customer_id)\
-            .order_by(Conversation.initiated_at.desc())\
-            .limit(limit)\
+        conversations = (
+            db.query(Conversation)
+            .options(joinedload(Conversation.messages))
+            .filter(Conversation.customer_id == customer_id)
+            .order_by(Conversation.initiated_at.desc())
+            .limit(limit)
             .all()
+        )
 
         # Serialize timeline
         timeline = []
         for conv in conversations:
-            timeline.append({
-                "id": str(conv.id),
-                "channel": conv.channel,
-                "initiated_at": conv.initiated_at.isoformat() if conv.initiated_at else None,
-                "completed_at": conv.completed_at.isoformat() if conv.completed_at else None,
-                "outcome": conv.outcome,
-                "satisfaction_score": conv.satisfaction_score,
-                "sentiment": conv.sentiment,
-                "ai_summary": conv.ai_summary,
-                "message_count": len(conv.messages),
-                "status": conv.status
-            })
+            timeline.append(
+                {
+                    "id": str(conv.id),
+                    "channel": conv.channel,
+                    "initiated_at": (
+                        conv.initiated_at.isoformat() if conv.initiated_at else None
+                    ),
+                    "completed_at": (
+                        conv.completed_at.isoformat() if conv.completed_at else None
+                    ),
+                    "outcome": conv.outcome,
+                    "satisfaction_score": conv.satisfaction_score,
+                    "sentiment": conv.sentiment,
+                    "ai_summary": conv.ai_summary,
+                    "message_count": len(conv.messages),
+                    "status": conv.status,
+                }
+            )
 
         # Calculate customer stats
         total_conversations = len(conversations)
-        avg_satisfaction = sum(c.satisfaction_score or 0 for c in conversations) / max(total_conversations, 1)
-        total_bookings = sum(1 for c in conversations if c.outcome == 'appointment_scheduled')
+        avg_satisfaction = sum(c.satisfaction_score or 0 for c in conversations) / max(
+            total_conversations, 1
+        )
+        total_bookings = sum(
+            1 for c in conversations if c.outcome == "appointment_scheduled"
+        )
 
         return {
             "customer": {
@@ -1181,21 +1255,22 @@ Consider:
                 "name": customer.name,
                 "phone": customer.phone,
                 "email": customer.email,
-                "created_at": customer.created_at.isoformat() if customer.created_at else None
+                "created_at": (
+                    customer.created_at.isoformat() if customer.created_at else None
+                ),
             },
             "stats": {
                 "total_conversations": total_conversations,
                 "avg_satisfaction_score": round(avg_satisfaction, 2),
                 "total_bookings": total_bookings,
-                "channels_used": list(set(c.channel for c in conversations))
+                "channels_used": list(set(c.channel for c in conversations)),
             },
-            "timeline": timeline
+            "timeline": timeline,
         }
 
     @staticmethod
     def get_channel_distribution(
-        db: Session,
-        period: str = "week"
+        db: Session, period: str = "week"
     ) -> List[Dict[str, Any]]:
         """
         Get conversation count by communication channel.
@@ -1213,7 +1288,9 @@ Consider:
 
         # Determine date range
         if period == "today":
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
         elif period == "week":
             start_date = now - timedelta(days=7)
         elif period == "month":
@@ -1222,32 +1299,31 @@ Consider:
             start_date = now - timedelta(days=7)
 
         # Query channel counts
-        results = db.query(
-            Conversation.channel,
-            func.count(Conversation.id).label('count')
-        ).filter(
-            Conversation.initiated_at >= start_date
-        ).group_by(Conversation.channel).all()
+        results = (
+            db.query(Conversation.channel, func.count(Conversation.id).label("count"))
+            .filter(Conversation.initiated_at >= start_date)
+            .group_by(Conversation.channel)
+            .all()
+        )
 
         channel_colors = {
-            'voice': '#3b82f6',  # blue-500
-            'sms': '#8b5cf6',    # violet-500
-            'email': '#10b981',  # emerald-500
+            "voice": "#3b82f6",  # blue-500
+            "sms": "#8b5cf6",  # violet-500
+            "email": "#10b981",  # emerald-500
         }
 
         return [
             {
                 "name": r.channel.capitalize(),
                 "conversations": r.count,
-                "color": channel_colors.get(r.channel, '#6b7280')
+                "color": channel_colors.get(r.channel, "#6b7280"),
             }
             for r in results
         ]
 
     @staticmethod
     def get_outcome_distribution(
-        db: Session,
-        period: str = "week"
+        db: Session, period: str = "week"
     ) -> List[Dict[str, Any]]:
         """
         Get conversation count by outcome.
@@ -1265,7 +1341,9 @@ Consider:
 
         # Determine date range
         if period == "today":
-            start_date = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+            start_date = datetime.combine(
+                now.date(), datetime.min.time(), tzinfo=timezone.utc
+            )
         elif period == "week":
             start_date = now - timedelta(days=7)
         elif period == "month":
@@ -1274,28 +1352,32 @@ Consider:
             start_date = now - timedelta(days=7)
 
         # Query outcome counts
-        results = db.query(
-            Conversation.outcome,
-            func.count(Conversation.id).label('count')
-        ).filter(
-            Conversation.initiated_at >= start_date,
-            Conversation.outcome.isnot(None)
-        ).group_by(Conversation.outcome).all()
+        results = (
+            db.query(Conversation.outcome, func.count(Conversation.id).label("count"))
+            .filter(
+                Conversation.initiated_at >= start_date,
+                Conversation.outcome.isnot(None),
+            )
+            .group_by(Conversation.outcome)
+            .all()
+        )
 
         outcome_names = {
-            'appointment_scheduled': 'Booked',
-            'info_request': 'Info Only',
-            'complaint': 'Complaint',
-            'unresolved': 'Unresolved',
-            'browsing': 'Browsing',
-            'escalated': 'Escalated',
-            'abandoned': 'Abandoned',
+            "appointment_scheduled": "Booked",
+            "info_request": "Info Only",
+            "complaint": "Complaint",
+            "unresolved": "Unresolved",
+            "browsing": "Browsing",
+            "escalated": "Escalated",
+            "abandoned": "Abandoned",
         }
 
         return [
             {
-                "name": outcome_names.get(r.outcome, r.outcome.replace('_', ' ').title()),
-                "count": r.count
+                "name": outcome_names.get(
+                    r.outcome, r.outcome.replace("_", " ").title()
+                ),
+                "count": r.count,
             }
             for r in results
         ]

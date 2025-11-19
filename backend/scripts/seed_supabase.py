@@ -4,12 +4,13 @@ Usage:
     python backend/scripts/seed_supabase.py            # seed if empty
     python backend/scripts/seed_supabase.py --force    # wipe and reseed
 """
+
 from __future__ import annotations
 
 import argparse
-import sys
-from datetime import datetime, timedelta, time
 import random
+import sys
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Dict, List
 
@@ -28,10 +29,10 @@ else:
     load_dotenv()
 
 from config import get_settings  # noqa: E402
-from database import (  # noqa: E402
+from database import CallSession  # noqa: E402
+from database import (
     Appointment,
     CallEvent,
-    CallSession,
     CommunicationEvent,
     CommunicationMessage,
     Conversation,
@@ -189,7 +190,9 @@ def seed_data() -> None:
                 sentiment = "negative"
 
             session_id = f"sess_{started_at.strftime('%Y%m%d')}_{idx:03d}"
-            transcript = transcripts_templates[outcome].format(name=customer.name, service=service)
+            transcript = transcripts_templates[outcome].format(
+                name=customer.name, service=service
+            )
 
             call = CallSession(
                 customer_id=customer.id,
@@ -204,7 +207,9 @@ def seed_data() -> None:
                 outcome=outcome,
                 customer_interruptions=random.randint(0, 2),
                 ai_clarifications_needed=random.randint(0, 2),
-                function_calls_made=1 if outcome in {"booked", "info_only", "escalated"} else 0,
+                function_calls_made=(
+                    1 if outcome in {"booked", "info_only", "escalated"} else 0
+                ),
                 escalated=outcome == "escalated",
             )
             session.add(call)
@@ -323,7 +328,8 @@ def seed_data() -> None:
                         conversation_id=conversation.id,
                         message_id=message.id,
                         event_type="appointment_booked",
-                        timestamp=call.started_at + timedelta(seconds=duration_seconds - 90),
+                        timestamp=call.started_at
+                        + timedelta(seconds=duration_seconds - 90),
                         details={"service": service},
                     )
                 )
@@ -333,7 +339,8 @@ def seed_data() -> None:
                         conversation_id=conversation.id,
                         message_id=message.id,
                         event_type="follow_up_required",
-                        timestamp=call.started_at + timedelta(seconds=duration_seconds - 45),
+                        timestamp=call.started_at
+                        + timedelta(seconds=duration_seconds - 45),
                         details={"channel": "email"},
                     )
                 )
@@ -343,7 +350,8 @@ def seed_data() -> None:
                         conversation_id=conversation.id,
                         message_id=message.id,
                         event_type="escalation_requested",
-                        timestamp=call.started_at + timedelta(seconds=duration_seconds - 60),
+                        timestamp=call.started_at
+                        + timedelta(seconds=duration_seconds - 60),
                         details={"reason": "medical_question"},
                     )
                 )
@@ -353,7 +361,9 @@ def seed_data() -> None:
 
             # Create appointments for booked/rescheduled outcomes
             if outcome == "booked":
-                appointment_time = now + timedelta(days=random.randint(1, 7), hours=random.randint(10, 17))
+                appointment_time = now + timedelta(
+                    days=random.randint(1, 7), hours=random.randint(10, 17)
+                )
                 appointment = Appointment(
                     customer_id=customer.id,
                     calendar_event_id=f"cal_evt_{session_id}",
@@ -368,7 +378,9 @@ def seed_data() -> None:
                 session.flush()
                 appointments_created.append(appointment)
             elif outcome == "escalated":
-                appointment_time = now + timedelta(days=random.randint(2, 9), hours=random.randint(9, 16))
+                appointment_time = now + timedelta(
+                    days=random.randint(2, 9), hours=random.randint(9, 16)
+                )
                 appointment = Appointment(
                     customer_id=customer.id,
                     calendar_event_id=f"cal_evt_{session_id}",
@@ -398,7 +410,8 @@ def seed_data() -> None:
                     CallEvent(
                         call_session_id=call.id,
                         event_type="appointment_booked",
-                        timestamp=call.started_at + timedelta(seconds=duration_seconds - 90),
+                        timestamp=call.started_at
+                        + timedelta(seconds=duration_seconds - 90),
                         data={"service": service},
                     )
                 )
@@ -407,7 +420,8 @@ def seed_data() -> None:
                     CallEvent(
                         call_session_id=call.id,
                         event_type="follow_up_required",
-                        timestamp=call.started_at + timedelta(seconds=duration_seconds - 45),
+                        timestamp=call.started_at
+                        + timedelta(seconds=duration_seconds - 45),
                         data={"channel": "email"},
                     )
                 )
@@ -416,7 +430,8 @@ def seed_data() -> None:
                     CallEvent(
                         call_session_id=call.id,
                         event_type="escalation_requested",
-                        timestamp=call.started_at + timedelta(seconds=duration_seconds - 60),
+                        timestamp=call.started_at
+                        + timedelta(seconds=duration_seconds - 60),
                         data={"reason": "medical_question"},
                     )
                 )
@@ -450,7 +465,9 @@ def seed_data() -> None:
         for day, values in sorted(daily_rollups.items()):
             total = values["total_calls"]
             avg_duration = int(values["total_talk_time"] / total) if total else 0
-            avg_satisfaction = round(values["satisfaction_total"] / total, 1) if total else 0
+            avg_satisfaction = (
+                round(values["satisfaction_total"] / total, 1) if total else 0
+            )
             conversion = round((values["booked"] / total) * 100, 1) if total else 0
 
             metric = DailyMetric(
@@ -478,7 +495,9 @@ def seed_data() -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed Supabase database with sample data")
+    parser = argparse.ArgumentParser(
+        description="Seed Supabase database with sample data"
+    )
     parser.add_argument(
         "--force",
         action="store_true",

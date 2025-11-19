@@ -5,11 +5,12 @@ This provides basic rate limiting without requiring Redis or external services.
 For production with multiple workers, consider using Redis-based rate limiting.
 """
 
+import logging
 import time
 from collections import defaultdict
 from typing import Dict, Tuple
+
 from fastapi import HTTPException, Request
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +29,7 @@ class RateLimiter:
         self._last_cleanup = time.time()
 
     def check_rate_limit(
-        self,
-        request: Request,
-        max_requests: int = 10,
-        window_seconds: int = 60
+        self, request: Request, max_requests: int = 10, window_seconds: int = 60
     ) -> None:
         """
         Check if request should be rate limited.
@@ -68,7 +66,7 @@ class RateLimiter:
                     raise HTTPException(
                         status_code=429,
                         detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",
-                        headers={"Retry-After": str(retry_after)}
+                        headers={"Retry-After": str(retry_after)},
                     )
                 # Increment count in same window
                 self._requests[client_ip] = (last_time, count + 1)
@@ -106,9 +104,7 @@ class RateLimiter:
             # Remove entries older than 1 hour
             cutoff_time = current_time - 3600
             self._requests = {
-                ip: (t, c)
-                for ip, (t, c) in self._requests.items()
-                if t > cutoff_time
+                ip: (t, c) for ip, (t, c) in self._requests.items() if t > cutoff_time
             }
             self._last_cleanup = current_time
             logger.info(f"Rate limiter cleanup: {len(self._requests)} active IPs")

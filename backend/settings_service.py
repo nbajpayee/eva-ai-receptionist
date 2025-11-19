@@ -2,14 +2,14 @@
 Settings service for managing med spa configuration.
 Provides CRUD operations for settings, locations, services, and providers.
 """
-from typing import List, Optional, Dict, Any
-from datetime import time
-from sqlalchemy.orm import Session
-from sqlalchemy import func
 
-from database import (
-    MedSpaSettings, Location, BusinessHours, Service, Provider
-)
+from datetime import time
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from database import BusinessHours, Location, MedSpaSettings, Provider, Service
 
 
 class SettingsService:
@@ -61,8 +61,8 @@ class SettingsService:
     def create_location(db: Session, location_data: dict) -> Location:
         """Create a new location."""
         # If this is set as primary, unset other primaries
-        if location_data.get('is_primary'):
-            db.query(Location).update({'is_primary': False})
+        if location_data.get("is_primary"):
+            db.query(Location).update({"is_primary": False})
 
         location = Location(**location_data)
         db.add(location)
@@ -71,15 +71,19 @@ class SettingsService:
         return location
 
     @staticmethod
-    def update_location(db: Session, location_id: int, location_data: dict) -> Optional[Location]:
+    def update_location(
+        db: Session, location_id: int, location_data: dict
+    ) -> Optional[Location]:
         """Update a location."""
         location = db.query(Location).filter(Location.id == location_id).first()
         if not location:
             return None
 
         # If this is set as primary, unset other primaries
-        if location_data.get('is_primary') and not location.is_primary:
-            db.query(Location).filter(Location.id != location_id).update({'is_primary': False})
+        if location_data.get("is_primary") and not location.is_primary:
+            db.query(Location).filter(Location.id != location_id).update(
+                {"is_primary": False}
+            )
 
         for key, value in location_data.items():
             if hasattr(location, key):
@@ -97,12 +101,18 @@ class SettingsService:
             return False
 
         # Don't allow deleting the only location or primary location
-        active_count = db.query(func.count(Location.id)).filter(Location.is_active == True).scalar()
+        active_count = (
+            db.query(func.count(Location.id))
+            .filter(Location.is_active == True)
+            .scalar()
+        )
         if active_count <= 1:
             raise ValueError("Cannot delete the only active location")
 
         if location.is_primary:
-            raise ValueError("Cannot delete primary location. Set another location as primary first.")
+            raise ValueError(
+                "Cannot delete primary location. Set another location as primary first."
+            )
 
         location.is_active = False
         db.commit()
@@ -111,15 +121,22 @@ class SettingsService:
     @staticmethod
     def get_business_hours(db: Session, location_id: int) -> List[BusinessHours]:
         """Get business hours for a location."""
-        return db.query(BusinessHours).filter(
-            BusinessHours.location_id == location_id
-        ).order_by(BusinessHours.day_of_week).all()
+        return (
+            db.query(BusinessHours)
+            .filter(BusinessHours.location_id == location_id)
+            .order_by(BusinessHours.day_of_week)
+            .all()
+        )
 
     @staticmethod
-    def update_business_hours(db: Session, location_id: int, hours_data: List[dict]) -> List[BusinessHours]:
+    def update_business_hours(
+        db: Session, location_id: int, hours_data: List[dict]
+    ) -> List[BusinessHours]:
         """Update business hours for a location (bulk update)."""
         # Delete existing hours
-        db.query(BusinessHours).filter(BusinessHours.location_id == location_id).delete()
+        db.query(BusinessHours).filter(
+            BusinessHours.location_id == location_id
+        ).delete()
 
         # Create new hours
         hours = []
@@ -132,7 +149,9 @@ class SettingsService:
         return hours
 
     @staticmethod
-    def get_all_services(db: Session, active_only: bool = False, category: Optional[str] = None) -> List[Service]:
+    def get_all_services(
+        db: Session, active_only: bool = False, category: Optional[str] = None
+    ) -> List[Service]:
         """Get all services."""
         query = db.query(Service)
 
@@ -158,14 +177,14 @@ class SettingsService:
     def create_service(db: Session, service_data: dict) -> Service:
         """Create a new service."""
         # Generate slug if not provided
-        if 'slug' not in service_data:
-            name = service_data.get('name', '')
-            service_data['slug'] = name.lower().replace(' ', '_').replace('-', '_')
+        if "slug" not in service_data:
+            name = service_data.get("name", "")
+            service_data["slug"] = name.lower().replace(" ", "_").replace("-", "_")
 
         # Set display_order to max + 1 if not provided
-        if 'display_order' not in service_data:
+        if "display_order" not in service_data:
             max_order = db.query(func.max(Service.display_order)).scalar() or 0
-            service_data['display_order'] = max_order + 1
+            service_data["display_order"] = max_order + 1
 
         service = Service(**service_data)
         db.add(service)
@@ -174,7 +193,9 @@ class SettingsService:
         return service
 
     @staticmethod
-    def update_service(db: Session, service_id: int, service_data: dict) -> Optional[Service]:
+    def update_service(
+        db: Session, service_id: int, service_data: dict
+    ) -> Optional[Service]:
         """Update a service."""
         service = db.query(Service).filter(Service.id == service_id).first()
         if not service:
@@ -206,9 +227,9 @@ class SettingsService:
         service_orders: List of {id: int, display_order: int}
         """
         for item in service_orders:
-            service = db.query(Service).filter(Service.id == item['id']).first()
+            service = db.query(Service).filter(Service.id == item["id"]).first()
             if service:
-                service.display_order = item['display_order']
+                service.display_order = item["display_order"]
 
         db.commit()
         return True
@@ -228,6 +249,7 @@ class SettingsService:
         """Get a single provider by ID (UUID string)."""
         try:
             import uuid as uuid_lib
+
             provider_uuid = uuid_lib.UUID(provider_id)
             return db.query(Provider).filter(Provider.id == provider_uuid).first()
         except (ValueError, AttributeError):
@@ -238,7 +260,16 @@ class SettingsService:
         """Create a new provider."""
         # Note: Provider model uses UUID and has these fields:
         # name, email, phone, specialties, hire_date, avatar_url, bio, is_active
-        valid_fields = {'name', 'email', 'phone', 'specialties', 'bio', 'is_active', 'hire_date', 'avatar_url'}
+        valid_fields = {
+            "name",
+            "email",
+            "phone",
+            "specialties",
+            "bio",
+            "is_active",
+            "hire_date",
+            "avatar_url",
+        }
         filtered_data = {k: v for k, v in provider_data.items() if k in valid_fields}
 
         provider = Provider(**filtered_data)
@@ -248,10 +279,13 @@ class SettingsService:
         return provider
 
     @staticmethod
-    def update_provider(db: Session, provider_id: str, provider_data: dict) -> Optional[Provider]:
+    def update_provider(
+        db: Session, provider_id: str, provider_data: dict
+    ) -> Optional[Provider]:
         """Update a provider."""
         try:
             import uuid as uuid_lib
+
             provider_uuid = uuid_lib.UUID(provider_id)
             provider = db.query(Provider).filter(Provider.id == provider_uuid).first()
         except (ValueError, AttributeError):
@@ -261,7 +295,16 @@ class SettingsService:
             return None
 
         # Only update fields that exist in main Provider model
-        valid_fields = {'name', 'email', 'phone', 'specialties', 'bio', 'is_active', 'hire_date', 'avatar_url'}
+        valid_fields = {
+            "name",
+            "email",
+            "phone",
+            "specialties",
+            "bio",
+            "is_active",
+            "hire_date",
+            "avatar_url",
+        }
         for key, value in provider_data.items():
             if key in valid_fields and hasattr(provider, key):
                 setattr(provider, key, value)
@@ -275,6 +318,7 @@ class SettingsService:
         """Delete a provider (soft delete by setting inactive)."""
         try:
             import uuid as uuid_lib
+
             provider_uuid = uuid_lib.UUID(provider_id)
             provider = db.query(Provider).filter(Provider.id == provider_uuid).first()
         except (ValueError, AttributeError):
@@ -300,10 +344,15 @@ class SettingsService:
             services_dict[service.slug] = {
                 "name": service.name,
                 "duration_minutes": service.duration_minutes,
-                "price_range": service.price_display or f"${service.price_min}-${service.price_max}" if service.price_min else "Contact for pricing",
+                "price_range": (
+                    service.price_display
+                    or f"${service.price_min}-${service.price_max}"
+                    if service.price_min
+                    else "Contact for pricing"
+                ),
                 "description": service.description,
                 "prep_instructions": service.prep_instructions or "",
-                "aftercare": service.aftercare_instructions or ""
+                "aftercare": service.aftercare_instructions or "",
             }
 
         return services_dict
@@ -318,10 +367,12 @@ class SettingsService:
         providers_list = []
 
         for provider in providers:
-            providers_list.append({
-                "name": provider.name,
-                "specialties": provider.specialties or [],
-                "bio": provider.bio or ""
-            })
+            providers_list.append(
+                {
+                    "name": provider.name,
+                    "specialties": provider.specialties or [],
+                    "bio": provider.bio or "",
+                }
+            )
 
         return providers_list

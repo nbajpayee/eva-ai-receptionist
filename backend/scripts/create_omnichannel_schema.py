@@ -9,6 +9,7 @@ Usage:
 
 See OMNICHANNEL_MIGRATION.md for full architecture details.
 """
+
 from __future__ import annotations
 
 import sys
@@ -31,15 +32,15 @@ else:
     load_dotenv()
 
 from config import get_settings  # noqa: E402
-from database import (  # noqa: E402
+from database import CommunicationEvent  # noqa: E402
+from database import (
     Base,
-    engine,
-    Conversation,
     CommunicationMessage,
-    VoiceCallDetails,
+    Conversation,
     EmailDetails,
     SMSDetails,
-    CommunicationEvent,
+    VoiceCallDetails,
+    engine,
 )
 
 
@@ -50,14 +51,17 @@ def create_omnichannel_tables():
 
     # Create tables using SQLAlchemy metadata
     # This will create only the tables that don't exist yet
-    Base.metadata.create_all(bind=engine, tables=[
-        Conversation.__table__,
-        CommunicationMessage.__table__,
-        VoiceCallDetails.__table__,
-        EmailDetails.__table__,
-        SMSDetails.__table__,
-        CommunicationEvent.__table__,
-    ])
+    Base.metadata.create_all(
+        bind=engine,
+        tables=[
+            Conversation.__table__,
+            CommunicationMessage.__table__,
+            VoiceCallDetails.__table__,
+            EmailDetails.__table__,
+            SMSDetails.__table__,
+            CommunicationEvent.__table__,
+        ],
+    )
 
     print("\n✅ Tables created (if they didn't exist):")
     print("   - conversations")
@@ -82,10 +86,8 @@ def create_additional_indexes():
             "CREATE INDEX IF NOT EXISTS idx_conversations_customer_last_activity ON conversations(customer_id, last_activity_at DESC);",
             "CREATE INDEX IF NOT EXISTS idx_messages_conversation_sent ON communication_messages(conversation_id, sent_at ASC);",
             "CREATE INDEX IF NOT EXISTS idx_events_conversation_timestamp ON communication_events(conversation_id, timestamp ASC);",
-
             # Channel-specific queries
             "CREATE INDEX IF NOT EXISTS idx_conversations_channel_last_activity ON conversations(channel, last_activity_at DESC);",
-
             # Status-based queries
             "CREATE INDEX IF NOT EXISTS idx_conversations_status_initiated ON conversations(status, initiated_at DESC);",
         ]
@@ -94,7 +96,11 @@ def create_additional_indexes():
             try:
                 conn.execute(text(idx_sql))
                 # Extract index name from SQL
-                idx_name = idx_sql.split("idx_")[1].split(" ON")[0] if "idx_" in idx_sql else "unknown"
+                idx_name = (
+                    idx_sql.split("idx_")[1].split(" ON")[0]
+                    if "idx_" in idx_sql
+                    else "unknown"
+                )
                 print(f"   ✓ idx_{idx_name}")
             except Exception as e:
                 print(f"   ⚠️  Error creating index: {e}")
@@ -112,19 +118,21 @@ def verify_schema():
     with engine.connect() as conn:
         # Check if tables exist
         tables = [
-            'conversations',
-            'communication_messages',
-            'voice_call_details',
-            'email_details',
-            'sms_details',
-            'communication_events'
+            "conversations",
+            "communication_messages",
+            "voice_call_details",
+            "email_details",
+            "sms_details",
+            "communication_events",
         ]
 
         for table in tables:
-            result = conn.execute(text(
-                f"SELECT COUNT(*) FROM information_schema.tables "
-                f"WHERE table_name = '{table}'"
-            ))
+            result = conn.execute(
+                text(
+                    f"SELECT COUNT(*) FROM information_schema.tables "
+                    f"WHERE table_name = '{table}'"
+                )
+            )
             count = result.scalar()
 
             if count > 0:
@@ -147,7 +155,9 @@ def main() -> None:
 
     print("\n🚀 Omnichannel Schema Creation Script")
     print("=" * 60)
-    print(f"Database: {settings.DATABASE_URL.split('@')[1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
+    print(
+        f"Database: {settings.DATABASE_URL.split('@')[1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}"
+    )
     print("=" * 60)
 
     # Create tables

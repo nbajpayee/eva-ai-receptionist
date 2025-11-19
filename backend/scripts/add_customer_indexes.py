@@ -9,7 +9,8 @@ This script creates indexes on frequently queried fields to improve performance:
 - appointment.customer_id (used in joins, stats queries)
 """
 
-from sqlalchemy import text, inspect
+from sqlalchemy import inspect, text
+
 from database import engine, get_db
 
 
@@ -17,7 +18,7 @@ def index_exists(conn, table_name: str, index_name: str) -> bool:
     """Check if an index already exists."""
     inspector = inspect(engine)
     indexes = inspector.get_indexes(table_name)
-    return any(idx['name'] == index_name for idx in indexes)
+    return any(idx["name"] == index_name for idx in indexes)
 
 
 def create_customer_indexes():
@@ -25,20 +26,58 @@ def create_customer_indexes():
 
     indexes_to_create = [
         # Customer table indexes
-        ("customers", "idx_customer_phone", "CREATE INDEX IF NOT EXISTS idx_customer_phone ON customers(phone)"),
-        ("customers", "idx_customer_email", "CREATE INDEX IF NOT EXISTS idx_customer_email ON customers(email)"),
-        ("customers", "idx_customer_created_at", "CREATE INDEX IF NOT EXISTS idx_customer_created_at ON customers(created_at DESC)"),
-        ("customers", "idx_customer_is_new_client", "CREATE INDEX IF NOT EXISTS idx_customer_is_new_client ON customers(is_new_client)"),
-
+        (
+            "customers",
+            "idx_customer_phone",
+            "CREATE INDEX IF NOT EXISTS idx_customer_phone ON customers(phone)",
+        ),
+        (
+            "customers",
+            "idx_customer_email",
+            "CREATE INDEX IF NOT EXISTS idx_customer_email ON customers(email)",
+        ),
+        (
+            "customers",
+            "idx_customer_created_at",
+            "CREATE INDEX IF NOT EXISTS idx_customer_created_at ON customers(created_at DESC)",
+        ),
+        (
+            "customers",
+            "idx_customer_is_new_client",
+            "CREATE INDEX IF NOT EXISTS idx_customer_is_new_client ON customers(is_new_client)",
+        ),
         # Conversation table indexes for customer queries
-        ("conversations", "idx_conversation_customer_id", "CREATE INDEX IF NOT EXISTS idx_conversation_customer_id ON conversations(customer_id)"),
-        ("conversations", "idx_conversation_customer_channel", "CREATE INDEX IF NOT EXISTS idx_conversation_customer_channel ON conversations(customer_id, channel)"),
-        ("conversations", "idx_conversation_last_activity", "CREATE INDEX IF NOT EXISTS idx_conversation_last_activity ON conversations(last_activity_at DESC)"),
-
+        (
+            "conversations",
+            "idx_conversation_customer_id",
+            "CREATE INDEX IF NOT EXISTS idx_conversation_customer_id ON conversations(customer_id)",
+        ),
+        (
+            "conversations",
+            "idx_conversation_customer_channel",
+            "CREATE INDEX IF NOT EXISTS idx_conversation_customer_channel ON conversations(customer_id, channel)",
+        ),
+        (
+            "conversations",
+            "idx_conversation_last_activity",
+            "CREATE INDEX IF NOT EXISTS idx_conversation_last_activity ON conversations(last_activity_at DESC)",
+        ),
         # Appointment table indexes for customer queries
-        ("appointments", "idx_appointment_customer_id", "CREATE INDEX IF NOT EXISTS idx_appointment_customer_id ON appointments(customer_id)"),
-        ("appointments", "idx_appointment_customer_status", "CREATE INDEX IF NOT EXISTS idx_appointment_customer_status ON appointments(customer_id, status)"),
-        ("appointments", "idx_appointment_updated_at", "CREATE INDEX IF NOT EXISTS idx_appointment_updated_at ON appointments(updated_at DESC)"),
+        (
+            "appointments",
+            "idx_appointment_customer_id",
+            "CREATE INDEX IF NOT EXISTS idx_appointment_customer_id ON appointments(customer_id)",
+        ),
+        (
+            "appointments",
+            "idx_appointment_customer_status",
+            "CREATE INDEX IF NOT EXISTS idx_appointment_customer_status ON appointments(customer_id, status)",
+        ),
+        (
+            "appointments",
+            "idx_appointment_updated_at",
+            "CREATE INDEX IF NOT EXISTS idx_appointment_updated_at ON appointments(updated_at DESC)",
+        ),
     ]
 
     with engine.connect() as conn:
@@ -100,5 +139,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n❌ Error creating indexes: {e}")
         import traceback
+
         traceback.print_exc()
         exit(1)

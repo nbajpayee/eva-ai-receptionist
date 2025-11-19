@@ -1,24 +1,28 @@
 """
 Research and outbound campaign API endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field
+
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from database import get_db
-from research.segmentation_service import SegmentationService
 from research.agent_templates import AgentTemplates
 from research.campaign_service import CampaignService
+from research.segmentation_service import SegmentationService
 
 router = APIRouter(prefix="/api/admin/research", tags=["research"])
 
 
 # ==================== Request/Response Models ====================
 
+
 class SegmentCriteria(BaseModel):
     """Segment criteria model."""
+
     channel: Optional[str] = None
     has_booking_intent: Optional[bool] = None
     has_appointment: Optional[bool] = None
@@ -35,6 +39,7 @@ class SegmentCriteria(BaseModel):
 
 class AgentConfig(BaseModel):
     """Agent configuration model."""
+
     system_prompt: str
     questions: List[str]
     voice_settings: Optional[Dict[str, Any]] = Field(default_factory=dict)
@@ -42,6 +47,7 @@ class AgentConfig(BaseModel):
 
 class CreateCampaignRequest(BaseModel):
     """Create campaign request model."""
+
     name: str
     campaign_type: str  # research or outbound_sales
     segment_criteria: Dict[str, Any]
@@ -52,6 +58,7 @@ class CreateCampaignRequest(BaseModel):
 
 class UpdateCampaignRequest(BaseModel):
     """Update campaign request model."""
+
     name: Optional[str] = None
     segment_criteria: Optional[Dict[str, Any]] = None
     agent_config: Optional[Dict[str, Any]] = None
@@ -60,6 +67,7 @@ class UpdateCampaignRequest(BaseModel):
 
 class SaveSegmentRequest(BaseModel):
     """Save segment request model."""
+
     name: str
     description: Optional[str] = None
     criteria: Dict[str, Any]
@@ -67,27 +75,19 @@ class SaveSegmentRequest(BaseModel):
 
 # ==================== Segment Endpoints ====================
 
+
 @router.get("/segments/templates")
 def get_segment_templates():
     """Get pre-built segment templates."""
-    return {
-        "success": True,
-        "templates": SegmentationService.get_templates()
-    }
+    return {"success": True, "templates": SegmentationService.get_templates()}
 
 
 @router.post("/segments/preview")
-def preview_segment(
-    criteria: Dict[str, Any],
-    db: Session = Depends(get_db)
-):
+def preview_segment(criteria: Dict[str, Any], db: Session = Depends(get_db)):
     """Preview a segment (get count and sample customers)."""
     try:
         result = SegmentationService.preview_segment(db, criteria)
-        return {
-            "success": True,
-            **result
-        }
+        return {"success": True, **result}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -104,25 +104,22 @@ def get_saved_segments(db: Session = Depends(get_db)):
                 "name": seg.name,
                 "description": seg.description,
                 "criteria": seg.criteria,
-                "created_at": seg.created_at.isoformat() if seg.created_at else None
+                "created_at": seg.created_at.isoformat() if seg.created_at else None,
             }
             for seg in segments
-        ]
+        ],
     }
 
 
 @router.post("/segments")
-def save_segment(
-    request: SaveSegmentRequest,
-    db: Session = Depends(get_db)
-):
+def save_segment(request: SaveSegmentRequest, db: Session = Depends(get_db)):
     """Save a segment definition for reuse."""
     try:
         segment = SegmentationService.save_segment(
             db,
             name=request.name,
             description=request.description,
-            criteria=request.criteria
+            criteria=request.criteria,
         )
         return {
             "success": True,
@@ -131,18 +128,15 @@ def save_segment(
                 "id": str(segment.id),
                 "name": segment.name,
                 "description": segment.description,
-                "criteria": segment.criteria
-            }
+                "criteria": segment.criteria,
+            },
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/segments/{segment_id}")
-def delete_segment(
-    segment_id: str,
-    db: Session = Depends(get_db)
-):
+def delete_segment(segment_id: str, db: Session = Depends(get_db)):
     """Delete a saved segment."""
     success = SegmentationService.delete_segment(db, segment_id)
     if not success:
@@ -152,6 +146,7 @@ def delete_segment(
 
 
 # ==================== Agent Template Endpoints ====================
+
 
 @router.get("/agent-templates")
 def get_agent_templates(
@@ -163,10 +158,7 @@ def get_agent_templates(
     else:
         templates = AgentTemplates.get_all_templates()
 
-    return {
-        "success": True,
-        "templates": templates
-    }
+    return {"success": True, "templates": templates}
 
 
 @router.get("/agent-templates/{template_id}")
@@ -176,30 +168,21 @@ def get_agent_template(template_id: str):
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    return {
-        "success": True,
-        "template": template
-    }
+    return {"success": True, "template": template}
 
 
 @router.post("/agent-templates/validate")
 def validate_agent_config(config: AgentConfig):
     """Validate an agent configuration."""
     is_valid, errors = AgentTemplates.validate_agent_config(config.dict())
-    return {
-        "success": True,
-        "is_valid": is_valid,
-        "errors": errors
-    }
+    return {"success": True, "is_valid": is_valid, "errors": errors}
 
 
 # ==================== Campaign Endpoints ====================
 
+
 @router.post("/campaigns")
-def create_campaign(
-    request: CreateCampaignRequest,
-    db: Session = Depends(get_db)
-):
+def create_campaign(request: CreateCampaignRequest, db: Session = Depends(get_db)):
     """Create a new research/outbound campaign."""
     try:
         campaign = CampaignService.create_campaign(
@@ -209,13 +192,13 @@ def create_campaign(
             segment_criteria=request.segment_criteria,
             agent_config=request.agent_config,
             channel=request.channel,
-            created_by=request.created_by
+            created_by=request.created_by,
         )
 
         return {
             "success": True,
             "campaign_id": str(campaign.id),
-            "campaign": serialize_campaign(campaign)
+            "campaign": serialize_campaign(campaign),
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -229,15 +212,11 @@ def list_campaigns(
     campaign_type: Optional[str] = Query(None, description="Filter by type"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """List campaigns with filtering and pagination."""
     result = CampaignService.list_campaigns(
-        db=db,
-        status=status,
-        campaign_type=campaign_type,
-        limit=limit,
-        offset=offset
+        db=db, status=status, campaign_type=campaign_type, limit=limit, offset=offset
     )
 
     return {
@@ -245,41 +224,30 @@ def list_campaigns(
         "campaigns": [serialize_campaign(c) for c in result["campaigns"]],
         "total": result["total"],
         "limit": result["limit"],
-        "offset": result["offset"]
+        "offset": result["offset"],
     }
 
 
 @router.get("/campaigns/{campaign_id}")
-def get_campaign(
-    campaign_id: str,
-    db: Session = Depends(get_db)
-):
+def get_campaign(campaign_id: str, db: Session = Depends(get_db)):
     """Get a single campaign with details."""
     campaign = CampaignService.get_campaign(db, campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    return {
-        "success": True,
-        "campaign": serialize_campaign(campaign)
-    }
+    return {"success": True, "campaign": serialize_campaign(campaign)}
 
 
 @router.patch("/campaigns/{campaign_id}")
 def update_campaign(
-    campaign_id: str,
-    request: UpdateCampaignRequest,
-    db: Session = Depends(get_db)
+    campaign_id: str, request: UpdateCampaignRequest, db: Session = Depends(get_db)
 ):
     """Update a campaign (only draft campaigns)."""
     try:
         updates = request.dict(exclude_unset=True)
         campaign = CampaignService.update_campaign(db, campaign_id, updates)
 
-        return {
-            "success": True,
-            "campaign": serialize_campaign(campaign)
-        }
+        return {"success": True, "campaign": serialize_campaign(campaign)}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -287,13 +255,15 @@ def update_campaign(
 @router.post("/campaigns/{campaign_id}/launch")
 def launch_campaign(
     campaign_id: str,
-    limit: Optional[int] = Query(None, description="Limit number of customers (for testing)"),
-    db: Session = Depends(get_db)
+    limit: Optional[int] = Query(
+        None, description="Limit number of customers (for testing)"
+    ),
+    db: Session = Depends(get_db),
 ):
     """Launch a campaign and begin outbound execution."""
     try:
-        from research.outbound_service import OutboundService
         from database import SessionLocal
+        from research.outbound_service import OutboundService
 
         # Launch campaign (changes status to active)
         campaign = CampaignService.launch_campaign(db, campaign_id)
@@ -301,16 +271,14 @@ def launch_campaign(
         # Automatically execute outbound communications
         outbound_service = OutboundService(db_session_factory=SessionLocal)
         execution_results = outbound_service.execute_campaign(
-            db=db,
-            campaign_id=campaign.id,
-            limit=limit
+            db=db, campaign_id=campaign.id, limit=limit
         )
 
         return {
             "success": True,
             "campaign": serialize_campaign(campaign),
             "execution": execution_results,
-            "message": f"Campaign launched and {execution_results['successful']} customers contacted"
+            "message": f"Campaign launched and {execution_results['successful']} customers contacted",
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -319,51 +287,42 @@ def launch_campaign(
 
 
 @router.post("/campaigns/{campaign_id}/pause")
-def pause_campaign(
-    campaign_id: str,
-    db: Session = Depends(get_db)
-):
+def pause_campaign(campaign_id: str, db: Session = Depends(get_db)):
     """Pause an active campaign."""
     try:
         campaign = CampaignService.pause_campaign(db, campaign_id)
         return {
             "success": True,
             "campaign": serialize_campaign(campaign),
-            "message": "Campaign paused"
+            "message": "Campaign paused",
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/campaigns/{campaign_id}/resume")
-def resume_campaign(
-    campaign_id: str,
-    db: Session = Depends(get_db)
-):
+def resume_campaign(campaign_id: str, db: Session = Depends(get_db)):
     """Resume a paused campaign."""
     try:
         campaign = CampaignService.resume_campaign(db, campaign_id)
         return {
             "success": True,
             "campaign": serialize_campaign(campaign),
-            "message": "Campaign resumed"
+            "message": "Campaign resumed",
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/campaigns/{campaign_id}/complete")
-def complete_campaign(
-    campaign_id: str,
-    db: Session = Depends(get_db)
-):
+def complete_campaign(campaign_id: str, db: Session = Depends(get_db)):
     """Mark campaign as completed."""
     try:
         campaign = CampaignService.complete_campaign(db, campaign_id)
         return {
             "success": True,
             "campaign": serialize_campaign(campaign),
-            "message": "Campaign completed"
+            "message": "Campaign completed",
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -372,31 +331,28 @@ def complete_campaign(
 @router.post("/campaigns/{campaign_id}/execute")
 def execute_campaign(
     campaign_id: str,
-    limit: Optional[int] = Query(None, description="Limit number of customers (for testing)"),
-    db: Session = Depends(get_db)
+    limit: Optional[int] = Query(
+        None, description="Limit number of customers (for testing)"
+    ),
+    db: Session = Depends(get_db),
 ):
     """
     Execute campaign outbound communications.
     Sends messages to all customers in the campaign segment.
     """
     try:
-        from research.outbound_service import OutboundService
         from database import SessionLocal
+        from research.outbound_service import OutboundService
 
         # Create outbound service
         outbound_service = OutboundService(db_session_factory=SessionLocal)
 
         # Execute campaign
         results = outbound_service.execute_campaign(
-            db=db,
-            campaign_id=campaign_id,
-            limit=limit
+            db=db, campaign_id=campaign_id, limit=limit
         )
 
-        return {
-            "success": True,
-            **results
-        }
+        return {"success": True, **results}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -404,36 +360,24 @@ def execute_campaign(
 
 
 @router.delete("/campaigns/{campaign_id}")
-def delete_campaign(
-    campaign_id: str,
-    db: Session = Depends(get_db)
-):
+def delete_campaign(campaign_id: str, db: Session = Depends(get_db)):
     """Delete a campaign (only draft or completed)."""
     try:
         success = CampaignService.delete_campaign(db, campaign_id)
         if not success:
             raise HTTPException(status_code=404, detail="Campaign not found")
 
-        return {
-            "success": True,
-            "message": "Campaign deleted"
-        }
+        return {"success": True, "message": "Campaign deleted"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/campaigns/{campaign_id}/stats")
-def get_campaign_stats(
-    campaign_id: str,
-    db: Session = Depends(get_db)
-):
+def get_campaign_stats(campaign_id: str, db: Session = Depends(get_db)):
     """Get detailed campaign statistics."""
     try:
         stats = CampaignService.get_campaign_stats(db, campaign_id)
-        return {
-            "success": True,
-            **stats
-        }
+        return {"success": True, **stats}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -443,25 +387,20 @@ def get_campaign_conversations(
     campaign_id: str,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get conversations for a campaign."""
     try:
         result = CampaignService.get_campaign_conversations(
-            db=db,
-            campaign_id=campaign_id,
-            limit=limit,
-            offset=offset
+            db=db, campaign_id=campaign_id, limit=limit, offset=offset
         )
-        return {
-            "success": True,
-            **result
-        }
+        return {"success": True, **result}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 # ==================== Helper Functions ====================
+
 
 def serialize_campaign(campaign) -> Dict[str, Any]:
     """Serialize a campaign object to dictionary."""
@@ -477,7 +416,11 @@ def serialize_campaign(campaign) -> Dict[str, Any]:
         "total_contacted": campaign.total_contacted,
         "total_responded": campaign.total_responded,
         "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
-        "launched_at": campaign.launched_at.isoformat() if campaign.launched_at else None,
-        "completed_at": campaign.completed_at.isoformat() if campaign.completed_at else None,
-        "created_by": campaign.created_by
+        "launched_at": (
+            campaign.launched_at.isoformat() if campaign.launched_at else None
+        ),
+        "completed_at": (
+            campaign.completed_at.isoformat() if campaign.completed_at else None
+        ),
+        "created_by": campaign.created_by,
     }

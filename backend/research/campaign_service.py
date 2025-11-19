@@ -1,19 +1,27 @@
 """
 Campaign management and execution service.
 """
+
 import uuid
 from datetime import datetime
-from typing import Dict, Any, List, Optional
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from typing import Any, Dict, List, Optional
 
-from database import (
-    ResearchCampaign, Customer, Conversation, CommunicationMessage,
-    SMSDetails, EmailDetails, VoiceCallDetails
-)
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
+
 from analytics import AnalyticsService
-from .segmentation_service import SegmentationService
+from database import (
+    CommunicationMessage,
+    Conversation,
+    Customer,
+    EmailDetails,
+    ResearchCampaign,
+    SMSDetails,
+    VoiceCallDetails,
+)
+
 from .agent_templates import AgentTemplates
+from .segmentation_service import SegmentationService
 
 
 class CampaignService:
@@ -27,7 +35,7 @@ class CampaignService:
         segment_criteria: Dict[str, Any],
         agent_config: Dict[str, Any],
         channel: str,
-        created_by: Optional[str] = None
+        created_by: Optional[str] = None,
     ) -> ResearchCampaign:
         """
         Create a new campaign.
@@ -64,7 +72,7 @@ class CampaignService:
             total_targeted=total_targeted,
             total_contacted=0,
             total_responded=0,
-            created_by=created_by
+            created_by=created_by,
         )
 
         db.add(campaign)
@@ -74,9 +82,7 @@ class CampaignService:
 
     @staticmethod
     def update_campaign(
-        db: Session,
-        campaign_id: str,
-        updates: Dict[str, Any]
+        db: Session, campaign_id: str, updates: Dict[str, Any]
     ) -> ResearchCampaign:
         """
         Update campaign details.
@@ -89,9 +95,11 @@ class CampaignService:
         Returns:
             Updated ResearchCampaign object
         """
-        campaign = db.query(ResearchCampaign).filter(
-            ResearchCampaign.id == uuid.UUID(campaign_id)
-        ).first()
+        campaign = (
+            db.query(ResearchCampaign)
+            .filter(ResearchCampaign.id == uuid.UUID(campaign_id))
+            .first()
+        )
 
         if not campaign:
             raise ValueError(f"Campaign not found: {campaign_id}")
@@ -108,7 +116,9 @@ class CampaignService:
 
         # Re-calculate targeted count if segment criteria changed
         if "segment_criteria" in updates:
-            preview = SegmentationService.preview_segment(db, updates["segment_criteria"])
+            preview = SegmentationService.preview_segment(
+                db, updates["segment_criteria"]
+            )
             campaign.total_targeted = preview["total_count"]
 
         db.commit()
@@ -116,10 +126,7 @@ class CampaignService:
         return campaign
 
     @staticmethod
-    def launch_campaign(
-        db: Session,
-        campaign_id: str
-    ) -> ResearchCampaign:
+    def launch_campaign(db: Session, campaign_id: str) -> ResearchCampaign:
         """
         Launch a campaign (change status to active and queue outreach).
 
@@ -130,15 +137,19 @@ class CampaignService:
         Returns:
             Updated ResearchCampaign object
         """
-        campaign = db.query(ResearchCampaign).filter(
-            ResearchCampaign.id == uuid.UUID(campaign_id)
-        ).first()
+        campaign = (
+            db.query(ResearchCampaign)
+            .filter(ResearchCampaign.id == uuid.UUID(campaign_id))
+            .first()
+        )
 
         if not campaign:
             raise ValueError(f"Campaign not found: {campaign_id}")
 
         if campaign.status != "draft":
-            raise ValueError(f"Can only launch draft campaigns. Current status: {campaign.status}")
+            raise ValueError(
+                f"Can only launch draft campaigns. Current status: {campaign.status}"
+            )
 
         # Update campaign status
         campaign.status = "active"
@@ -149,14 +160,13 @@ class CampaignService:
         return campaign
 
     @staticmethod
-    def pause_campaign(
-        db: Session,
-        campaign_id: str
-    ) -> ResearchCampaign:
+    def pause_campaign(db: Session, campaign_id: str) -> ResearchCampaign:
         """Pause an active campaign."""
-        campaign = db.query(ResearchCampaign).filter(
-            ResearchCampaign.id == uuid.UUID(campaign_id)
-        ).first()
+        campaign = (
+            db.query(ResearchCampaign)
+            .filter(ResearchCampaign.id == uuid.UUID(campaign_id))
+            .first()
+        )
 
         if not campaign:
             raise ValueError(f"Campaign not found: {campaign_id}")
@@ -170,14 +180,13 @@ class CampaignService:
         return campaign
 
     @staticmethod
-    def resume_campaign(
-        db: Session,
-        campaign_id: str
-    ) -> ResearchCampaign:
+    def resume_campaign(db: Session, campaign_id: str) -> ResearchCampaign:
         """Resume a paused campaign."""
-        campaign = db.query(ResearchCampaign).filter(
-            ResearchCampaign.id == uuid.UUID(campaign_id)
-        ).first()
+        campaign = (
+            db.query(ResearchCampaign)
+            .filter(ResearchCampaign.id == uuid.UUID(campaign_id))
+            .first()
+        )
 
         if not campaign:
             raise ValueError(f"Campaign not found: {campaign_id}")
@@ -191,14 +200,13 @@ class CampaignService:
         return campaign
 
     @staticmethod
-    def complete_campaign(
-        db: Session,
-        campaign_id: str
-    ) -> ResearchCampaign:
+    def complete_campaign(db: Session, campaign_id: str) -> ResearchCampaign:
         """Mark a campaign as completed."""
-        campaign = db.query(ResearchCampaign).filter(
-            ResearchCampaign.id == uuid.UUID(campaign_id)
-        ).first()
+        campaign = (
+            db.query(ResearchCampaign)
+            .filter(ResearchCampaign.id == uuid.UUID(campaign_id))
+            .first()
+        )
 
         if not campaign:
             raise ValueError(f"Campaign not found: {campaign_id}")
@@ -210,34 +218,34 @@ class CampaignService:
         return campaign
 
     @staticmethod
-    def delete_campaign(
-        db: Session,
-        campaign_id: str
-    ) -> bool:
+    def delete_campaign(db: Session, campaign_id: str) -> bool:
         """Delete a campaign (only if draft or completed)."""
-        campaign = db.query(ResearchCampaign).filter(
-            ResearchCampaign.id == uuid.UUID(campaign_id)
-        ).first()
+        campaign = (
+            db.query(ResearchCampaign)
+            .filter(ResearchCampaign.id == uuid.UUID(campaign_id))
+            .first()
+        )
 
         if not campaign:
             return False
 
         if campaign.status in ["active", "paused"]:
-            raise ValueError("Cannot delete active or paused campaigns. Complete or cancel them first.")
+            raise ValueError(
+                "Cannot delete active or paused campaigns. Complete or cancel them first."
+            )
 
         db.delete(campaign)
         db.commit()
         return True
 
     @staticmethod
-    def get_campaign(
-        db: Session,
-        campaign_id: str
-    ) -> Optional[ResearchCampaign]:
+    def get_campaign(db: Session, campaign_id: str) -> Optional[ResearchCampaign]:
         """Get a single campaign with details."""
-        return db.query(ResearchCampaign).filter(
-            ResearchCampaign.id == uuid.UUID(campaign_id)
-        ).first()
+        return (
+            db.query(ResearchCampaign)
+            .filter(ResearchCampaign.id == uuid.UUID(campaign_id))
+            .first()
+        )
 
     @staticmethod
     def list_campaigns(
@@ -245,7 +253,7 @@ class CampaignService:
         status: Optional[str] = None,
         campaign_type: Optional[str] = None,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
     ) -> Dict[str, Any]:
         """
         List campaigns with filtering and pagination.
@@ -270,22 +278,22 @@ class CampaignService:
 
         total = query.count()
 
-        campaigns = query.order_by(
-            ResearchCampaign.created_at.desc()
-        ).limit(limit).offset(offset).all()
+        campaigns = (
+            query.order_by(ResearchCampaign.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
 
         return {
             "campaigns": campaigns,
             "total": total,
             "limit": limit,
-            "offset": offset
+            "offset": offset,
         }
 
     @staticmethod
-    def get_campaign_stats(
-        db: Session,
-        campaign_id: str
-    ) -> Dict[str, Any]:
+    def get_campaign_stats(db: Session, campaign_id: str) -> Dict[str, Any]:
         """
         Get detailed statistics for a campaign.
 
@@ -296,29 +304,39 @@ class CampaignService:
         Returns:
             Dictionary with campaign statistics
         """
-        campaign = db.query(ResearchCampaign).filter(
-            ResearchCampaign.id == uuid.UUID(campaign_id)
-        ).first()
+        campaign = (
+            db.query(ResearchCampaign)
+            .filter(ResearchCampaign.id == uuid.UUID(campaign_id))
+            .first()
+        )
 
         if not campaign:
             raise ValueError(f"Campaign not found: {campaign_id}")
 
         # Get all conversations for this campaign
-        conversations = db.query(Conversation).filter(
-            Conversation.campaign_id == uuid.UUID(campaign_id)
-        ).all()
+        conversations = (
+            db.query(Conversation)
+            .filter(Conversation.campaign_id == uuid.UUID(campaign_id))
+            .all()
+        )
 
         # Calculate metrics
         total_conversations = len(conversations)
-        completed_conversations = len([c for c in conversations if c.status == "completed"])
+        completed_conversations = len(
+            [c for c in conversations if c.status == "completed"]
+        )
 
         # Response rate (customers who engaged beyond initial message)
         responded = 0
         for conv in conversations:
-            msg_count = db.query(CommunicationMessage).filter(
-                CommunicationMessage.conversation_id == conv.id,
-                CommunicationMessage.direction == "inbound"
-            ).count()
+            msg_count = (
+                db.query(CommunicationMessage)
+                .filter(
+                    CommunicationMessage.conversation_id == conv.id,
+                    CommunicationMessage.direction == "inbound",
+                )
+                .count()
+            )
             if msg_count > 0:  # Customer responded at least once
                 responded += 1
 
@@ -346,17 +364,21 @@ class CampaignService:
                 channel_breakdown[channel] = {
                     "total": 0,
                     "completed": 0,
-                    "responded": 0
+                    "responded": 0,
                 }
             channel_breakdown[channel]["total"] += 1
             if conv.status == "completed":
                 channel_breakdown[channel]["completed"] += 1
 
             # Check if customer responded
-            msg_count = db.query(CommunicationMessage).filter(
-                CommunicationMessage.conversation_id == conv.id,
-                CommunicationMessage.direction == "inbound"
-            ).count()
+            msg_count = (
+                db.query(CommunicationMessage)
+                .filter(
+                    CommunicationMessage.conversation_id == conv.id,
+                    CommunicationMessage.direction == "inbound",
+                )
+                .count()
+            )
             if msg_count > 0:
                 channel_breakdown[channel]["responded"] += 1
 
@@ -368,22 +390,33 @@ class CampaignService:
             "total_targeted": campaign.total_targeted,
             "total_contacted": total_conversations,
             "total_responded": responded,
-            "completion_rate": (completed_conversations / total_conversations * 100) if total_conversations > 0 else 0,
-            "response_rate": (responded / total_conversations * 100) if total_conversations > 0 else 0,
-            "avg_satisfaction_score": round(avg_satisfaction, 2) if avg_satisfaction else None,
+            "completion_rate": (
+                (completed_conversations / total_conversations * 100)
+                if total_conversations > 0
+                else 0
+            ),
+            "response_rate": (
+                (responded / total_conversations * 100)
+                if total_conversations > 0
+                else 0
+            ),
+            "avg_satisfaction_score": (
+                round(avg_satisfaction, 2) if avg_satisfaction else None
+            ),
             "sentiment_distribution": sentiments,
             "outcome_distribution": outcomes,
             "channel_breakdown": channel_breakdown,
-            "launched_at": campaign.launched_at.isoformat() if campaign.launched_at else None,
-            "completed_at": campaign.completed_at.isoformat() if campaign.completed_at else None
+            "launched_at": (
+                campaign.launched_at.isoformat() if campaign.launched_at else None
+            ),
+            "completed_at": (
+                campaign.completed_at.isoformat() if campaign.completed_at else None
+            ),
         }
 
     @staticmethod
     def get_campaign_conversations(
-        db: Session,
-        campaign_id: str,
-        limit: int = 50,
-        offset: int = 0
+        db: Session, campaign_id: str, limit: int = 50, offset: int = 0
     ) -> Dict[str, Any]:
         """
         Get conversations for a campaign.
@@ -397,15 +430,20 @@ class CampaignService:
         Returns:
             Dictionary with conversations and pagination
         """
-        query = db.query(Conversation).filter(
-            Conversation.campaign_id == uuid.UUID(campaign_id)
-        ).options(joinedload(Conversation.customer))
+        query = (
+            db.query(Conversation)
+            .filter(Conversation.campaign_id == uuid.UUID(campaign_id))
+            .options(joinedload(Conversation.customer))
+        )
 
         total = query.count()
 
-        conversations = query.order_by(
-            Conversation.initiated_at.desc()
-        ).limit(limit).offset(offset).all()
+        conversations = (
+            query.order_by(Conversation.initiated_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
 
         return {
             "conversations": [
@@ -416,26 +454,34 @@ class CampaignService:
                     "customer_phone": conv.customer.phone if conv.customer else None,
                     "channel": conv.channel,
                     "status": conv.status,
-                    "initiated_at": conv.initiated_at.isoformat() if conv.initiated_at else None,
-                    "last_activity_at": conv.last_activity_at.isoformat() if conv.last_activity_at else None,
+                    "initiated_at": (
+                        conv.initiated_at.isoformat() if conv.initiated_at else None
+                    ),
+                    "last_activity_at": (
+                        conv.last_activity_at.isoformat()
+                        if conv.last_activity_at
+                        else None
+                    ),
                     "satisfaction_score": conv.satisfaction_score,
                     "sentiment": conv.sentiment,
                     "outcome": conv.outcome,
-                    "ai_summary": conv.ai_summary
+                    "ai_summary": conv.ai_summary,
                 }
                 for conv in conversations
             ],
             "total": total,
             "limit": limit,
-            "offset": offset
+            "offset": offset,
         }
 
     @staticmethod
     def increment_contacted_count(db: Session, campaign_id: uuid.UUID):
         """Increment the total_contacted counter for a campaign."""
-        campaign = db.query(ResearchCampaign).filter(
-            ResearchCampaign.id == campaign_id
-        ).first()
+        campaign = (
+            db.query(ResearchCampaign)
+            .filter(ResearchCampaign.id == campaign_id)
+            .first()
+        )
         if campaign:
             campaign.total_contacted += 1
             db.commit()
@@ -443,9 +489,11 @@ class CampaignService:
     @staticmethod
     def increment_responded_count(db: Session, campaign_id: uuid.UUID):
         """Increment the total_responded counter for a campaign."""
-        campaign = db.query(ResearchCampaign).filter(
-            ResearchCampaign.id == campaign_id
-        ).first()
+        campaign = (
+            db.query(ResearchCampaign)
+            .filter(ResearchCampaign.id == campaign_id)
+            .first()
+        )
         if campaign:
             campaign.total_responded += 1
             db.commit()

@@ -1,16 +1,17 @@
 """FastAPI router for customer management operations."""
+
 from __future__ import annotations
 
 import logging
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, func
 
-from database import Customer, Appointment, CallSession, Conversation, get_db
+from database import Appointment, CallSession, Conversation, Customer, get_db
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +53,15 @@ def _serialize_customer(customer: Customer, include_stats: bool = False) -> dict
     }
 
     if include_stats:
-        data["appointment_count"] = len(customer.appointments) if customer.appointments else 0
-        data["call_count"] = len(customer.call_sessions) if customer.call_sessions else 0
-        data["conversation_count"] = len(customer.conversations) if customer.conversations else 0
+        data["appointment_count"] = (
+            len(customer.appointments) if customer.appointments else 0
+        )
+        data["call_count"] = (
+            len(customer.call_sessions) if customer.call_sessions else 0
+        )
+        data["conversation_count"] = (
+            len(customer.conversations) if customer.conversations else 0
+        )
 
     return data
 
@@ -94,8 +101,7 @@ def list_customers(
 
     # Apply pagination
     customers = (
-        query
-        .order_by(Customer.created_at.desc())
+        query.order_by(Customer.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
@@ -128,8 +134,7 @@ def create_customer(data: CustomerCreate, db: Session = Depends(get_db)):
     existing = db.query(Customer).filter(Customer.phone == data.phone).first()
     if existing:
         raise HTTPException(
-            status_code=400,
-            detail=f"Customer with phone {data.phone} already exists"
+            status_code=400, detail=f"Customer with phone {data.phone} already exists"
         )
 
     # Check if customer with same email exists (if email provided)
@@ -138,7 +143,7 @@ def create_customer(data: CustomerCreate, db: Session = Depends(get_db)):
         if existing_email:
             raise HTTPException(
                 status_code=400,
-                detail=f"Customer with email {data.email} already exists"
+                detail=f"Customer with email {data.email} already exists",
             )
 
     customer = Customer(
@@ -162,9 +167,7 @@ def create_customer(data: CustomerCreate, db: Session = Depends(get_db)):
 
 @customers_router.put("/{customer_id}")
 def update_customer(
-    customer_id: int,
-    data: CustomerUpdate,
-    db: Session = Depends(get_db)
+    customer_id: int, data: CustomerUpdate, db: Session = Depends(get_db)
 ):
     """Update customer details."""
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
@@ -174,26 +177,28 @@ def update_customer(
 
     # Check for phone conflicts
     if data.phone and data.phone != customer.phone:
-        existing = db.query(Customer).filter(
-            Customer.phone == data.phone,
-            Customer.id != customer_id
-        ).first()
+        existing = (
+            db.query(Customer)
+            .filter(Customer.phone == data.phone, Customer.id != customer_id)
+            .first()
+        )
         if existing:
             raise HTTPException(
                 status_code=400,
-                detail=f"Customer with phone {data.phone} already exists"
+                detail=f"Customer with phone {data.phone} already exists",
             )
 
     # Check for email conflicts
     if data.email and data.email != customer.email:
-        existing = db.query(Customer).filter(
-            Customer.email == data.email,
-            Customer.id != customer_id
-        ).first()
+        existing = (
+            db.query(Customer)
+            .filter(Customer.email == data.email, Customer.id != customer_id)
+            .first()
+        )
         if existing:
             raise HTTPException(
                 status_code=400,
-                detail=f"Customer with email {data.email} already exists"
+                detail=f"Customer with email {data.email} already exists",
             )
 
     # Update fields
@@ -220,15 +225,17 @@ def delete_customer(customer_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Customer not found")
 
     # Check for dependencies
-    appointment_count = db.query(func.count(Appointment.id)).filter(
-        Appointment.customer_id == customer_id
-    ).scalar()
+    appointment_count = (
+        db.query(func.count(Appointment.id))
+        .filter(Appointment.customer_id == customer_id)
+        .scalar()
+    )
 
     if appointment_count > 0:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot delete customer with {appointment_count} appointments. " +
-                   "Please delete or reassign appointments first."
+            detail=f"Cannot delete customer with {appointment_count} appointments. "
+            + "Please delete or reassign appointments first.",
         )
 
     db.delete(customer)
@@ -248,19 +255,28 @@ def get_customer_history(customer_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Customer not found")
 
     # Get appointments
-    appointments = db.query(Appointment).filter(
-        Appointment.customer_id == customer_id
-    ).order_by(Appointment.appointment_datetime.desc()).all()
+    appointments = (
+        db.query(Appointment)
+        .filter(Appointment.customer_id == customer_id)
+        .order_by(Appointment.appointment_datetime.desc())
+        .all()
+    )
 
     # Get call sessions
-    calls = db.query(CallSession).filter(
-        CallSession.customer_id == customer_id
-    ).order_by(CallSession.started_at.desc()).all()
+    calls = (
+        db.query(CallSession)
+        .filter(CallSession.customer_id == customer_id)
+        .order_by(CallSession.started_at.desc())
+        .all()
+    )
 
     # Get conversations (SMS/email)
-    conversations = db.query(Conversation).filter(
-        Conversation.customer_id == customer_id
-    ).order_by(Conversation.initiated_at.desc()).all()
+    conversations = (
+        db.query(Conversation)
+        .filter(Conversation.customer_id == customer_id)
+        .order_by(Conversation.initiated_at.desc())
+        .all()
+    )
 
     return {
         "customer": _serialize_customer(customer),
@@ -294,7 +310,9 @@ def get_customer_history(customer_id: int, db: Session = Depends(get_db)):
             {
                 "id": str(conv.id),
                 "channel": conv.channel,
-                "initiated_at": conv.initiated_at.isoformat() if conv.initiated_at else None,
+                "initiated_at": (
+                    conv.initiated_at.isoformat() if conv.initiated_at else None
+                ),
                 "status": conv.status,
                 "outcome": conv.outcome,
                 "satisfaction_score": conv.satisfaction_score,
@@ -313,32 +331,48 @@ def get_customer_stats(customer_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Customer not found")
 
     # Calculate stats
-    total_appointments = db.query(func.count(Appointment.id)).filter(
-        Appointment.customer_id == customer_id
-    ).scalar()
+    total_appointments = (
+        db.query(func.count(Appointment.id))
+        .filter(Appointment.customer_id == customer_id)
+        .scalar()
+    )
 
-    completed_appointments = db.query(func.count(Appointment.id)).filter(
-        Appointment.customer_id == customer_id,
-        Appointment.status == "completed"
-    ).scalar()
+    completed_appointments = (
+        db.query(func.count(Appointment.id))
+        .filter(
+            Appointment.customer_id == customer_id, Appointment.status == "completed"
+        )
+        .scalar()
+    )
 
-    cancelled_appointments = db.query(func.count(Appointment.id)).filter(
-        Appointment.customer_id == customer_id,
-        Appointment.status == "cancelled"
-    ).scalar()
+    cancelled_appointments = (
+        db.query(func.count(Appointment.id))
+        .filter(
+            Appointment.customer_id == customer_id, Appointment.status == "cancelled"
+        )
+        .scalar()
+    )
 
-    total_calls = db.query(func.count(CallSession.id)).filter(
-        CallSession.customer_id == customer_id
-    ).scalar()
+    total_calls = (
+        db.query(func.count(CallSession.id))
+        .filter(CallSession.customer_id == customer_id)
+        .scalar()
+    )
 
-    avg_satisfaction = db.query(func.avg(CallSession.satisfaction_score)).filter(
-        CallSession.customer_id == customer_id,
-        CallSession.satisfaction_score.isnot(None)
-    ).scalar()
+    avg_satisfaction = (
+        db.query(func.avg(CallSession.satisfaction_score))
+        .filter(
+            CallSession.customer_id == customer_id,
+            CallSession.satisfaction_score.isnot(None),
+        )
+        .scalar()
+    )
 
-    total_conversations = db.query(func.count(Conversation.id)).filter(
-        Conversation.customer_id == customer_id
-    ).scalar()
+    total_conversations = (
+        db.query(func.count(Conversation.id))
+        .filter(Conversation.customer_id == customer_id)
+        .scalar()
+    )
 
     return {
         "customer_id": customer_id,
@@ -347,7 +381,8 @@ def get_customer_stats(customer_id: int, db: Session = Depends(get_db)):
         "cancelled_appointments": cancelled_appointments or 0,
         "no_show_rate": (
             (cancelled_appointments / total_appointments * 100)
-            if total_appointments > 0 else 0
+            if total_appointments > 0
+            else 0
         ),
         "total_calls": total_calls or 0,
         "total_conversations": total_conversations or 0,

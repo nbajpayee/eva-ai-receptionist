@@ -2,10 +2,12 @@
 Tests for the rate limiter module.
 """
 
-import pytest
-from fastapi import Request, HTTPException
-from rate_limiter import RateLimiter
 from unittest.mock import Mock
+
+import pytest
+from fastapi import HTTPException, Request
+
+from rate_limiter import RateLimiter
 
 
 def test_rate_limiter_allows_within_limit():

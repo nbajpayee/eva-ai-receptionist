@@ -1,22 +1,23 @@
 """
 OpenAI Realtime API client for voice-to-voice conversation handling.
 """
-import json
+
 import asyncio
+import json
 import logging
-import websockets
-from typing import Dict, Any, Optional, Callable, List
 from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, List, Optional
 
 import pytz
+import websockets
 from sqlalchemy.orm import Session
 
 from analytics import AnalyticsService
-from booking.manager import SlotSelectionManager, SlotSelectionError
+from booking.manager import SlotSelectionError, SlotSelectionManager
 from booking.time_utils import format_for_display, parse_iso_datetime
 from booking_handlers import handle_book_appointment, handle_check_availability
 from calendar_service import get_calendar_service
-from config import get_settings, OPENING_SCRIPT
+from config import OPENING_SCRIPT, PROVIDERS, get_settings
 from database import Conversation, SessionLocal
 from prompts import get_system_prompt
 from settings_service import SettingsService
@@ -48,12 +49,12 @@ class RealtimeClient:
             else self._get_or_create_conversation(legacy_call_session_id)
         )
         self.session_data = {
-            'transcript': [],
-            'function_calls': [],
-            'customer_data': {},
-            'sentiment_markers': [],
-            'last_appointment': None,
-            'conversation_id': str(self.conversation.id),
+            "transcript": [],
+            "function_calls": [],
+            "customer_data": {},
+            "sentiment_markers": [],
+            "last_appointment": None,
+            "conversation_id": str(self.conversation.id),
         }
         self.identity_instructions = ""
         self._current_customer_text = ""
@@ -89,7 +90,7 @@ class RealtimeClient:
         """Return an existing voice conversation or create one for this session."""
         existing = (
             self.db.query(Conversation)
-            .filter(Conversation.channel == 'voice')
+            .filter(Conversation.channel == "voice")
             .order_by(Conversation.initiated_at.desc())
             .all()
         )
@@ -100,17 +101,17 @@ class RealtimeClient:
                     metadata = json.loads(metadata)
                 except json.JSONDecodeError:
                     metadata = {}
-            if metadata.get('session_id') == self.session_id:
+            if metadata.get("session_id") == self.session_id:
                 return candidate
 
-        metadata: Dict[str, Any] = {'session_id': self.session_id}
+        metadata: Dict[str, Any] = {"session_id": self.session_id}
         if legacy_call_session_id:
-            metadata['legacy_call_session_id'] = legacy_call_session_id
+            metadata["legacy_call_session_id"] = legacy_call_session_id
 
         conversation = AnalyticsService.create_conversation(
             db=self.db,
             customer_id=None,
-            channel='voice',
+            channel="voice",
             metadata=metadata,
         )
         return conversation
@@ -126,7 +127,11 @@ class RealtimeClient:
         try:
             return get_calendar_service()
         except Exception as exc:  # noqa: BLE001
-            logger.critical("RealtimeClient failed to initialize calendar service: %s", exc, exc_info=True)
+            logger.critical(
+                "RealtimeClient failed to initialize calendar service: %s",
+                exc,
+                exc_info=True,
+            )
             raise
 
     async def connect(self):
@@ -134,7 +139,7 @@ class RealtimeClient:
         url = "wss://api.openai.com/v1/realtime?model=gpt-realtime-mini-2025-10-06"
         headers = {
             "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-            "OpenAI-Beta": "realtime=v1"
+            "OpenAI-Beta": "realtime=v1",
         }
 
         print(f"Connecting to OpenAI Realtime API: {url}")
@@ -165,8 +170,8 @@ class RealtimeClient:
             "type": "response.create",
             "response": {
                 "modalities": ["text", "audio"],
-                "instructions": f"Start the conversation by saying: {greeting_text}"
-            }
+                "instructions": f"Start the conversation by saying: {greeting_text}",
+            },
         }
 
         await self.ws.send(json.dumps(response_create))
@@ -199,12 +204,12 @@ class RealtimeClient:
                     "threshold": 0.6,  # Higher threshold = less sensitive to background noise (increased from 0.5)
                     "prefix_padding_ms": 300,  # Capture more of the start of speech
                     "silence_duration_ms": 600,  # Wait 600ms of silence before considering speech done (increased from 500)
-                    "create_response": True  # Automatically create response when user stops speaking
+                    "create_response": True,  # Automatically create response when user stops speaking
                 },
                 "tools": self._get_function_definitions(),
                 "tool_choice": "auto",
                 "temperature": 0.7,
-            }
+            },
         }
 
         await self.ws.send(json.dumps(session_config))
@@ -222,16 +227,16 @@ class RealtimeClient:
                     "properties": {
                         "date": {
                             "type": "string",
-                            "description": "Date in YYYY-MM-DD format"
+                            "description": "Date in YYYY-MM-DD format",
                         },
                         "service_type": {
                             "type": "string",
                             "enum": list(self._get_services().keys()),
-                            "description": "Type of service requested"
-                        }
+                            "description": "Type of service requested",
+                        },
                     },
-                    "required": ["date", "service_type"]
-                }
+                    "required": ["date", "service_type"],
+                },
             },
             {
                 "type": "function",
@@ -242,36 +247,41 @@ class RealtimeClient:
                     "properties": {
                         "customer_name": {
                             "type": "string",
-                            "description": "Customer's full name"
+                            "description": "Customer's full name",
                         },
                         "customer_phone": {
                             "type": "string",
-                            "description": "Customer's phone number"
+                            "description": "Customer's phone number",
                         },
                         "customer_email": {
                             "type": "string",
-                            "description": "Customer's email address"
+                            "description": "Customer's email address",
                         },
                         "start_time": {
                             "type": "string",
-                            "description": "Appointment start time in ISO 8601 format"
+                            "description": "Appointment start time in ISO 8601 format",
                         },
                         "service_type": {
                             "type": "string",
                             "enum": list(self._get_services().keys()),
-                            "description": "Type of service"
+                            "description": "Type of service",
                         },
                         "provider": {
                             "type": "string",
-                            "description": "Preferred provider name (optional)"
+                            "description": "Preferred provider name (optional)",
                         },
                         "notes": {
                             "type": "string",
-                            "description": "Special requests or notes (optional)"
-                        }
+                            "description": "Special requests or notes (optional)",
+                        },
                     },
-                    "required": ["customer_name", "customer_phone", "start_time", "service_type"]
-                }
+                    "required": [
+                        "customer_name",
+                        "customer_phone",
+                        "start_time",
+                        "service_type",
+                    ],
+                },
             },
             {
                 "type": "function",
@@ -283,11 +293,11 @@ class RealtimeClient:
                         "service_type": {
                             "type": "string",
                             "enum": list(self._get_services().keys()),
-                            "description": "Type of service to get information about"
+                            "description": "Type of service to get information about",
                         }
                     },
-                    "required": ["service_type"]
-                }
+                    "required": ["service_type"],
+                },
             },
             {
                 "type": "function",
@@ -298,10 +308,10 @@ class RealtimeClient:
                     "properties": {
                         "provider_name": {
                             "type": "string",
-                            "description": "Specific provider name (optional, returns all if not specified)"
+                            "description": "Specific provider name (optional, returns all if not specified)",
                         }
-                    }
-                }
+                    },
+                },
             },
             {
                 "type": "function",
@@ -312,11 +322,11 @@ class RealtimeClient:
                     "properties": {
                         "phone": {
                             "type": "string",
-                            "description": "Customer's phone number"
+                            "description": "Customer's phone number",
                         }
                     },
-                    "required": ["phone"]
-                }
+                    "required": ["phone"],
+                },
             },
             {
                 "type": "function",
@@ -327,11 +337,11 @@ class RealtimeClient:
                     "properties": {
                         "appointment_id": {
                             "type": "string",
-                            "description": "Google Calendar event ID for the appointment"
+                            "description": "Google Calendar event ID for the appointment",
                         }
                     },
-                    "required": ["appointment_id"]
-                }
+                    "required": ["appointment_id"],
+                },
             },
             {
                 "type": "function",
@@ -342,24 +352,24 @@ class RealtimeClient:
                     "properties": {
                         "appointment_id": {
                             "type": "string",
-                            "description": "Google Calendar event ID for the appointment"
+                            "description": "Google Calendar event ID for the appointment",
                         },
                         "new_start_time": {
                             "type": "string",
-                            "description": "New start time in ISO 8601 format"
+                            "description": "New start time in ISO 8601 format",
                         },
                         "service_type": {
                             "type": "string",
                             "enum": list(self._get_services().keys()),
-                            "description": "Service type for duration lookup (optional if previously stored)"
+                            "description": "Service type for duration lookup (optional if previously stored)",
                         },
                         "provider": {
                             "type": "string",
-                            "description": "Preferred provider name (optional)"
-                        }
+                            "description": "Preferred provider name (optional)",
+                        },
                     },
-                    "required": ["appointment_id", "new_start_time"]
-                }
+                    "required": ["appointment_id", "new_start_time"],
+                },
             },
             {
                 "type": "function",
@@ -370,19 +380,21 @@ class RealtimeClient:
                     "properties": {
                         "appointment_id": {
                             "type": "string",
-                            "description": "Google Calendar event ID for the appointment"
+                            "description": "Google Calendar event ID for the appointment",
                         },
                         "cancellation_reason": {
                             "type": "string",
-                            "description": "Optional reason provided by customer"
-                        }
+                            "description": "Optional reason provided by customer",
+                        },
                     },
-                    "required": ["appointment_id"]
-                }
-            }
+                    "required": ["appointment_id"],
+                },
+            },
         ]
 
-    async def handle_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def handle_function_call(
+        self, function_name: str, arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Execute function calls from the AI assistant.
 
@@ -393,11 +405,13 @@ class RealtimeClient:
         Returns:
             Function execution result
         """
-        self.session_data['function_calls'].append({
-            'function': function_name,
-            'arguments': arguments,
-            'timestamp': datetime.utcnow().isoformat()
-        })
+        self.session_data["function_calls"].append(
+            {
+                "function": function_name,
+                "arguments": arguments,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
 
         try:
             if function_name == "check_availability":
@@ -453,7 +467,10 @@ class RealtimeClient:
 
                     customer_name = normalized_args.get("customer_name")
                     customer_phone = normalized_args.get("customer_phone")
-                    customer_email = normalized_args.get("customer_email") or f"{customer_phone}@placeholder.com"
+                    customer_email = (
+                        normalized_args.get("customer_email")
+                        or f"{customer_phone}@placeholder.com"
+                    )
                     service_type = normalized_args.get("service_type")
 
                     start_iso = booking_result.get("start_time")
@@ -467,20 +484,20 @@ class RealtimeClient:
                             f"Perfect! I've booked your {booking_result.get('service', service_type)} appointment for {formatted_voice_time}."
                         )
 
-                    self.session_data['customer_data'] = {
-                        'name': customer_name,
-                        'phone': customer_phone,
-                        'email': customer_email,
+                    self.session_data["customer_data"] = {
+                        "name": customer_name,
+                        "phone": customer_phone,
+                        "email": customer_email,
                     }
 
-                    self.session_data['last_appointment'] = {
-                        'event_id': booking_result.get('event_id'),
-                        'service_type': service_type,
-                        'provider': normalized_args.get('provider'),
-                        'start_time': start_iso,
-                        'customer_name': customer_name,
-                        'customer_phone': customer_phone,
-                        'customer_email': customer_email,
+                    self.session_data["last_appointment"] = {
+                        "event_id": booking_result.get("event_id"),
+                        "service_type": service_type,
+                        "provider": normalized_args.get("provider"),
+                        "start_time": start_iso,
+                        "customer_name": customer_name,
+                        "customer_phone": customer_phone,
+                        "customer_email": customer_email,
                     }
 
                 return booking_result
@@ -490,15 +507,9 @@ class RealtimeClient:
                 service = self._get_services().get(service_type)
 
                 if service:
-                    return {
-                        "success": True,
-                        "service": service
-                    }
+                    return {"success": True, "service": service}
                 else:
-                    return {
-                        "success": False,
-                        "error": "Service not found"
-                    }
+                    return {"success": False, "error": "Service not found"}
 
             elif function_name == "get_provider_info":
                 provider_name = arguments.get("provider_name")
@@ -506,20 +517,11 @@ class RealtimeClient:
                 if provider_name:
                     provider = PROVIDERS.get(provider_name)
                     if provider:
-                        return {
-                            "success": True,
-                            "provider": provider
-                        }
+                        return {"success": True, "provider": provider}
                     else:
-                        return {
-                            "success": False,
-                            "error": "Provider not found"
-                        }
+                        return {"success": False, "error": "Provider not found"}
                 else:
-                    return {
-                        "success": True,
-                        "providers": list(PROVIDERS.values())
-                    }
+                    return {"success": True, "providers": list(PROVIDERS.values())}
 
             elif function_name == "search_customer":
                 phone = arguments.get("phone")
@@ -528,7 +530,7 @@ class RealtimeClient:
                 return {
                     "success": True,
                     "found": False,
-                    "message": "No existing customer found with this phone number"
+                    "message": "No existing customer found with this phone number",
                 }
 
             elif function_name == "get_appointment_details":
@@ -536,31 +538,46 @@ class RealtimeClient:
                 details = self.calendar_service.get_appointment_details(appointment_id)
 
                 if not details:
-                    return {
-                        "success": False,
-                        "error": "Appointment not found"
-                    }
+                    return {"success": False, "error": "Appointment not found"}
 
-                self.session_data['last_appointment'] = {
-                    'event_id': appointment_id,
-                    'service_type': self.session_data.get('last_appointment', {}).get('service_type'),
-                    'provider': details.get('provider'),
-                    'start_time': details['start'].isoformat() if 'start' in details else None,
-                    'customer_name': self.session_data.get('customer_data', {}).get('name'),
-                    'customer_phone': self.session_data.get('customer_data', {}).get('phone'),
-                    'customer_email': self.session_data.get('customer_data', {}).get('email'),
+                self.session_data["last_appointment"] = {
+                    "event_id": appointment_id,
+                    "service_type": self.session_data.get("last_appointment", {}).get(
+                        "service_type"
+                    ),
+                    "provider": details.get("provider"),
+                    "start_time": (
+                        details["start"].isoformat() if "start" in details else None
+                    ),
+                    "customer_name": self.session_data.get("customer_data", {}).get(
+                        "name"
+                    ),
+                    "customer_phone": self.session_data.get("customer_data", {}).get(
+                        "phone"
+                    ),
+                    "customer_email": self.session_data.get("customer_data", {}).get(
+                        "email"
+                    ),
                 }
 
                 return {
                     "success": True,
                     "appointment": {
-                        "id": details['id'],
-                        "summary": details.get('summary'),
-                        "description": details.get('description'),
-                        "start": details.get('start').isoformat() if details.get('start') else None,
-                        "end": details.get('end').isoformat() if details.get('end') else None,
-                        "status": details.get('status'),
-                    }
+                        "id": details["id"],
+                        "summary": details.get("summary"),
+                        "description": details.get("description"),
+                        "start": (
+                            details.get("start").isoformat()
+                            if details.get("start")
+                            else None
+                        ),
+                        "end": (
+                            details.get("end").isoformat()
+                            if details.get("end")
+                            else None
+                        ),
+                        "status": details.get("status"),
+                    },
                 }
 
             elif function_name == "reschedule_appointment":
@@ -569,34 +586,47 @@ class RealtimeClient:
                 service_type = arguments.get("service_type")
                 provider = arguments.get("provider")
 
-                if not service_type and self.session_data.get('last_appointment'):
-                    service_type = self.session_data['last_appointment'].get('service_type')
+                if not service_type and self.session_data.get("last_appointment"):
+                    service_type = self.session_data["last_appointment"].get(
+                        "service_type"
+                    )
 
                 if not service_type:
                     return {
                         "success": False,
-                        "error": "Missing service type to determine appointment duration"
+                        "error": "Missing service type to determine appointment duration",
                     }
 
-                start_time = datetime.fromisoformat(new_start_time_str.replace('Z', '+00:00'))
+                start_time = datetime.fromisoformat(
+                    new_start_time_str.replace("Z", "+00:00")
+                )
                 duration = self._get_services()[service_type]["duration_minutes"]
                 end_time = start_time + timedelta(minutes=duration)
 
                 success = self.calendar_service.reschedule_appointment(
                     event_id=appointment_id,
                     new_start_time=start_time,
-                    new_end_time=end_time
+                    new_end_time=end_time,
                 )
 
                 if success:
-                    self.session_data['last_appointment'] = {
-                        'event_id': appointment_id,
-                        'service_type': service_type,
-                        'provider': provider or self.session_data.get('last_appointment', {}).get('provider'),
-                        'start_time': start_time.isoformat(),
-                        'customer_name': self.session_data.get('customer_data', {}).get('name'),
-                        'customer_phone': self.session_data.get('customer_data', {}).get('phone'),
-                        'customer_email': self.session_data.get('customer_data', {}).get('email'),
+                    self.session_data["last_appointment"] = {
+                        "event_id": appointment_id,
+                        "service_type": service_type,
+                        "provider": provider
+                        or self.session_data.get("last_appointment", {}).get(
+                            "provider"
+                        ),
+                        "start_time": start_time.isoformat(),
+                        "customer_name": self.session_data.get("customer_data", {}).get(
+                            "name"
+                        ),
+                        "customer_phone": self.session_data.get(
+                            "customer_data", {}
+                        ).get("phone"),
+                        "customer_email": self.session_data.get(
+                            "customer_data", {}
+                        ).get("email"),
                     }
 
                     return {
@@ -608,7 +638,7 @@ class RealtimeClient:
 
                 return {
                     "success": False,
-                    "error": "Failed to reschedule appointment. Please try again or contact staff."
+                    "error": "Failed to reschedule appointment. Please try again or contact staff.",
                 }
 
             elif function_name == "cancel_appointment":
@@ -618,12 +648,12 @@ class RealtimeClient:
                 success = self.calendar_service.cancel_appointment(appointment_id)
 
                 if success:
-                    self.session_data['last_appointment'] = None
+                    self.session_data["last_appointment"] = None
 
                     response = {
                         "success": True,
                         "appointment_id": appointment_id,
-                        "status": "cancelled"
+                        "status": "cancelled",
                     }
 
                     if cancellation_reason:
@@ -633,20 +663,14 @@ class RealtimeClient:
 
                 return {
                     "success": False,
-                    "error": "Failed to cancel appointment. Please try again or contact staff."
+                    "error": "Failed to cancel appointment. Please try again or contact staff.",
                 }
 
             else:
-                return {
-                    "success": False,
-                    "error": f"Unknown function: {function_name}"
-                }
+                return {"success": False, "error": f"Unknown function: {function_name}"}
 
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            return {"success": False, "error": str(e)}
 
     async def send_audio(self, audio_base64: str, *, commit: bool = False):
         """Send base64-encoded audio data to the Realtime API."""
@@ -658,10 +682,7 @@ class RealtimeClient:
             print("⚠️  Empty audio payload received; skipping append")
             return
 
-        append_event = {
-            "type": "input_audio_buffer.append",
-            "audio": audio_base64
-        }
+        append_event = {"type": "input_audio_buffer.append", "audio": audio_base64}
         await self.ws.send(json.dumps(append_event))
         print(f"🎙️  Sent audio chunk (base64 len={len(audio_base64)})")
 
@@ -702,16 +723,22 @@ class RealtimeClient:
             # Log all events for debugging transcription issues
             if event_type not in ["response.audio.delta", "input_audio_buffer.append"]:
                 print(f"🔔 Received OpenAI event: {event_type}")
-                if event_type.startswith("input_audio") or event_type.startswith("conversation.item"):
+                if event_type.startswith("input_audio") or event_type.startswith(
+                    "conversation.item"
+                ):
                     print(f"   Data: {json.dumps(data, indent=2)[:500]}")
 
             # Handle different event types
             if event_type == "session.updated":
                 # Log session configuration to verify transcription is enabled
                 session = data.get("session", {})
-                print(f"✅ Session updated - Transcription enabled: {session.get('input_audio_transcription') is not None}")
+                print(
+                    f"✅ Session updated - Transcription enabled: {session.get('input_audio_transcription') is not None}"
+                )
                 print(f"   Voice: {session.get('voice')}")
-                print(f"   Turn detection: {session.get('turn_detection', {}).get('type')}")
+                print(
+                    f"   Turn detection: {session.get('turn_detection', {}).get('type')}"
+                )
 
             elif event_type == "response.audio.delta":
                 # Audio output from AI
@@ -733,10 +760,12 @@ class RealtimeClient:
                 print(f"📝 User speech delta: {delta}")
 
             elif event_type == "input_audio_buffer.transcription.completed":
-                transcript_text = data.get("transcript") or self._current_customer_text.strip()
+                transcript_text = (
+                    data.get("transcript") or self._current_customer_text.strip()
+                )
                 if transcript_text:
                     print(f"📝 User speech completed: {transcript_text}")
-                    self._append_transcript_entry('customer', transcript_text)
+                    self._append_transcript_entry("customer", transcript_text)
                 self._current_customer_text = ""
 
             elif event_type == "conversation.item.input_audio_transcription.delta":
@@ -749,9 +778,11 @@ class RealtimeClient:
                 # User audio transcription completed
                 transcript = data.get("transcript")
                 item_id = data.get("item_id")
-                print(f"📝 User audio transcription completed (item {item_id}): {transcript}")
+                print(
+                    f"📝 User audio transcription completed (item {item_id}): {transcript}"
+                )
                 if transcript:
-                    self._append_transcript_entry('customer', transcript)
+                    self._append_transcript_entry("customer", transcript)
 
             elif event_type == "conversation.item.created":
                 print(f"🧩 conversation.item.created: {data}")
@@ -772,10 +803,12 @@ class RealtimeClient:
                     print(f"🤖 Assistant speech delta: {transcript_delta}")
 
             elif event_type == "response.audio_transcript.done":
-                transcript_text = (data.get("transcript") or self._current_assistant_text).strip()
+                transcript_text = (
+                    data.get("transcript") or self._current_assistant_text
+                ).strip()
                 if transcript_text:
                     print(f"🤖 Assistant speech completed: {transcript_text}")
-                    self._append_transcript_entry('assistant', transcript_text)
+                    self._append_transcript_entry("assistant", transcript_text)
                 self._current_assistant_text = ""
 
             elif event_type == "response.output_text.delta":
@@ -787,13 +820,13 @@ class RealtimeClient:
 
             elif event_type == "response.output_text.done":
                 assistant_text = self._current_assistant_text.strip()
-                self._append_transcript_entry('assistant', assistant_text)
+                self._append_transcript_entry("assistant", assistant_text)
                 self._current_assistant_text = ""
 
             elif event_type == "response.text.done":
                 # Legacy text response event
                 text = data.get("text")
-                self._append_transcript_entry('assistant', text)
+                self._append_transcript_entry("assistant", text)
 
             elif event_type == "response.function_call_arguments.done":
                 # Function call from AI
@@ -810,8 +843,8 @@ class RealtimeClient:
                     "item": {
                         "type": "function_call_output",
                         "call_id": data.get("call_id"),
-                        "output": json.dumps(result)
-                    }
+                        "output": json.dumps(result),
+                    },
                 }
                 await self.ws.send(json.dumps(response_event))
 
@@ -873,11 +906,11 @@ class RealtimeClient:
 
         print(f"📝 Captured transcript entry [{speaker}]: {text}")
         entry = {
-            'speaker': speaker,
-            'text': text,
-            'timestamp': datetime.utcnow().isoformat()
+            "speaker": speaker,
+            "text": text,
+            "timestamp": datetime.utcnow().isoformat(),
         }
-        self.session_data['transcript'].append(entry)
+        self.session_data["transcript"].append(entry)
         self._last_transcript_entry = fingerprint
         if speaker == "customer" and self._awaiting_response:
             self._awaiting_response = False
@@ -895,9 +928,9 @@ class RealtimeClient:
         message = AnalyticsService.add_message(
             db=self.db,
             conversation_id=self.conversation.id,
-            direction='inbound',
+            direction="inbound",
             content=sanitized,
-            metadata={'source': 'voice_transcript'},
+            metadata={"source": "voice_transcript"},
         )
 
         SlotSelectionManager.capture_selection(self.db, self.conversation, message)
@@ -909,14 +942,18 @@ class RealtimeClient:
         role = item.get("role")
         speaker = self._speaker_from_role(role)
 
-        print(f"🧩 Processing conversation.item.created - ID: {item_id}, Role: {role}, Speaker: {speaker}")
+        print(
+            f"🧩 Processing conversation.item.created - ID: {item_id}, Role: {role}, Speaker: {speaker}"
+        )
 
         if not item_id or not speaker:
             print(f"   ⚠️ Skipping - missing item_id or speaker")
             return
 
         texts = self._extract_text_from_content(item.get("content"))
-        pending = self._pending_items.setdefault(item_id, {"speaker": speaker, "text": ""})
+        pending = self._pending_items.setdefault(
+            item_id, {"speaker": speaker, "text": ""}
+        )
         if texts:
             pending["text"] += " ".join(texts).strip()
             print(f"   📝 Extracted texts from content: {texts}")
@@ -949,13 +986,17 @@ class RealtimeClient:
             return
         text = pending.get("text", "").strip()
         speaker = pending.get("speaker", "assistant")
-        print(f"📋 Finalizing pending item {item_id}: Speaker={speaker}, Text={text[:100] if text else 'EMPTY'}")
+        print(
+            f"📋 Finalizing pending item {item_id}: Speaker={speaker}, Text={text[:100] if text else 'EMPTY'}"
+        )
         if text:
             self._append_transcript_entry(speaker, text)
         else:
             print(f"   ⚠️ Skipping empty text for item {item_id}")
 
-    def _extract_text_from_content(self, content: Optional[List[Dict[str, Any]]]) -> List[str]:
+    def _extract_text_from_content(
+        self, content: Optional[List[Dict[str, Any]]]
+    ) -> List[str]:
         if not content:
             return []
 
@@ -975,7 +1016,9 @@ class RealtimeClient:
                 transcript = entry.get("transcript")
                 if transcript:
                     texts.append(transcript)
-                    print(f"      🎤 Extracted input_audio transcript: {transcript[:100]}")
+                    print(
+                        f"      🎤 Extracted input_audio transcript: {transcript[:100]}"
+                    )
 
             elif entry_type == "audio":
                 # Generic audio with transcript
@@ -1004,22 +1047,30 @@ class RealtimeClient:
             print("⚠️  WebSocket not ready; cannot request response")
             return
         self._current_assistant_text = ""
-        await self.ws.send(json.dumps({
-            "type": "response.create",
-            "response": {
-                "modalities": ["text", "audio"],
-                "instructions": self.identity_instructions or None
-            }
-        }))
+        await self.ws.send(
+            json.dumps(
+                {
+                    "type": "response.create",
+                    "response": {
+                        "modalities": ["text", "audio"],
+                        "instructions": self.identity_instructions or None,
+                    },
+                }
+            )
+        )
         print("▶️  Requested model response")
 
     def _finalize_transcript_buffers(self) -> None:
         if self._current_customer_text.strip():
-            self._append_transcript_entry('customer', self._current_customer_text.strip())
+            self._append_transcript_entry(
+                "customer", self._current_customer_text.strip()
+            )
             self._current_customer_text = ""
 
         if self._current_assistant_text.strip():
-            self._append_transcript_entry('assistant', self._current_assistant_text.strip())
+            self._append_transcript_entry(
+                "assistant", self._current_assistant_text.strip()
+            )
             self._current_assistant_text = ""
 
         pending_ids = list(self._pending_items.keys())
