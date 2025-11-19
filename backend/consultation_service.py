@@ -12,6 +12,8 @@ from __future__ import annotations
 import os
 import io
 import uuid
+import logging
+import time
 from datetime import datetime
 from typing import Optional, BinaryIO
 from pathlib import Path
@@ -28,6 +30,9 @@ except ModuleNotFoundError:
 
 settings = get_settings()
 openai.api_key = settings.OPENAI_API_KEY
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class ConsultationService:
@@ -85,19 +90,62 @@ class ConsultationService:
         # Return relative path (in production, return full URL)
         return str(file_path)
 
-    def transcribe_audio(self, audio_path: str) -> str:
-        """Transcribe audio file using OpenAI Whisper API."""
-        try:
-            with open(audio_path, "rb") as audio_file:
-                transcript = openai.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="text"
-                )
-            return transcript
-        except Exception as e:
-            print(f"Error transcribing audio: {e}")
-            raise
+    def transcribe_audio(self, audio_path: str, max_retries: int = 3) -> str:
+        """
+        Transcribe audio file using OpenAI Whisper API with retry logic.
+
+        Args:
+            audio_path: Path to audio file
+            max_retries: Maximum number of retry attempts (default: 3)
+
+        Returns:
+            Transcribed text
+
+        Raises:
+            Exception: If transcription fails after all retries
+        """
+        last_exception = None
+
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Transcribing audio (attempt {attempt + 1}/{max_retries}): {audio_path}")
+
+                with open(audio_path, "rb") as audio_file:
+                    transcript = openai.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        response_format="text"
+                    )
+
+                logger.info(f"Successfully transcribed audio: {len(transcript)} characters")
+                return transcript
+
+            except openai.RateLimitError as e:
+                last_exception = e
+                wait_time = (2 ** attempt) * 2  # Exponential backoff: 2s, 4s, 8s
+                logger.warning(f"Rate limit hit, waiting {wait_time}s before retry {attempt + 1}/{max_retries}")
+                time.sleep(wait_time)
+
+            except openai.APIError as e:
+                last_exception = e
+                wait_time = (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                logger.warning(f"API error, retrying in {wait_time}s: {str(e)}")
+                time.sleep(wait_time)
+
+            except openai.APIConnectionError as e:
+                last_exception = e
+                wait_time = (2 ** attempt) * 3  # Longer backoff for connection issues
+                logger.warning(f"Connection error, retrying in {wait_time}s: {str(e)}")
+                time.sleep(wait_time)
+
+            except Exception as e:
+                # Non-retryable errors (file not found, invalid format, etc.)
+                logger.error(f"Non-retryable error transcribing audio: {str(e)}", exc_info=True)
+                raise
+
+        # All retries exhausted
+        logger.error(f"Failed to transcribe audio after {max_retries} attempts")
+        raise last_exception or Exception("Transcription failed after all retries")
 
     def end_consultation(
         self,
@@ -137,7 +185,9 @@ class ConsultationService:
             try:
                 consultation.transcript = self.transcribe_audio(consultation.recording_url)
             except Exception as e:
-                print(f"Failed to transcribe consultation {consultation_id}: {e}")
+                logger.error(f"Failed to transcribe consultation {consultation_id}: {str(e)}", exc_info=True)
+                # Don't fail the entire consultation if transcription fails
+                # Consultation can still be saved without transcript
 
         self.db.commit()
         self.db.refresh(consultation)

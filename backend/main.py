@@ -23,6 +23,7 @@ from calendar_service import check_calendar_credentials
 from consultation_service import ConsultationService
 from ai_insights_service import AIInsightsService
 from provider_analytics_service import ProviderAnalyticsService
+from auth import get_current_user, get_current_admin, get_current_provider, verify_provider_access, AuthUser
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -1657,9 +1658,13 @@ async def handle_sendgrid_email(
 @app.post("/api/consultations")
 async def create_consultation(
     request: ConsultationCreateRequest,
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new consultation session."""
+    """Create a new consultation session. Requires authentication."""
+    # Verify provider can create consultation for themselves
+    verify_provider_access(current_user, request.provider_id, "consultations")
+
     service = ConsultationService(db)
     consultation = service.create_consultation(
         provider_id=request.provider_id,
@@ -1679,10 +1684,19 @@ async def create_consultation(
 async def upload_consultation_audio(
     consultation_id: str,
     audio: UploadFile = File(...),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Upload audio recording for a consultation."""
+    """Upload audio recording for a consultation. Requires authentication."""
     service = ConsultationService(db)
+
+    # Get consultation to verify ownership
+    consultation = service.get_consultation(consultation_id)
+    if not consultation:
+        raise HTTPException(status_code=404, detail="Consultation not found")
+
+    # Verify provider can access this consultation
+    verify_provider_access(current_user, str(consultation.provider_id), "consultation")
 
     # Upload file
     file_path = service.upload_audio(
@@ -1690,11 +1704,6 @@ async def upload_consultation_audio(
         audio_file=audio.file,
         filename=audio.filename or "recording.wav"
     )
-
-    # Update consultation record
-    consultation = service.get_consultation(consultation_id)
-    if not consultation:
-        raise HTTPException(status_code=404, detail="Consultation not found")
 
     consultation.recording_url = file_path
     db.commit()
@@ -1710,10 +1719,18 @@ async def upload_consultation_audio(
 async def end_consultation(
     consultation_id: str,
     request: ConsultationEndRequest,
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """End a consultation and trigger AI analysis."""
+    """End a consultation and trigger AI analysis. Requires authentication."""
     service = ConsultationService(db)
+
+    # Verify ownership before ending
+    consultation_check = service.get_consultation(consultation_id)
+    if not consultation_check:
+        raise HTTPException(status_code=404, detail="Consultation not found")
+    verify_provider_access(current_user, str(consultation_check.provider_id), "consultation")
+
     consultation = service.end_consultation(
         consultation_id=consultation_id,
         outcome=request.outcome,
@@ -1745,9 +1762,17 @@ async def list_consultations(
     service_type: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """List consultations with filters."""
+    """List consultations with filters. Requires authentication. Providers see only their own consultations."""
+    # If user is a provider (not admin), force filter to their own consultations
+    if not current_user.is_admin:
+        provider_id = current_user.provider_id
+    elif provider_id:
+        # Admin requesting specific provider - verify they have access
+        verify_provider_access(current_user, provider_id, "consultations")
+
     service = ConsultationService(db)
     offset = (page - 1) * page_size
 
@@ -1856,9 +1881,10 @@ async def get_consultation_details(
 @app.post("/api/providers")
 async def create_provider(
     request: ProviderCreateRequest,
+    current_user: AuthUser = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """Create a new provider."""
+    """Create a new provider. Requires admin access."""
     provider = Provider(
         id=uuid.uuid4(),
         name=request.name,
@@ -1911,9 +1937,10 @@ async def list_providers(
 @app.get("/api/providers/summary")
 async def get_providers_summary(
     days: int = Query(30, ge=1, le=365),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get performance summary for all providers."""
+    """Get performance summary for all providers. Requires authentication. Providers see only their own summary."""
     from datetime import timedelta
     service = ProviderAnalyticsService(db)
 
@@ -1923,15 +1950,23 @@ async def get_providers_summary(
         end_date=datetime.utcnow()
     )
 
+    # If user is a provider (not admin), filter to show only their summary
+    if not current_user.is_admin:
+        summaries = [s for s in summaries if s["provider_id"] == current_user.provider_id]
+
     return {"providers": summaries, "period_days": days}
 
 
 @app.get("/api/providers/{provider_id}")
 async def get_provider_details(
     provider_id: str,
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get detailed provider information."""
+    """Get detailed provider information. Requires authentication. Providers can only access their own details."""
+    # Verify provider can access this data
+    verify_provider_access(current_user, provider_id, "provider details")
+
     provider = db.query(Provider).filter(
         Provider.id == uuid.UUID(provider_id)
     ).first()
@@ -1958,9 +1993,13 @@ async def get_provider_details(
 async def get_provider_metrics(
     provider_id: str,
     days: int = Query(30, ge=1, le=365),
+    current_user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get performance metrics for a provider."""
+    """Get performance metrics for a provider. Requires authentication. Providers can only access their own metrics."""
+    # Verify provider can access this data
+    verify_provider_access(current_user, provider_id, "provider metrics")
+
     from datetime import timedelta
     service = ProviderAnalyticsService(db)
 

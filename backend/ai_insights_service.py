@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import uuid
+import logging
+import time
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
@@ -34,12 +36,88 @@ except ModuleNotFoundError:
 settings = get_settings()
 openai.api_key = settings.OPENAI_API_KEY
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
 
 class AIInsightsService:
     """Service for generating AI-powered coaching insights."""
 
     def __init__(self, db: Session):
         self.db = db
+
+    def _call_gpt4_with_retry(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_retries: int = 3,
+        model: str = "gpt-4o"
+    ) -> Dict[str, Any]:
+        """
+        Call GPT-4 API with retry logic and exponential backoff.
+
+        Args:
+            system_prompt: System message for GPT-4
+            user_prompt: User message/prompt
+            max_retries: Maximum number of retry attempts
+            model: OpenAI model to use
+
+        Returns:
+            Parsed JSON response from GPT-4
+
+        Raises:
+            Exception: If all retries fail
+        """
+        last_exception = None
+
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Calling GPT-4 (attempt {attempt + 1}/{max_retries})")
+
+                response = openai.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.7
+                )
+
+                result = json.loads(response.choices[0].message.content)
+                logger.info(f"Successfully received GPT-4 response")
+                return result
+
+            except openai.RateLimitError as e:
+                last_exception = e
+                wait_time = (2 ** attempt) * 5  # Exponential backoff: 5s, 10s, 20s
+                logger.warning(f"Rate limit hit, waiting {wait_time}s before retry")
+                time.sleep(wait_time)
+
+            except openai.APIError as e:
+                last_exception = e
+                wait_time = (2 ** attempt) * 2  # Exponential backoff: 2s, 4s, 8s
+                logger.warning(f"API error: {str(e)}, retrying in {wait_time}s")
+                time.sleep(wait_time)
+
+            except openai.APIConnectionError as e:
+                last_exception = e
+                wait_time = (2 ** attempt) * 3
+                logger.warning(f"Connection error: {str(e)}, retrying in {wait_time}s")
+                time.sleep(wait_time)
+
+            except json.JSONDecodeError as e:
+                # JSON parsing errors are not retryable
+                logger.error(f"Failed to parse GPT-4 response as JSON: {str(e)}")
+                raise
+
+            except Exception as e:
+                logger.error(f"Unexpected error calling GPT-4: {str(e)}", exc_info=True)
+                raise
+
+        # All retries exhausted
+        logger.error(f"Failed to call GPT-4 after {max_retries} attempts")
+        raise last_exception or Exception("GPT-4 call failed after all retries")
 
     def analyze_consultation(self, consultation_id: str) -> List[AIInsight]:
         """

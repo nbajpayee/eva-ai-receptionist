@@ -51,8 +51,12 @@ class ProviderAnalyticsService:
             end_date: End of period
             period_type: 'daily', 'weekly', or 'monthly'
         """
-        # Query consultations in the period
-        consultations = self.db.query(InPersonConsultation).filter(
+        # Query consultations with appointments in a single query (fix N+1 problem)
+        from sqlalchemy.orm import joinedload
+
+        consultations = self.db.query(InPersonConsultation).options(
+            joinedload(InPersonConsultation.appointment)
+        ).filter(
             and_(
                 InPersonConsultation.provider_id == uuid.UUID(provider_id),
                 InPersonConsultation.created_at >= start_date,
@@ -65,32 +69,28 @@ class ProviderAnalyticsService:
         successful_bookings = sum(1 for c in consultations if c.outcome == 'booked')
         conversion_rate = (successful_bookings / total_consultations * 100) if total_consultations > 0 else 0.0
 
-        # Calculate revenue (sum of associated appointment prices)
+        # Calculate revenue using pre-loaded appointments (no additional queries)
         total_revenue = 0.0
+        settings = get_settings()
+
         for consultation in consultations:
-            if consultation.appointment_id:
-                appointment = self.db.query(Appointment).filter(
-                    Appointment.id == consultation.appointment_id
-                ).first()
-                if appointment and appointment.service_type:
-                    # Get service price from config
-                    from config import get_settings
-                    settings = get_settings()
-                    service = settings.SERVICES.get(appointment.service_type, {})
-                    # Use average of price range
-                    price_range = service.get('price_range', '$0')
-                    # Parse price (e.g., "$500-800" -> 650)
-                    try:
-                        price_str = price_range.replace('$', '').replace(',', '')
-                        if '-' in price_str:
-                            low, high = price_str.split('-')
-                            avg_price = (float(low) + float(high)) / 2
-                        else:
-                            avg_price = float(price_str)
-                        total_revenue += avg_price
-                    except (ValueError, AttributeError) as e:
-                        # Skip if price format is invalid
-                        continue
+            # Access pre-loaded appointment (no DB query)
+            if consultation.appointment and consultation.appointment.service_type:
+                service = settings.SERVICES.get(consultation.appointment.service_type, {})
+                price_range = service.get('price_range', '$0')
+
+                # Parse price (e.g., "$500-800" -> 650)
+                try:
+                    price_str = price_range.replace('$', '').replace(',', '')
+                    if '-' in price_str:
+                        low, high = price_str.split('-')
+                        avg_price = (float(low) + float(high)) / 2
+                    else:
+                        avg_price = float(price_str)
+                    total_revenue += avg_price
+                except (ValueError, AttributeError):
+                    # Skip if price format is invalid
+                    continue
 
         # Calculate average consultation duration
         durations = [c.duration_seconds for c in consultations if c.duration_seconds]
@@ -164,54 +164,63 @@ class ProviderAnalyticsService:
         Get summary metrics for all providers.
 
         Returns list of provider summaries with key metrics for comparison.
+        Optimized to avoid N+1 queries using aggregate queries.
         """
         if not start_date:
             start_date = datetime.utcnow() - timedelta(days=30)
         if not end_date:
             end_date = datetime.utcnow()
 
+        # Get all active providers
         providers = self.db.query(Provider).filter(
             Provider.is_active == True
         ).all()
 
+        # Fetch ALL consultations for the period with appointments in ONE query
+        from sqlalchemy.orm import joinedload
+
+        all_consultations = self.db.query(InPersonConsultation).options(
+            joinedload(InPersonConsultation.appointment)
+        ).filter(
+            and_(
+                InPersonConsultation.created_at >= start_date,
+                InPersonConsultation.created_at < end_date
+            )
+        ).all()
+
+        # Group consultations by provider_id (in memory, but efficient)
+        from collections import defaultdict
+        consultations_by_provider = defaultdict(list)
+        for consultation in all_consultations:
+            consultations_by_provider[consultation.provider_id].append(consultation)
+
+        settings = get_settings()
         summaries = []
+
         for provider in providers:
-            # Get consultations in period
-            consultations = self.db.query(InPersonConsultation).filter(
-                and_(
-                    InPersonConsultation.provider_id == provider.id,
-                    InPersonConsultation.created_at >= start_date,
-                    InPersonConsultation.created_at < end_date
-                )
-            ).all()
+            consultations = consultations_by_provider.get(provider.id, [])
 
             total = len(consultations)
             booked = sum(1 for c in consultations if c.outcome == 'booked')
             conversion_rate = (booked / total * 100) if total > 0 else 0.0
 
-            # Calculate revenue
+            # Calculate revenue using pre-loaded appointments (no additional queries)
             revenue = 0.0
             for consultation in consultations:
-                if consultation.appointment_id:
-                    appointment = self.db.query(Appointment).filter(
-                        Appointment.id == consultation.appointment_id
-                    ).first()
-                    if appointment and appointment.service_type:
-                        from config import get_settings
-                        settings = get_settings()
-                        service = settings.SERVICES.get(appointment.service_type, {})
-                        price_range = service.get('price_range', '$0')
-                        try:
-                            price_str = price_range.replace('$', '').replace(',', '')
-                            if '-' in price_str:
-                                low, high = price_str.split('-')
-                                avg_price = (float(low) + float(high)) / 2
-                            else:
-                                avg_price = float(price_str)
-                            revenue += avg_price
-                        except (ValueError, AttributeError):
-                            # Skip if price format is invalid
-                            pass
+                if consultation.appointment and consultation.appointment.service_type:
+                    service = settings.SERVICES.get(consultation.appointment.service_type, {})
+                    price_range = service.get('price_range', '$0')
+                    try:
+                        price_str = price_range.replace('$', '').replace(',', '')
+                        if '-' in price_str:
+                            low, high = price_str.split('-')
+                            avg_price = (float(low) + float(high)) / 2
+                        else:
+                            avg_price = float(price_str)
+                        revenue += avg_price
+                    except (ValueError, AttributeError):
+                        # Skip if price format is invalid
+                        pass
 
             # Average satisfaction
             scores = [c.satisfaction_score for c in consultations if c.satisfaction_score]
