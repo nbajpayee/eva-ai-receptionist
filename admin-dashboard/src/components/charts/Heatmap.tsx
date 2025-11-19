@@ -8,13 +8,12 @@ type HeatmapCell = {
 
 type HeatmapProps = {
   data: HeatmapCell[];
-  height?: number;
 };
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-export function Heatmap({ data, height = 400 }: HeatmapProps) {
+export function Heatmap({ data }: HeatmapProps) {
   // Find min/max for color scaling
   const values = data.map((d) => d.value);
   const minValue = Math.min(...values, 0);

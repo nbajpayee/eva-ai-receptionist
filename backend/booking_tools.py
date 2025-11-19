@@ -1,9 +1,10 @@
 """Shared OpenAI tool definitions for booking flows."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from config import SERVICES, PROVIDERS
+from config import PROVIDERS, SERVICES
 
 
 def get_booking_tools() -> List[Dict[str, Any]]:
@@ -87,7 +88,12 @@ def get_booking_tools() -> List[Dict[str, Any]]:
                             "description": "Special requests or notes (optional)",
                         },
                     },
-                    "required": ["customer_name", "customer_phone", "start_time", "service_type"],
+                    "required": [
+                        "customer_name",
+                        "customer_phone",
+                        "start_time",
+                        "service_type",
+                    ],
                 },
             },
         },

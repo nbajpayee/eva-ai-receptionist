@@ -152,7 +152,7 @@ export function CallLogTable({ calls }: CallLogTableProps) {
           </table>
         </div>
         <div className="border-t border-zinc-100 bg-zinc-50 px-6 py-3 text-xs text-zinc-500">
-          Showing {calls.length} recent session{calls.length !== 1 ? 's' : ''}. Click "View" to see full details and transcript.
+          Showing {calls.length} recent session{calls.length !== 1 ? "s" : ""}. Click &quot;View&quot; to see full details and transcript.
         </div>
       </CardContent>
     </Card>

@@ -10,14 +10,27 @@ declare const WebSocketPair: {
   new (): { 0: WebSocket; 1: WebSocket };
 };
 
+type WebSocketWithAccept = WebSocket & {
+  accept?: () => void;
+};
+
+type UpgradeResponse = Response & {
+  webSocket?: WebSocketWithAccept;
+};
+
+type WebSocketResponseInit = ResponseInit & {
+  webSocket: WebSocketWithAccept;
+};
+
 type PendingMessage =
   | string
   | ArrayBuffer
   | ArrayBufferView
   | Blob;
 
-function createWebSocketPair(): { 0: WebSocket; 1: WebSocket } {
-  return new WebSocketPair();
+function createWebSocketPair(): [WebSocketWithAccept, WebSocketWithAccept] {
+  const pair = new WebSocketPair();
+  return [pair[0] as WebSocketWithAccept, pair[1] as WebSocketWithAccept];
 }
 
 function closeWithError(socket: WebSocket, reason: string) {
@@ -28,7 +41,10 @@ function closeWithError(socket: WebSocket, reason: string) {
   }
 }
 
-export async function GET(request: Request, { params }: RouteContext) {
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ sessionId: string }> }
+) {
   if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
     return new Response("Expected WebSocket upgrade", { status: 426 });
   }
@@ -41,7 +57,8 @@ export async function GET(request: Request, { params }: RouteContext) {
   }
 
   const normalizedBaseUrl = backendBaseUrl.replace(/\/$/, "");
-  const httpTargetUrl = `${normalizedBaseUrl}/ws/voice/${params.sessionId}`;
+  const { sessionId } = await context.params;
+  const httpTargetUrl = `${normalizedBaseUrl}/ws/voice/${sessionId}`;
 
   const upstreamResponse = await fetch(httpTargetUrl, {
     headers: {
@@ -49,17 +66,18 @@ export async function GET(request: Request, { params }: RouteContext) {
     },
   });
 
-  const upstreamSocket = (upstreamResponse as any).webSocket as WebSocket | undefined;
+  const upgradedResponse = upstreamResponse as UpgradeResponse;
+  const upstreamSocket = upgradedResponse.webSocket;
 
   if (upstreamResponse.status !== 101 || !upstreamSocket) {
     console.error("Upstream handshake failed", upstreamResponse.status, upstreamResponse.headers);
     return new Response("Failed to establish upstream WebSocket", { status: 502 });
   }
 
-  (upstreamSocket as any).accept?.();
+  upstreamSocket.accept?.();
 
-  const { 0: clientSocket, 1: proxySocket } = createWebSocketPair();
-  (proxySocket as any).accept?.();
+  const [clientSocket, proxySocket] = createWebSocketPair();
+  proxySocket.accept?.();
 
   let upstreamOpen = false;
   const pending: PendingMessage[] = [];
@@ -125,5 +143,5 @@ export async function GET(request: Request, { params }: RouteContext) {
     upstreamSocket.close(1011, "Client error");
   });
 
-  return new Response(null, { status: 101, webSocket: clientSocket } as any);
+  return new Response(null, { status: 101, webSocket: clientSocket } as WebSocketResponseInit);
 }

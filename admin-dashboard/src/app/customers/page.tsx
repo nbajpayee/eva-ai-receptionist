@@ -2,241 +2,307 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { format } from "date-fns";
-import { Search, User, ArrowLeft } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Plus, Phone, Mail, AlertTriangle, Baby, Download, Search, X } from "lucide-react";
+import { format } from "date-fns";
+import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
+import { CreateCustomerModal } from "@/components/customers/create-customer-modal";
+import { CustomerCardSkeletonList } from "@/components/skeletons/customer-card-skeleton";
 
-type Customer = {
+interface Customer {
   id: number;
   name: string;
   phone: string;
-  email: string | null;
-  created_at: string;
-  conversation_count: number;
-  booking_count: number;
-};
+  email?: string;
+  is_new_client: boolean;
+  has_allergies: boolean;
+  is_pregnant: boolean;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+  appointment_count?: number;
+  call_count?: number;
+  conversation_count?: number;
+}
 
-type CustomersResponse = {
+interface CustomersResponse {
+  customers: Customer[];
   total: number;
   page: number;
   page_size: number;
   total_pages: number;
-  customers: Customer[];
-};
+}
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showNewOnly, setShowNewOnly] = useState(false);
+  const [showAllergiesOnly, setShowAllergiesOnly] = useState(false);
+  const [showPregnantOnly, setShowPregnantOnly] = useState(false);
+
+  const fetchCustomers = async () => {
+    try {
+      const response = await fetch("/api/admin/customers?page=1&page_size=50");
+
+      if (!response.ok) {
+        console.warn("Failed to fetch customers", response.statusText);
+        return;
+      }
+
+      const data = (await response.json()) as CustomersResponse;
+      setCustomers(data.customers || []);
+    } catch (error) {
+      console.error("Error fetching customers", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchCustomers = async () => {
-      setIsLoading(true);
-      setError(null);
+    fetchCustomers();
+  }, []);
 
-      try {
-        const params = new URLSearchParams({
-          page: page.toString(),
-          page_size: "20",
-        });
+  const handleCreateSuccess = () => {
+    // Refresh customer list after successful creation
+    fetchCustomers();
+  };
 
-        if (search) {
-          params.set("search", search);
-        }
-
-        const response = await fetch(
-          `/api/admin/customers?${params.toString()}`,
-          { cache: "no-store" }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch customers");
-        }
-
-        const data: CustomersResponse = await response.json();
-        setCustomers(data.customers);
-        setTotalPages(data.total_pages);
-        setTotal(data.total);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unknown error");
-      } finally {
-        setIsLoading(false);
+  // Filter customers based on search and filters
+  const filteredCustomers = customers.filter((customer) => {
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesName = customer.name.toLowerCase().includes(query);
+      const matchesPhone = customer.phone.toLowerCase().includes(query);
+      const matchesEmail = customer.email?.toLowerCase().includes(query);
+      if (!matchesName && !matchesPhone && !matchesEmail) {
+        return false;
       }
-    };
+    }
 
-    // Debounce search
-    const timeoutId = setTimeout(() => {
-      fetchCustomers();
-    }, 300);
+    // Medical/status filters
+    if (showNewOnly && !customer.is_new_client) return false;
+    if (showAllergiesOnly && !customer.has_allergies) return false;
+    if (showPregnantOnly && !customer.is_pregnant) return false;
 
-    return () => clearTimeout(timeoutId);
-  }, [search, page]);
+    return true;
+  });
+
+  const handleExport = () => {
+    const exportData = filteredCustomers.map((customer) => ({
+      ID: customer.id,
+      Name: customer.name,
+      Phone: customer.phone,
+      Email: customer.email || "",
+      "New Client": customer.is_new_client ? "Yes" : "No",
+      "Has Allergies": customer.has_allergies ? "Yes" : "No",
+      "Is Pregnant": customer.is_pregnant ? "Yes" : "No",
+      "Appointments": customer.appointment_count || 0,
+      "Calls": customer.call_count || 0,
+      "Messages": customer.conversation_count || 0,
+      "Added": customer.created_at ? format(new Date(customer.created_at), "yyyy-MM-dd") : "",
+    }));
+
+    exportToCSV(exportData, generateExportFilename("customers"));
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Customers</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            {total} total customers
+      <header className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold text-zinc-900">Customers</h1>
+          <p className="text-sm text-zinc-500">
+            Manage customer profiles, medical screening, and interaction history
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={filteredCustomers.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+          <Button onClick={() => setIsCreateModalOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Customer
+          </Button>
+        </div>
+      </header>
+
+      {/* Search and Filters */}
+      <div className="space-y-3">
+        {/* Search Bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <Input
+            placeholder="Search by name, phone, or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 pr-10"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Badges */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-zinc-500">Filters:</span>
+          <Button
+            variant={showNewOnly ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowNewOnly(!showNewOnly)}
+          >
+            New Clients
+          </Button>
+          <Button
+            variant={showAllergiesOnly ? "destructive" : "outline"}
+            size="sm"
+            onClick={() => setShowAllergiesOnly(!showAllergiesOnly)}
+          >
+            <AlertTriangle className="mr-1 h-3 w-3" />
+            Allergies
+          </Button>
+          <Button
+            variant={showPregnantOnly ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowPregnantOnly(!showPregnantOnly)}
+            className={showPregnantOnly ? "bg-pink-600 hover:bg-pink-700" : ""}
+          >
+            <Baby className="mr-1 h-3 w-3" />
+            Pregnant
+          </Button>
+          {(searchQuery || showNewOnly || showAllergiesOnly || showPregnantOnly) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchQuery("");
+                setShowNewOnly(false);
+                setShowAllergiesOnly(false);
+                setShowPregnantOnly(false);
+              }}
+            >
+              Clear All
+            </Button>
+          )}
+          <span className="ml-auto text-sm text-zinc-500">
+            Showing {filteredCustomers.length} of {customers.length} customers
+          </span>
+        </div>
       </div>
 
-      {/* Search */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Search Customers</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-            <Input
-              type="text"
-              placeholder="Search by name, phone, or email..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1); // Reset to first page on search
-              }}
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      {isLoading && <CustomerCardSkeletonList count={5} />}
 
-      {/* Customers Table */}
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="space-y-3 p-6">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <Skeleton className="h-12 w-12 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-48" />
-                    <Skeleton className="h-3 w-32" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : error ? (
-            <div className="p-8 text-center">
-              <p className="text-sm font-medium text-red-600">Error loading customers</p>
-              <p className="mt-1 text-xs text-zinc-500">{error}</p>
-            </div>
-          ) : customers.length === 0 ? (
-            <div className="p-8 text-center">
-              <User className="mx-auto h-12 w-12 text-zinc-300" />
-              <p className="mt-2 text-sm text-zinc-500">
-                {search ? "No customers found" : "No customers yet"}
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-zinc-100">
-              {customers.map((customer) => (
-                <Link
-                  key={customer.id}
-                  href={`/customers/${customer.id}`}
-                  className="block transition-colors hover:bg-zinc-50"
-                >
-                  <div className="flex items-center gap-4 p-4">
-                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-zinc-100">
-                      <User className="h-6 w-6 text-zinc-600" />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-zinc-900 truncate">
-                          {customer.name}
-                        </h3>
-                      </div>
-                      <div className="mt-1 flex items-center gap-3 text-sm text-zinc-500">
-                        <span>{customer.phone}</span>
-                        {customer.email && (
-                          <>
-                            <span>•</span>
-                            <span className="truncate">{customer.email}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 text-sm">
-                      <div className="text-center">
-                        <div className="font-semibold text-zinc-900">
-                          {customer.conversation_count}
-                        </div>
-                        <div className="text-xs text-zinc-500">Conversations</div>
-                      </div>
-
-                      <div className="text-center">
-                        <div className="font-semibold text-zinc-900">
-                          {customer.booking_count}
-                        </div>
-                        <div className="text-xs text-zinc-500">Bookings</div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="text-xs text-zinc-500">
-                          Joined {format(new Date(customer.created_at), "MMM d, yyyy")}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-zinc-500">
-            Page {page} of {totalPages}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-            >
-              Next
-            </Button>
-          </div>
+      {!isLoading && customers.length === 0 && (
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
+          <p className="text-sm text-zinc-600">
+            No customers found. Customers will appear here once they interact with Ava.
+          </p>
         </div>
       )}
+
+      {!isLoading && customers.length > 0 && filteredCustomers.length === 0 && (
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
+          <p className="text-sm text-zinc-600">
+            No customers match your search or filter criteria.
+          </p>
+        </div>
+      )}
+
+      {filteredCustomers.length > 0 && (
+        <div className="grid gap-4">
+          {filteredCustomers.map((customer) => (
+            <Card key={customer.id} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <CardTitle className="text-lg font-semibold">
+                      {customer.name}
+                      {customer.is_new_client && (
+                        <Badge variant="secondary" className="ml-2 text-xs">
+                          New
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <CardDescription className="flex items-center gap-4 text-sm">
+                      <span className="flex items-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        {customer.phone}
+                      </span>
+                      {customer.email && (
+                        <span className="flex items-center gap-1">
+                          <Mail className="h-3 w-3" />
+                          {customer.email}
+                        </span>
+                      )}
+                    </CardDescription>
+                  </div>
+                  <Link href={`/customers/${customer.id}`}>
+                    <Button variant="outline" size="sm">
+                      View Details
+                    </Button>
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4">
+                  {/* Medical Flags */}
+                  <div className="flex items-center gap-2">
+                    {customer.has_allergies && (
+                      <Badge
+                        variant="outline"
+                        className="text-xs border-red-200 bg-red-100 text-red-700"
+                      >
+                        <AlertTriangle className="mr-1 h-3 w-3" />
+                        Allergies
+                      </Badge>
+                    )}
+                    {customer.is_pregnant && (
+                      <Badge variant="default" className="text-xs bg-pink-600">
+                        <Baby className="mr-1 h-3 w-3" />
+                        Pregnant
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Activity Stats */}
+                  <div className="ml-auto flex items-center gap-4 text-xs text-zinc-500">
+                    {(customer.appointment_count ?? 0) > 0 && (
+                      <span>{customer.appointment_count} appointment{customer.appointment_count !== 1 ? 's' : ''}</span>
+                    )}
+                    {(customer.call_count ?? 0) > 0 && (
+                      <span>{customer.call_count} call{customer.call_count !== 1 ? 's' : ''}</span>
+                    )}
+                    {(customer.conversation_count ?? 0) > 0 && (
+                      <span>{customer.conversation_count} message{customer.conversation_count !== 1 ? 's' : ''}</span>
+                    )}
+                    {customer.created_at && (
+                      <span>
+                        Added {format(new Date(customer.created_at), "MMM d, yyyy")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <CreateCustomerModal
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+        onSuccess={handleCreateSuccess}
+      />
     </div>
   );
 }

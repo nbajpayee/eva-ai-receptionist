@@ -1,9 +1,10 @@
 """FastAPI router for messaging console operations."""
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional, List, Literal, Dict, Any
+from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,6 +12,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session, joinedload
 
 from analytics import AnalyticsService
+from booking.manager import SlotSelectionManager
 from database import Conversation, Customer, get_db
 from messaging_service import MessagingService
 
@@ -31,7 +33,9 @@ messaging_router = APIRouter(prefix="/api/admin/messaging", tags=["messaging"])
 
 
 def _serialize_conversation(conversation: Conversation) -> Dict[str, Any]:
-    messages_sorted = sorted(conversation.messages, key=lambda m: m.sent_at or conversation.initiated_at)
+    messages_sorted = sorted(
+        conversation.messages, key=lambda m: m.sent_at or conversation.initiated_at
+    )
     last_message = messages_sorted[-1] if messages_sorted else None
 
     return {
@@ -40,12 +44,26 @@ def _serialize_conversation(conversation: Conversation) -> Dict[str, Any]:
         "status": conversation.status,
         "subject": conversation.subject,
         "customer_name": conversation.customer.name if conversation.customer else None,
-        "customer_phone": conversation.customer.phone if conversation.customer else None,
-        "customer_email": conversation.customer.email if conversation.customer else None,
+        "customer_phone": (
+            conversation.customer.phone if conversation.customer else None
+        ),
+        "customer_email": (
+            conversation.customer.email if conversation.customer else None
+        ),
         "message_count": len(messages_sorted),
-        "last_message_preview": (last_message.content[:140] if last_message and last_message.content else None),
-        "last_activity_at": conversation.last_activity_at.isoformat() if conversation.last_activity_at else None,
-        "initiated_at": conversation.initiated_at.isoformat() if conversation.initiated_at else None,
+        "last_message_preview": (
+            last_message.content[:140]
+            if last_message and last_message.content
+            else None
+        ),
+        "last_activity_at": (
+            conversation.last_activity_at.isoformat()
+            if conversation.last_activity_at
+            else None
+        ),
+        "initiated_at": (
+            conversation.initiated_at.isoformat() if conversation.initiated_at else None
+        ),
     }
 
 
@@ -98,16 +116,22 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
     if request.conversation_id:
         conversation = (
             db.query(Conversation)
-            .options(joinedload(Conversation.customer), joinedload(Conversation.messages))
+            .options(
+                joinedload(Conversation.customer), joinedload(Conversation.messages)
+            )
             .filter(Conversation.id == request.conversation_id)
             .first()
         )
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         if conversation.channel != channel:
-            raise HTTPException(status_code=422, detail="Channel mismatch for conversation")
+            raise HTTPException(
+                status_code=422, detail="Channel mismatch for conversation"
+            )
 
-    customer = _ensure_customer(db=db, request=request, conversation=conversation, channel=channel)
+    customer = _ensure_customer(
+        db=db, request=request, conversation=conversation, channel=channel
+    )
 
     if conversation is None:
         conversation = MessagingService.find_active_conversation(
@@ -130,9 +154,14 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
         db.refresh(conversation)
 
     if channel == "sms" and not customer.phone:
-        raise HTTPException(status_code=422, detail="Customer phone number is required for SMS conversations")
+        raise HTTPException(
+            status_code=422,
+            detail="Customer phone number is required for SMS conversations",
+        )
     if channel == "email" and not customer.email:
-        raise HTTPException(status_code=422, detail="Customer email is required for email conversations")
+        raise HTTPException(
+            status_code=422, detail="Customer email is required for email conversations"
+        )
 
     inbound_message = MessagingService.add_customer_message(
         db=db,
@@ -140,6 +169,11 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
         content=request.content,
         metadata={"source": "messaging_console"},
     )
+
+    # Capture slot selections (e.g., "Option 2" or explicit time choices) as soon as the
+    # inbound message is stored so deterministic booking can trigger without waiting for
+    # the AI to parse the message later.
+    SlotSelectionManager.capture_selection(db, conversation, inbound_message)
 
     # Refresh conversation to get any metadata updates from slot selection capture
     db.refresh(conversation)
@@ -173,7 +207,11 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
 
     logger = logging.getLogger(__name__)
 
-    tool_calls = list(getattr(assistant_message, "tool_calls", []) or []) if assistant_message else []
+    tool_calls = (
+        list(getattr(assistant_message, "tool_calls", []) or [])
+        if assistant_message
+        else []
+    )
     tool_results: List[Dict[str, Any]] = []
     booking_action_success = False
 
@@ -183,16 +221,29 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
         for call in tool_calls:
             try:
                 function_obj = getattr(call, "function", None)
-                tool_name = getattr(function_obj, "name", None) if function_obj else None
-                raw_arguments = getattr(function_obj, "arguments", "") if function_obj else ""
+                tool_name = (
+                    getattr(function_obj, "name", None) if function_obj else None
+                )
+                raw_arguments = (
+                    getattr(function_obj, "arguments", "") if function_obj else ""
+                )
                 try:
-                    parsed_arguments = json.loads(raw_arguments) if raw_arguments else {}
+                    parsed_arguments = (
+                        json.loads(raw_arguments) if raw_arguments else {}
+                    )
                 except json.JSONDecodeError:
                     parsed_arguments = {}
 
-                normalized_arguments, adjustments = MessagingService._normalize_tool_arguments(tool_name, parsed_arguments)
+                normalized_arguments, adjustments = (
+                    MessagingService._normalize_tool_arguments(
+                        tool_name, parsed_arguments
+                    )
+                )
 
-                if function_obj is not None and normalized_arguments != parsed_arguments:
+                if (
+                    function_obj is not None
+                    and normalized_arguments != parsed_arguments
+                ):
                     function_obj.arguments = json.dumps(normalized_arguments)
 
                 result = MessagingService._execute_tool_call(
@@ -209,7 +260,9 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
                 db.refresh(conversation)
                 db.refresh(customer)
 
-            except Exception as exc:  # noqa: BLE001 - continue capturing failure details
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 - continue capturing failure details
                 result = {
                     "tool_call_id": getattr(call, "id", None),
                     "name": getattr(getattr(call, "function", None), "name", None),
@@ -218,13 +271,22 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
                 }
                 logger.warning("Tool call execution raised %s", exc)
             tool_results.append(result)
-            if result.get("name") in {"book_appointment", "reschedule_appointment", "cancel_appointment"}:
+            if result.get("name") in {
+                "book_appointment",
+                "reschedule_appointment",
+                "cancel_appointment",
+            }:
                 if (result.get("output") or {}).get("success"):
                     booking_action_success = True
-                    if result.get("name") == "book_appointment" and not booking_confirmation_message:
-                        booking_confirmation_message = MessagingService.build_booking_confirmation_message(
-                            channel=channel,
-                            tool_output=result.get("output") or {},
+                    if (
+                        result.get("name") == "book_appointment"
+                        and not booking_confirmation_message
+                    ):
+                        booking_confirmation_message = (
+                            MessagingService.build_booking_confirmation_message(
+                                channel=channel,
+                                tool_output=result.get("output") or {},
+                            )
                         )
 
             tool_results[-1]["normalized_arguments"] = normalized_arguments
@@ -240,12 +302,14 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
             response_content = booking_confirmation_message
             assistant_message = None
         else:
-            followup_content, followup_message = MessagingService.generate_followup_response(
-                db=db,
-                conversation_id=conversation.id,
-                channel=channel,
-                assistant_message=assistant_message,
-                tool_results=tool_results,
+            followup_content, followup_message = (
+                MessagingService.generate_followup_response(
+                    db=db,
+                    conversation_id=conversation.id,
+                    channel=channel,
+                    assistant_message=assistant_message,
+                    tool_results=tool_results,
+                )
             )
             response_content = followup_content
             assistant_message = followup_message or assistant_message
@@ -267,7 +331,9 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
         tool_requests: List[Dict[str, Any]] = []
         for call in tool_calls:
             function_obj = getattr(call, "function", None)
-            arguments_raw = getattr(function_obj, "arguments", "") if function_obj else ""
+            arguments_raw = (
+                getattr(function_obj, "arguments", "") if function_obj else ""
+            )
             try:
                 parsed_args = json.loads(arguments_raw) if arguments_raw else {}
             except json.JSONDecodeError:
@@ -321,9 +387,15 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
 
     if channel in {"sms", "email"}:
         try:
-            AnalyticsService.score_conversation_satisfaction(db=db, conversation_id=conversation.id)
-        except Exception as exc:  # noqa: BLE001 - fall back to existing values if scoring fails
-            print(f"Warning: Failed to score messaging conversation {conversation.id}: {exc}")
+            AnalyticsService.score_conversation_satisfaction(
+                db=db, conversation_id=conversation.id
+            )
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - fall back to existing values if scoring fails
+            print(
+                f"Warning: Failed to score messaging conversation {conversation.id}: {exc}"
+            )
 
     db.refresh(conversation)
 
@@ -358,8 +430,7 @@ def list_conversations(
     total = query.count()
 
     conversations = (
-        query
-        .order_by(Conversation.last_activity_at.desc())
+        query.order_by(Conversation.last_activity_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
@@ -386,5 +457,11 @@ def get_conversation(conversation_id: UUID, db: Session = Depends(get_db)):
 
     return {
         "conversation": _serialize_conversation(conversation),
-        "messages": [_serialize_message(msg, conversation.channel) for msg in sorted(conversation.messages, key=lambda m: m.sent_at or conversation.initiated_at)],
+        "messages": [
+            _serialize_message(msg, conversation.channel)
+            for msg in sorted(
+                conversation.messages,
+                key=lambda m: m.sent_at or conversation.initiated_at,
+            )
+        ],
     }

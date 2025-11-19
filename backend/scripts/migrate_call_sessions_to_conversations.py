@@ -16,13 +16,14 @@ Usage:
 
 See OMNICHANNEL_MIGRATION.md for full migration strategy.
 """
+
 from __future__ import annotations
 
-import sys
 import argparse
+import sys
 import uuid
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import func
@@ -41,14 +42,14 @@ else:
     load_dotenv()
 
 from config import get_settings  # noqa: E402
-from database import (  # noqa: E402
-    SessionLocal,
-    CallSession,
+from database import CommunicationEvent  # noqa: E402
+from database import (
     CallEvent,
-    Conversation,
+    CallSession,
     CommunicationMessage,
+    Conversation,
+    SessionLocal,
     VoiceCallDetails,
-    CommunicationEvent,
 )
 
 
@@ -61,36 +62,40 @@ def infer_outcome_from_session(session: CallSession) -> str:
     if session.outcome:
         # Map old outcomes to new schema
         outcome_map = {
-            'booked': 'appointment_scheduled',
-            'rescheduled': 'appointment_rescheduled',
-            'cancelled': 'appointment_cancelled',
-            'info_only': 'info_request',
-            'escalated': 'complaint',
-            'abandoned': 'unresolved',
+            "booked": "appointment_scheduled",
+            "rescheduled": "appointment_rescheduled",
+            "cancelled": "appointment_cancelled",
+            "info_only": "info_request",
+            "escalated": "complaint",
+            "abandoned": "unresolved",
         }
-        return outcome_map.get(session.outcome, 'unresolved')
+        return outcome_map.get(session.outcome, "unresolved")
 
     # Infer from function calls if no explicit outcome
     if session.function_calls_made > 0:
         # TODO: Parse actual function_calls JSON if available
-        return 'appointment_scheduled'
+        return "appointment_scheduled"
 
-    return 'info_request' if session.transcript else 'unresolved'
+    return "info_request" if session.transcript else "unresolved"
 
 
 def generate_subject_from_session(session: CallSession) -> str:
     """Generate human-readable subject line from call session."""
-    if session.outcome == 'booked':
+    if session.outcome == "booked":
         return "Appointment booking"
-    elif session.outcome == 'rescheduled':
+    elif session.outcome == "rescheduled":
         return "Appointment rescheduling"
-    elif session.outcome == 'cancelled':
+    elif session.outcome == "cancelled":
         return "Appointment cancellation"
     elif session.escalated:
         return "Customer escalation"
     elif session.transcript:
         # Use first 50 characters of transcript
-        return session.transcript[:50].strip() + "..." if len(session.transcript) > 50 else session.transcript.strip()
+        return (
+            session.transcript[:50].strip() + "..."
+            if len(session.transcript) > 50
+            else session.transcript.strip()
+        )
     else:
         return "Voice call"
 
@@ -107,7 +112,7 @@ def parse_transcript_to_segments(transcript: str) -> list:
 
     # Simple heuristic: look for "Customer:" and "Ava:" or "Assistant:" prefixes
     segments = []
-    lines = transcript.split('\n')
+    lines = transcript.split("\n")
 
     for i, line in enumerate(lines):
         line = line.strip()
@@ -118,20 +123,26 @@ def parse_transcript_to_segments(transcript: str) -> list:
         text = line
 
         # Try to extract speaker
-        if line.lower().startswith('customer:'):
+        if line.lower().startswith("customer:"):
             speaker = "customer"
             text = line[9:].strip()
-        elif line.lower().startswith('ava:') or line.lower().startswith('assistant:'):
+        elif line.lower().startswith("ava:") or line.lower().startswith("assistant:"):
             speaker = "assistant"
-            text = line.split(':', 1)[1].strip() if ':' in line else text
+            text = line.split(":", 1)[1].strip() if ":" in line else text
 
-        segments.append({
-            "speaker": speaker,
-            "text": text,
-            "timestamp": float(i)  # Use line number as approximate timestamp
-        })
+        segments.append(
+            {
+                "speaker": speaker,
+                "text": text,
+                "timestamp": float(i),  # Use line number as approximate timestamp
+            }
+        )
 
-    return segments if segments else [{"speaker": "unknown", "text": transcript, "timestamp": 0.0}]
+    return (
+        segments
+        if segments
+        else [{"speaker": "unknown", "text": transcript, "timestamp": 0.0}]
+    )
 
 
 def migrate_session(session: CallSession, db, dry_run: bool = False) -> dict:
@@ -141,73 +152,80 @@ def migrate_session(session: CallSession, db, dry_run: bool = False) -> dict:
     Returns dict with migration details for reporting.
     """
     result = {
-        'session_id': session.session_id,
-        'customer_id': session.customer_id,
-        'success': False,
-        'conversation_id': None,
-        'message_id': None,
-        'events_migrated': 0,
-        'error': None,
+        "session_id": session.session_id,
+        "customer_id": session.customer_id,
+        "success": False,
+        "conversation_id": None,
+        "message_id": None,
+        "events_migrated": 0,
+        "error": None,
     }
 
     try:
         # Check if already migrated (look for legacy_session_id in metadata)
-        existing = db.query(Conversation).filter(
-            Conversation.custom_metadata['legacy_call_session_id'].astext == str(session.id)
-        ).first()
+        existing = (
+            db.query(Conversation)
+            .filter(
+                Conversation.custom_metadata["legacy_call_session_id"].astext
+                == str(session.id)
+            )
+            .first()
+        )
 
         if existing:
-            result['error'] = "Already migrated"
+            result["error"] = "Already migrated"
             return result
 
         # 1. Create Conversation
         conversation = Conversation(
             id=uuid.uuid4(),
             customer_id=session.customer_id,
-            channel='voice',
-            status='completed' if session.ended_at else 'failed',
+            channel="voice",
+            status="completed" if session.ended_at else "failed",
             initiated_at=session.started_at,
             last_activity_at=session.ended_at or session.started_at,
             completed_at=session.ended_at,
-            satisfaction_score=int(session.satisfaction_score) if session.satisfaction_score else None,
+            satisfaction_score=(
+                int(session.satisfaction_score) if session.satisfaction_score else None
+            ),
             sentiment=session.sentiment,
             outcome=infer_outcome_from_session(session),
             subject=generate_subject_from_session(session),
             ai_summary=None,  # Will be generated later if needed
             custom_metadata={
-                'legacy_call_session_id': str(session.id),
-                'legacy_session_id': session.session_id,
-                'phone_number': session.phone_number,
-                'escalated': session.escalated,
-                'escalation_reason': session.escalation_reason,
-            }
+                "legacy_call_session_id": str(session.id),
+                "legacy_session_id": session.session_id,
+                "phone_number": session.phone_number,
+                "escalated": session.escalated,
+                "escalation_reason": session.escalation_reason,
+            },
         )
 
         if not dry_run:
             db.add(conversation)
             db.flush()  # Get conversation.id
 
-        result['conversation_id'] = str(conversation.id)
+        result["conversation_id"] = str(conversation.id)
 
         # 2. Create CommunicationMessage (entire call is one message)
         message = CommunicationMessage(
             id=uuid.uuid4(),
             conversation_id=conversation.id,
-            direction='inbound',  # Customer called in
-            content=session.transcript or '',
+            direction="inbound",  # Customer called in
+            content=session.transcript or "",
             sent_at=session.started_at,
             processed=True,
             custom_metadata={
-                'customer_interruptions': session.customer_interruptions,
-                'ai_clarifications_needed': session.ai_clarifications_needed,
-            }
+                "customer_interruptions": session.customer_interruptions,
+                "ai_clarifications_needed": session.ai_clarifications_needed,
+            },
         )
 
         if not dry_run:
             db.add(message)
             db.flush()
 
-        result['message_id'] = str(message.id)
+        result["message_id"] = str(message.id)
 
         # 3. Create VoiceCallDetails
         voice_details = VoiceCallDetails(
@@ -224,7 +242,9 @@ def migrate_session(session: CallSession, db, dry_run: bool = False) -> dict:
             db.add(voice_details)
 
         # 4. Migrate CallEvents → CommunicationEvents
-        events = db.query(CallEvent).filter(CallEvent.call_session_id == session.id).all()
+        events = (
+            db.query(CallEvent).filter(CallEvent.call_session_id == session.id).all()
+        )
         for event in events:
             comm_event = CommunicationEvent(
                 id=uuid.uuid4(),
@@ -232,38 +252,52 @@ def migrate_session(session: CallSession, db, dry_run: bool = False) -> dict:
                 message_id=message.id,
                 event_type=event.event_type,
                 timestamp=event.timestamp,
-                details=event.data or {}
+                details=event.data or {},
             )
 
             if not dry_run:
                 db.add(comm_event)
 
-        result['events_migrated'] = len(events)
+        result["events_migrated"] = len(events)
 
         if not dry_run:
             db.commit()
 
-        result['success'] = True
+        result["success"] = True
 
     except Exception as e:
         if not dry_run:
             db.rollback()
-        result['error'] = str(e)
+        result["error"] = str(e)
 
     return result
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Migrate call_sessions to conversations schema')
-    parser.add_argument('--dry-run', action='store_true', help='Preview changes without committing')
-    parser.add_argument('--session-ids', type=str, help='Comma-separated session IDs to migrate (migrates all if not specified)')
-    parser.add_argument('--limit', type=int, help='Limit number of sessions to migrate (useful for testing)')
+    parser = argparse.ArgumentParser(
+        description="Migrate call_sessions to conversations schema"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Preview changes without committing"
+    )
+    parser.add_argument(
+        "--session-ids",
+        type=str,
+        help="Comma-separated session IDs to migrate (migrates all if not specified)",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Limit number of sessions to migrate (useful for testing)",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
 
     if settings.DATABASE_URL.startswith("sqlite"):
-        print("[ERROR] DATABASE_URL points to SQLite. This migration requires Supabase/PostgreSQL.")
+        print(
+            "[ERROR] DATABASE_URL points to SQLite. This migration requires Supabase/PostgreSQL."
+        )
         sys.exit(1)
 
     db = SessionLocal()
@@ -279,7 +313,7 @@ def main():
     query = db.query(CallSession)
 
     if args.session_ids:
-        session_ids = [sid.strip() for sid in args.session_ids.split(',')]
+        session_ids = [sid.strip() for sid in args.session_ids.split(",")]
         query = query.filter(CallSession.session_id.in_(session_ids))
         print(f"📋 Migrating specific sessions: {', '.join(session_ids)}")
     else:
@@ -311,12 +345,12 @@ def main():
         result = migrate_session(session, db, dry_run=args.dry_run)
         results.append(result)
 
-        if result['success']:
+        if result["success"]:
             success_count += 1
             print(f"  ✅ Created conversation: {result['conversation_id']}")
             print(f"     - Message ID: {result['message_id']}")
             print(f"     - Events migrated: {result['events_migrated']}")
-        elif result['error'] == "Already migrated":
+        elif result["error"] == "Already migrated":
             skip_count += 1
             print(f"  ⏭️  Skipped (already migrated)")
         else:
@@ -339,7 +373,9 @@ def main():
         print("\n✨ Migration complete!")
 
         if error_count > 0:
-            print(f"\n⚠️  {error_count} sessions failed to migrate. Review errors above.")
+            print(
+                f"\n⚠️  {error_count} sessions failed to migrate. Review errors above."
+            )
 
         # Verification
         print("\n🔍 Verification:")

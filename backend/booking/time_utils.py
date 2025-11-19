@@ -1,4 +1,5 @@
 """Timezone utilities shared across booking channels."""
+
 from __future__ import annotations
 
 from datetime import datetime

@@ -1,74 +1,124 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Phone, Mail, Calendar, MessageSquare, Video, Smile } from "lucide-react";
-import { format } from "date-fns";
+import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, AlertTriangle, Baby, Calendar, MessageSquare, Headphones } from "lucide-react";
+import { format } from "date-fns";
+import Link from "next/link";
 
-type Customer = {
+interface Customer {
   id: number;
   name: string;
   phone: string;
-  email: string | null;
-  created_at: string;
-};
+  email?: string;
+  is_new_client: boolean;
+  has_allergies: boolean;
+  is_pregnant: boolean;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+  appointment_count?: number;
+  call_count?: number;
+  conversation_count?: number;
+}
 
-type CustomerStats = {
-  total_conversations: number;
-  avg_satisfaction_score: number;
-  total_bookings: number;
-  channels_used: string[];
-};
+interface Appointment {
+  id: number;
+  appointment_datetime: string;
+  service_type: string;
+  provider?: string;
+  status: string;
+  booked_by: string;
+  special_requests?: string;
+  created_at?: string;
+}
 
-type TimelineEvent = {
+interface Call {
+  id: number;
+  session_id: string;
+  started_at?: string;
+  duration_seconds?: number;
+  satisfaction_score?: number;
+  sentiment?: string;
+  outcome?: string;
+  escalated: boolean;
+}
+
+interface Conversation {
   id: string;
   channel: string;
-  initiated_at: string;
-  completed_at: string | null;
-  outcome: string | null;
-  satisfaction_score: number | null;
-  sentiment: string | null;
-  ai_summary: string | null;
-  message_count: number;
-  status: string;
-};
+  initiated_at?: string;
+  status?: string;
+  outcome?: string;
+  satisfaction_score?: number;
+}
 
-type CustomerTimelineData = {
+function formatTime(isoString: string): string {
+  const date = new Date(isoString);
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+}
+
+function getStatusBadgeProps(status?: string | null) {
+  const normalized = status?.toLowerCase() ?? "";
+
+  switch (normalized) {
+    case "completed":
+    case "success":
+      return { variant: "default" as const };
+    case "cancelled":
+    case "canceled":
+    case "failed":
+      return {
+        variant: "outline" as const,
+        className: "border-red-200 bg-red-100 text-red-700",
+      };
+    case "active":
+    case "scheduled":
+    case "pending":
+      return { variant: "secondary" as const };
+    default:
+      return { variant: "outline" as const };
+  }
+}
+
+interface CustomerHistory {
   customer: Customer;
-  stats: CustomerStats;
-  timeline: TimelineEvent[];
-};
+  appointments: Appointment[];
+  calls: Call[];
+  conversations: Conversation[];
+}
 
-export default function CustomerDetailPage() {
-  const params = useParams();
-  const customerId = params?.id as string;
-
-  const [data, setData] = useState<CustomerTimelineData | null>(null);
+export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const router = useRouter();
+  const [data, setData] = useState<CustomerHistory | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Customer>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const fetchTimeline = async () => {
-      setIsLoading(true);
-      setError(null);
-
+    const fetchData = async () => {
       try {
-        const response = await fetch(
-          `/api/admin/customers/${customerId}/timeline`,
-          { cache: "no-store" }
-        );
+        const response = await fetch(`/api/admin/customers/${resolvedParams.id}/history`);
 
         if (!response.ok) {
-          throw new Error("Failed to fetch customer timeline");
+          throw new Error("Failed to fetch customer");
         }
 
-        const result = await response.json();
-        setData(result);
+        const historyData = await response.json();
+        setData(historyData);
+        setEditForm(historyData.customer);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
@@ -76,245 +126,425 @@ export default function CustomerDetailPage() {
       }
     };
 
-    if (customerId) {
-      fetchTimeline();
-    }
-  }, [customerId]);
+    fetchData();
+  }, [resolvedParams.id]);
 
-  const getChannelIcon = (channel: string) => {
-    switch (channel) {
-      case "voice":
-        return <Phone className="h-4 w-4" />;
-      case "sms":
-        return <MessageSquare className="h-4 w-4" />;
-      case "email":
-        return <Mail className="h-4 w-4" />;
-      default:
-        return <MessageSquare className="h-4 w-4" />;
-    }
-  };
+  const handleSave = async () => {
+    setIsSaving(true);
 
-  const getChannelColor = (channel: string) => {
-    switch (channel) {
-      case "voice":
-        return "bg-blue-100 text-blue-700 border-blue-200";
-      case "sms":
-        return "bg-violet-100 text-violet-700 border-violet-200";
-      case "email":
-        return "bg-emerald-100 text-emerald-700 border-emerald-200";
-      default:
-        return "bg-zinc-100 text-zinc-700 border-zinc-200";
+    try {
+      const response = await fetch(`/api/admin/customers/${resolvedParams.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(editForm),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update customer");
+      }
+
+      const updatedCustomer = await response.json();
+      setData((prev) => prev ? { ...prev, customer: updatedCustomer } : null);
+      setIsEditing(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const getOutcomeBadge = (outcome: string | null) => {
-    if (!outcome) return null;
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this customer? This action cannot be undone.")) {
+      return;
+    }
 
-    const badgeStyles: Record<string, string> = {
-      appointment_scheduled: "bg-green-100 text-green-700 border-green-200",
-      info_request: "bg-blue-100 text-blue-700 border-blue-200",
-      complaint: "bg-red-100 text-red-700 border-red-200",
-      unresolved: "bg-zinc-100 text-zinc-700 border-zinc-200",
-    };
+    try {
+      const response = await fetch(`/api/admin/customers/${resolvedParams.id}`, {
+        method: "DELETE",
+      });
 
-    const style = badgeStyles[outcome] || "bg-zinc-100 text-zinc-700 border-zinc-200";
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details?.detail || "Failed to delete customer");
+      }
 
-    return (
-      <Badge variant="outline" className={style}>
-        {outcome.replace("_", " ")}
-      </Badge>
-    );
+      router.push("/customers");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
+    }
   };
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <Skeleton className="h-4 w-48" />
-        </div>
+      <div className="space-y-6">
+        <p className="text-sm text-zinc-500">Loading...</p>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <p className="text-sm font-medium text-red-600">Error loading customer</p>
-          <p className="mt-1 text-xs text-zinc-500">{error || "Customer not found"}</p>
-          <Button variant="ghost" size="sm" className="mt-4" asChild>
-            <Link href="/">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
-            </Link>
+      <div className="space-y-6">
+        <p className="text-sm text-red-600">Error: {error || "Customer not found"}</p>
+        <Link href="/customers">
+          <Button variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Customers
           </Button>
-        </div>
+        </Link>
       </div>
     );
   }
 
+  const customer = data.customer;
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/customers">
+            <Button variant="outline" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
           </Link>
-        </Button>
+          <div>
+            <h1 className="text-3xl font-bold text-zinc-900">
+              {customer.name}
+              {customer.is_new_client && (
+                <Badge variant="secondary" className="ml-2">
+                  New Client
+                </Badge>
+              )}
+            </h1>
+            <p className="text-sm text-zinc-500">Customer ID: {customer.id}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isEditing && (
+            <>
+              <Button variant="outline" onClick={() => setIsEditing(true)}>
+                <Edit2 className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
+              <Button variant="destructive" onClick={handleDelete}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            </>
+          )}
+          {isEditing && (
+            <>
+              <Button variant="outline" onClick={() => {
+                setIsEditing(false);
+                setEditForm(customer);
+              }}>
+                <X className="mr-2 h-4 w-4" />
+                Cancel
+              </Button>
+              <Button onClick={handleSave} disabled={isSaving}>
+                <Save className="mr-2 h-4 w-4" />
+                {isSaving ? "Saving..." : "Save"}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Customer Profile Card */}
+      {/* Customer Information Card */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900">{data.customer.name}</h1>
-            <div className="mt-3 flex flex-col gap-2 text-sm text-zinc-600">
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4" />
-                {data.customer.phone}
+        <CardHeader>
+          <CardTitle>Customer Information</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!isEditing ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium text-zinc-500">Phone</label>
+                  <p className="flex items-center gap-2 text-zinc-900">
+                    <Phone className="h-4 w-4" />
+                    {customer.phone}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-zinc-500">Email</label>
+                  <p className="flex items-center gap-2 text-zinc-900">
+                    <Mail className="h-4 w-4" />
+                    {customer.email || "Not provided"}
+                  </p>
+                </div>
               </div>
-              {data.customer.email && (
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4" />
-                  {data.customer.email}
+
+              <div>
+                <label className="text-sm font-medium text-zinc-500">Medical Screening</label>
+                <div className="flex items-center gap-2 mt-1">
+                  {customer.has_allergies && (
+                    <Badge
+                      variant="outline"
+                      className="border-red-200 bg-red-100 text-red-700"
+                    >
+                      <AlertTriangle className="mr-1 h-3 w-3" />
+                      Has Allergies
+                    </Badge>
+                  )}
+                  {customer.is_pregnant && (
+                    <Badge className="bg-pink-600">
+                      <Baby className="mr-1 h-3 w-3" />
+                      Pregnant
+                    </Badge>
+                  )}
+                  {!customer.has_allergies && !customer.is_pregnant && (
+                    <span className="text-sm text-zinc-500">No flags</span>
+                  )}
+                </div>
+              </div>
+
+              {customer.notes && (
+                <div>
+                  <label className="text-sm font-medium text-zinc-500">Notes</label>
+                  <p className="text-zinc-900 whitespace-pre-wrap">{customer.notes}</p>
                 </div>
               )}
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Customer since {format(new Date(data.customer.created_at), "MMM d, yyyy")}
-              </div>
-            </div>
-          </div>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <div className="text-2xl font-bold text-zinc-900">
-                {data.stats.total_conversations}
+              <div className="text-xs text-zinc-500 pt-2 border-t">
+                Added {customer.created_at ? format(new Date(customer.created_at), "PPP") : "Unknown"}
               </div>
-              <div className="text-xs text-zinc-500">Conversations</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-zinc-900">
-                {data.stats.total_bookings}
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium">Name</label>
+                  <input
+                    type="text"
+                    value={editForm.name || ""}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Phone</label>
+                  <input
+                    type="tel"
+                    value={editForm.phone || ""}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                  />
+                </div>
               </div>
-              <div className="text-xs text-zinc-500">Bookings</div>
-            </div>
-            <div>
-              <div className="flex items-center justify-center gap-1 text-2xl font-bold text-zinc-900">
-                {data.stats.avg_satisfaction_score.toFixed(1)}
-                <Smile className="h-5 w-5 text-amber-500" />
-              </div>
-              <div className="text-xs text-zinc-500">Avg Satisfaction</div>
-            </div>
-          </div>
-        </div>
 
-        {/* Channels Used */}
-        <div className="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-4">
-          <span className="text-sm font-medium text-zinc-700">Channels:</span>
-          <div className="flex gap-2">
-            {data.stats.channels_used.map((channel) => (
-              <Badge
-                key={channel}
-                variant="outline"
-                className={`flex items-center gap-1.5 ${getChannelColor(channel)}`}
-              >
-                {getChannelIcon(channel)}
-                {channel.charAt(0).toUpperCase() + channel.slice(1)}
-              </Badge>
-            ))}
-          </div>
-        </div>
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <input
+                  type="email"
+                  value={editForm.email || ""}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.has_allergies || false}
+                    onChange={(e) => setEditForm({ ...editForm, has_allergies: e.target.checked })}
+                    className="rounded"
+                  />
+                  <span className="text-sm">Has allergies</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.is_pregnant || false}
+                    onChange={(e) => setEditForm({ ...editForm, is_pregnant: e.target.checked })}
+                    className="rounded"
+                  />
+                  <span className="text-sm">Is pregnant</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.is_new_client !== undefined ? !editForm.is_new_client : false}
+                    onChange={(e) => setEditForm({ ...editForm, is_new_client: !e.target.checked })}
+                    className="rounded"
+                  />
+                  <span className="text-sm">Mark as existing client</span>
+                </label>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Notes</label>
+                <textarea
+                  value={editForm.notes || ""}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                  placeholder="Add any notes about this customer..."
+                />
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Timeline */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-zinc-900">Conversation History</h2>
+      {/* Activity Tabs */}
+      <Tabs defaultValue="appointments" className="w-full">
+        <TabsList>
+          <TabsTrigger value="appointments">
+            <Calendar className="mr-2 h-4 w-4" />
+            Appointments ({data.appointments.length})
+          </TabsTrigger>
+          <TabsTrigger value="calls">
+            <Headphones className="mr-2 h-4 w-4" />
+            Calls ({data.calls.length})
+          </TabsTrigger>
+          <TabsTrigger value="messages">
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Messages ({data.conversations.length})
+          </TabsTrigger>
+        </TabsList>
 
-        {data.timeline.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <p className="text-sm text-zinc-500">No conversation history yet</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            {data.timeline.map((event, index) => (
-              <Card key={event.id} className="relative transition-shadow hover:shadow-md">
-                <CardContent className="p-5">
-                {/* Timeline connector line */}
-                {index < data.timeline.length - 1 && (
-                  <div className="absolute left-7 top-14 h-[calc(100%+1rem)] w-0.5 bg-zinc-200"></div>
-                )}
-
-                <div className="flex gap-4">
-                  {/* Channel Icon */}
-                  <div
-                    className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border ${getChannelColor(
-                      event.channel
-                    )}`}
-                  >
-                    {getChannelIcon(event.channel)}
-                  </div>
-
-                  {/* Event Details */}
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-zinc-900">
-                            {event.channel.charAt(0).toUpperCase() + event.channel.slice(1)}{" "}
-                            Conversation
-                          </span>
-                          {event.outcome && getOutcomeBadge(event.outcome)}
-                        </div>
-                        <p className="mt-1 text-sm text-zinc-600">
-                          {format(new Date(event.initiated_at), "MMM d, yyyy 'at' h:mm a")}
-                          {event.completed_at && (
-                            <>
-                              {" "}
-                              -{" "}
-                              {format(new Date(event.completed_at), "h:mm a")}
-                            </>
-                          )}
-                        </p>
-                      </div>
-
-                      {event.satisfaction_score !== null && (
-                        <div className="flex items-center gap-1 text-sm">
-                          <Smile className="h-4 w-4 text-amber-500" />
-                          <span className="font-medium text-zinc-900">
-                            {event.satisfaction_score}/10
-                          </span>
-                        </div>
-                      )}
+        <TabsContent value="appointments" className="space-y-4">
+          {data.appointments.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-zinc-500">
+                No appointments yet
+              </CardContent>
+            </Card>
+          ) : (
+            data.appointments.map((apt) => (
+              <Card key={apt.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{apt.service_type}</CardTitle>
+                      <CardDescription>
+                        {format(new Date(apt.appointment_datetime), "PPP 'at' p")}
+                      </CardDescription>
                     </div>
-
-                    {event.ai_summary && (
-                      <p className="mt-3 text-sm text-zinc-600">{event.ai_summary}</p>
-                    )}
-
-                    <div className="mt-3 flex items-center gap-4 text-xs text-zinc-500">
-                      <span>{event.message_count} message(s)</span>
-                      {event.sentiment && (
-                        <span className="capitalize">{event.sentiment} sentiment</span>
-                      )}
-                      <span className="capitalize">{event.status}</span>
-                    </div>
+                    {(() => {
+                      const badgeProps = getStatusBadgeProps(apt.status);
+                      return (
+                        <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                          {apt.status}
+                        </Badge>
+                      );
+                    })()}
                   </div>
-                </div>
+                </CardHeader>
+                <CardContent className="text-sm">
+                  {apt.provider && <p className="text-zinc-500">Provider: {apt.provider}</p>}
+                  {apt.special_requests && <p className="mt-2 text-zinc-700">{apt.special_requests}</p>}
+                  <p className="text-xs text-zinc-400 mt-2">Booked by {apt.booked_by}</p>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        )}
-      </div>
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="calls" className="space-y-4">
+          {data.calls.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-zinc-500">
+                No calls yet
+              </CardContent>
+            </Card>
+          ) : (
+            data.calls.map((call) => (
+              <Card key={call.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">Voice Call</CardTitle>
+                      <CardDescription>
+                        {call.started_at ? format(new Date(call.started_at), "PPP 'at' p") : "Unknown"}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {call.outcome && (() => {
+                        const badgeProps = getStatusBadgeProps(call.outcome);
+                        return (
+                          <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                            {call.outcome}
+                          </Badge>
+                        );
+                      })()}
+                      {call.escalated && (
+                        <Badge variant="outline" className="border-red-200 bg-red-100 text-red-700">
+                          Escalated
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-sm space-y-1">
+                  {call.duration_seconds && (
+                    <p className="text-zinc-500">Duration: {Math.floor(call.duration_seconds / 60)}m {call.duration_seconds % 60}s</p>
+                  )}
+                  {call.satisfaction_score !== undefined && call.satisfaction_score !== null && (
+                    <p className="text-zinc-500">Satisfaction: {call.satisfaction_score}/10</p>
+                  )}
+                  {call.sentiment && (
+                    <p className="text-zinc-500">Sentiment: {call.sentiment}</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="messages" className="space-y-4">
+          {data.conversations.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-zinc-500">
+                No messages yet
+              </CardContent>
+            </Card>
+          ) : (
+            data.conversations.map((conv) => (
+              <Card key={conv.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg capitalize">{conv.channel} Conversation</CardTitle>
+                      <CardDescription>
+                        {conv.initiated_at ? format(new Date(conv.initiated_at), "PPP 'at' p") : "Unknown"}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {conv.status && (() => {
+                        const badgeProps = getStatusBadgeProps(conv.status);
+                        return (
+                          <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                            {conv.status}
+                          </Badge>
+                        );
+                      })()}
+                      {conv.outcome && (() => {
+                        const badgeProps = getStatusBadgeProps(conv.outcome);
+                        return (
+                          <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                            {conv.outcome}
+                          </Badge>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </CardHeader>
+                {conv.satisfaction_score !== undefined && conv.satisfaction_score !== null && (
+                  <CardContent className="text-sm">
+                    <p className="text-zinc-500">Satisfaction: {conv.satisfaction_score}/10</p>
+                  </CardContent>
+                )}
+              </Card>
+            ))
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

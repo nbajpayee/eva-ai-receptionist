@@ -3,17 +3,17 @@
 These tests verify the end-to-end interaction between the AI and the booking system,
 including tool calling behavior, retry logic, and error handling.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import pytest
 
-from booking.time_utils import to_eastern
 from booking.manager import SlotSelectionManager
+from booking.time_utils import to_eastern
 from database import CommunicationMessage, Conversation, Customer, SessionLocal
 from messaging_service import MessagingService
 
@@ -45,7 +45,7 @@ def customer(db_session):
     try:
         db_session.query(Customer).filter(Customer.id == cust.id).delete()
         db_session.commit()
-    except:
+    except Exception:
         db_session.rollback()
 
 
@@ -71,7 +71,7 @@ def conversation(db_session, customer):
         ).delete()
         db_session.query(Conversation).filter(Conversation.id == conv.id).delete()
         db_session.commit()
-    except:
+    except Exception:
         db_session.rollback()
 
 
@@ -110,7 +110,9 @@ def _mock_ai_response_with_text(text: str) -> Mock:
     return response
 
 
-def _add_user_message(db_session, conversation: Conversation, content: str) -> CommunicationMessage:
+def _add_user_message(
+    db_session, conversation: Conversation, content: str
+) -> CommunicationMessage:
     """Add a user message to the conversation."""
     msg = CommunicationMessage(
         conversation_id=conversation.id,
@@ -133,12 +135,14 @@ def _build_availability_output(date: str = "2025-11-20") -> dict:
     for i in range(10):
         start = base_time + timedelta(hours=i)
         end = start + timedelta(minutes=60)
-        slots.append({
-            "start": start.isoformat(),
-            "end": end.isoformat(),
-            "start_time": start.strftime("%I:%M %p"),
-            "end_time": end.strftime("%I:%M %p"),
-        })
+        slots.append(
+            {
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "start_time": start.strftime("%I:%M %p"),
+                "end_time": end.strftime("%I:%M %p"),
+            }
+        )
 
     return {
         "success": True,
@@ -167,9 +171,13 @@ class TestPreemptiveAvailability:
 
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
-    def test_preemptive_call_injects_availability(self, mock_openai, mock_check_avail, db_session, conversation):
+    def test_preemptive_call_injects_availability(
+        self, mock_openai, mock_check_avail, db_session, conversation
+    ):
         """Ensure preemptive check_availability runs and injects tool context before the AI call."""
-        _add_user_message(db_session, conversation, "can you book me for botox tomorrow at 4 pm")
+        _add_user_message(
+            db_session, conversation, "can you book me for botox tomorrow at 4 pm"
+        )
 
         availability_output = _build_availability_output()
         mock_check_avail.return_value = availability_output
@@ -182,19 +190,25 @@ class TestPreemptiveAvailability:
                 None,
             )
             assert tool_call_entry is not None
-            assert tool_call_entry["tool_calls"][0]["function"]["name"] == "check_availability"
+            assert (
+                tool_call_entry["tool_calls"][0]["function"]["name"]
+                == "check_availability"
+            )
 
             tool_result_entry = next(
                 (
                     entry
                     for entry in history
-                    if entry.get("role") == "tool" and entry.get("tool_call_id") == "preemptive_call"
+                    if entry.get("role") == "tool"
+                    and entry.get("tool_call_id") == "preemptive_call"
                 ),
                 None,
             )
             assert tool_result_entry is not None
 
-            return _mock_ai_response_with_text("We have availability at 4 PM. Would you like to take it?")
+            return _mock_ai_response_with_text(
+                "We have availability at 4 PM. Would you like to take it?"
+            )
 
         mock_openai.side_effect = _mock_ai_request
 
@@ -220,16 +234,23 @@ class TestPreemptiveAvailability:
 
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
-    def test_ai_can_still_request_tool_after_preemptive_check(self, mock_openai, mock_check_avail, db_session, conversation):
+    def test_ai_can_still_request_tool_after_preemptive_check(
+        self, mock_openai, mock_check_avail, db_session, conversation
+    ):
         """If the AI still asks to run the tool, we execute it again and return follow-up flow."""
-        _add_user_message(db_session, conversation, "book me a botox appointment tomorrow")
+        _add_user_message(
+            db_session, conversation, "book me a botox appointment tomorrow"
+        )
 
         availability_output = _build_availability_output()
         mock_check_avail.return_value = availability_output
 
         mock_openai.return_value = _mock_ai_response_with_tool_call(
             "check_availability",
-            {"date": availability_output["date"], "service_type": availability_output["service_type"]},
+            {
+                "date": availability_output["date"],
+                "service_type": availability_output["service_type"],
+            },
         )
 
         content, message = MessagingService.generate_ai_response(
@@ -256,15 +277,16 @@ class TestEndToEndBookingFlow:
     ):
         """Test full flow: user request → AI calls check_availability → stores offers."""
         # Setup user message
-        _add_user_message(db_session, conversation, "book me a botox appointment for Nov 20")
+        _add_user_message(
+            db_session, conversation, "book me a botox appointment for Nov 20"
+        )
 
         availability_output = _build_availability_output("2025-11-20")
         mock_check_avail.return_value = availability_output
 
         # Mock AI to call check_availability
         mock_openai.return_value = _mock_ai_response_with_tool_call(
-            "check_availability",
-            {"date": "2025-11-20", "service_type": "botox"}
+            "check_availability", {"date": "2025-11-20", "service_type": "botox"}
         )
 
         # Mock calendar service (not needed for this test but prevents errors)
@@ -272,9 +294,7 @@ class TestEndToEndBookingFlow:
 
         # Execute
         content, message = MessagingService.generate_ai_response(
-            db_session,
-            conversation.id,
-            "sms"
+            db_session, conversation.id, "sms"
         )
 
         # Preemptive call + AI requested call
@@ -316,8 +336,15 @@ class TestDeterministicBooking:
             },
         )
 
-        selection_message = _add_user_message(db_session, conversation, "Option 1 sounds perfect")
-        assert SlotSelectionManager.capture_selection(db_session, conversation, selection_message) is True
+        selection_message = _add_user_message(
+            db_session, conversation, "Option 1 sounds perfect"
+        )
+        assert (
+            SlotSelectionManager.capture_selection(
+                db_session, conversation, selection_message
+            )
+            is True
+        )
 
         mock_calendar.return_value = Mock()
         mock_book.return_value = {
@@ -352,7 +379,9 @@ class TestNonBookingRequests:
 
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
-    def test_info_request_allows_text_response(self, mock_openai, mock_check_avail, db_session, conversation):
+    def test_info_request_allows_text_response(
+        self, mock_openai, mock_check_avail, db_session, conversation
+    ):
         """Informational questions should bypass check_availability entirely."""
         _add_user_message(db_session, conversation, "What services do you offer?")
 
@@ -363,9 +392,7 @@ class TestNonBookingRequests:
 
         # Execute
         content, message = MessagingService.generate_ai_response(
-            db_session,
-            conversation.id,
-            "sms"
+            db_session, conversation.id, "sms"
         )
 
         # Verify
@@ -376,7 +403,9 @@ class TestNonBookingRequests:
 
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
-    def test_greeting_allows_text_response(self, mock_openai, mock_check_avail, db_session, conversation):
+    def test_greeting_allows_text_response(
+        self, mock_openai, mock_check_avail, db_session, conversation
+    ):
         """Greetings should not kick off availability checks."""
         _add_user_message(db_session, conversation, "Hi there!")
 
@@ -387,9 +416,7 @@ class TestNonBookingRequests:
 
         # Execute
         content, message = MessagingService.generate_ai_response(
-            db_session,
-            conversation.id,
-            "sms"
+            db_session, conversation.id, "sms"
         )
 
         # Verify
@@ -402,7 +429,9 @@ class TestPromptEffectiveness:
     """Test that the critical prompt rules are effective."""
 
     @patch("messaging_service.openai_client.chat.completions.create")
-    def test_prompt_includes_critical_rules(self, mock_openai, db_session, conversation):
+    def test_prompt_includes_critical_rules(
+        self, mock_openai, db_session, conversation
+    ):
         """Test that system prompt includes critical rules about tool calling."""
         _add_user_message(db_session, conversation, "schedule appointment")
 
@@ -418,4 +447,7 @@ class TestPromptEffectiveness:
         system_message = next((m for m in messages if m["role"] == "system"), None)
         assert system_message is not None
         assert "CRITICAL RULES" in system_message["content"]
-        assert "NEVER state availability times without first calling check_availability" in system_message["content"]
+        assert (
+            "NEVER state availability times without first calling check_availability"
+            in system_message["content"]
+        )

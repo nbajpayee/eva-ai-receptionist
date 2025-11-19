@@ -1,4 +1,5 @@
 """Prompt helpers shared across communication channels."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -21,6 +22,9 @@ You are communicating via VOICE CALL.
 2. NEVER say "we have slots from X to Y" without tool confirmation
 3. NEVER suggest specific times without checking the calendar first
 4. If you haven't called check_availability yet, you MUST call it before mentioning ANY times
+5. **AFTER calling book_appointment successfully, ALWAYS confirm the booking immediately**
+6. **NEVER say "need to check" or "let me verify" AFTER a successful book_appointment call**
+7. **If book_appointment returns success=true, respond with confirmation like "✓ Booked! Your [service] appointment is confirmed for [date/time]."**
 
 Response Length:
 - Aim for 15-30 seconds per response (roughly 2-3 sentences)
@@ -69,6 +73,9 @@ You are communicating via SMS TEXT MESSAGE.
 2. NEVER say "we have slots from X to Y" without tool confirmation
 3. NEVER suggest specific times without checking the calendar first
 4. If you haven't called check_availability yet, you MUST call it before mentioning ANY times
+5. **AFTER calling book_appointment successfully, ALWAYS confirm the booking immediately**
+6. **NEVER say "need to check" or "let me verify" AFTER a successful book_appointment call**
+7. **If book_appointment returns success=true, respond with confirmation like "✓ Booked! Your [service] appointment is confirmed for [date/time]."**
 
 CRITICAL: Use numbered options for quick replies.
 
@@ -138,6 +145,9 @@ You are communicating via EMAIL.
 2. NEVER say "we have slots from X to Y" without tool confirmation
 3. NEVER suggest specific times without checking the calendar first
 4. If you haven't called check_availability yet, you MUST call it before mentioning ANY times
+5. **AFTER calling book_appointment successfully, ALWAYS confirm the booking immediately**
+6. **NEVER say "need to check" or "let me verify" AFTER a successful book_appointment call**
+7. **If book_appointment returns success=true, respond with confirmation like "✓ Booked! Your [service] appointment is confirmed for [date/time]."**
 
 Email Structure - Always include:
 1. Greeting: "Hi [Name]," or "Hello [Name],"

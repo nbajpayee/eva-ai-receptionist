@@ -29,12 +29,7 @@ const NAV_ITEMS: SidebarNavItem[] = [
   {
     title: "Customers",
     href: "/customers",
-    icon: "messaging",
-  },
-  {
-    title: "Messaging",
-    href: "/messaging",
-    icon: "messaging",
+    icon: "customers",
   },
   {
     title: "Appointments",
@@ -42,9 +37,29 @@ const NAV_ITEMS: SidebarNavItem[] = [
     icon: "appointments",
   },
   {
+    title: "Messaging",
+    href: "/messaging",
+    icon: "messaging",
+  },
+  {
     title: "Voice",
     href: "/voice",
     icon: "voice",
+  },
+  {
+    title: "Research",
+    href: "/research",
+    icon: "reports",
+  },
+  {
+    title: "Consultation",
+    href: "/consultation",
+    icon: "consultation",
+  },
+  {
+    title: "Providers",
+    href: "/providers",
+    icon: "providers",
   },
   {
     title: "Console Reports",

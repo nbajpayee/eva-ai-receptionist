@@ -33,7 +33,9 @@ def _make_conversation(session, *, channel: str = "sms") -> Conversation:
     return conversation
 
 
-def _log_message(session, conversation: Conversation, content: str, *, source: str) -> CommunicationMessage:
+def _log_message(
+    session, conversation: Conversation, content: str, *, source: str
+) -> CommunicationMessage:
     message = CommunicationMessage(
         conversation_id=conversation.id,
         direction="inbound",

@@ -1,9 +1,10 @@
 """Google Calendar integration service for managing appointments."""
+
 import logging
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 try:  # pragma: no cover - import guard for optional dependency environments
     from google.auth.transport.requests import Request
@@ -11,6 +12,7 @@ try:  # pragma: no cover - import guard for optional dependency environments
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError  # type: ignore
+
     GOOGLE_API_IMPORT_ERROR: Optional[Exception] = None
 except Exception as exc:  # noqa: BLE001 - capture environment issues early
     Request = None  # type: ignore[assignment]
@@ -27,15 +29,21 @@ except Exception as exc:  # noqa: BLE001 - capture environment issues early
 
 import pytz
 
-from config import get_settings, SERVICES
+from config import get_settings
+
+# Import SERVICES as fallback for backward compatibility
+try:
+    from config import SERVICES as FALLBACK_SERVICES
+except ImportError:
+    FALLBACK_SERVICES = {}
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
 # If modifying these scopes, delete the token.json file.
-SCOPES = ['https://www.googleapis.com/auth/calendar']
+SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
-EASTERN_TZ = pytz.timezone('America/New_York')
+EASTERN_TZ = pytz.timezone("America/New_York")
 
 
 def _resolve_path(path_str: str) -> Path:
@@ -75,9 +83,7 @@ class GoogleCalendarService:
         token_path = _resolve_path(settings.GOOGLE_TOKEN_FILE)
 
         if token_path.exists():
-            self.creds = Credentials.from_authorized_user_file(
-                str(token_path), SCOPES
-            )
+            self.creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
 
         # If there are no (valid) credentials available, let the user log in
         if not self.creds or not self.creds.valid:
@@ -87,8 +93,7 @@ class GoogleCalendarService:
             else:
                 if not credentials_path.exists():
                     message = (
-                        "Google credentials file not found: "
-                        f"{credentials_path}"
+                        "Google credentials file not found: " f"{credentials_path}"
                     )
                     logger.error(message)
                     raise FileNotFoundError(message)
@@ -98,26 +103,28 @@ class GoogleCalendarService:
                 self.creds = flow.run_local_server(port=0)
 
             # Save the credentials for the next run
-            with open(token_path, 'w') as token:
+            with open(token_path, "w") as token:
                 token.write(self.creds.to_json())
                 logger.info("Saved new Google Calendar OAuth token to %s", token_path)
 
-        self.service = build('calendar', 'v3', credentials=self.creds)
+        self.service = build("calendar", "v3", credentials=self.creds)
         logger.info("Initialized Google Calendar service client")
 
     def get_available_slots(
         self,
         date: datetime,
         service_type: str,
-        duration_minutes: Optional[int] = None
+        duration_minutes: Optional[int] = None,
+        services_dict: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get available time slots for a specific date and service.
 
         Args:
             date: The date to check availability
-            service_type: Type of service (key from SERVICES config)
+            service_type: Type of service (key from services_dict)
             duration_minutes: Duration override, uses service default if not provided
+            services_dict: Optional services dictionary (uses FALLBACK_SERVICES if not provided)
 
         Returns:
             List of available time slots with start and end times
@@ -133,39 +140,56 @@ class GoogleCalendarService:
         try:
             # Get service duration
             if duration_minutes is None:
-                service = SERVICES.get(service_type)
+                services = (
+                    services_dict if services_dict is not None else FALLBACK_SERVICES
+                )
+                service = services.get(service_type)
                 if not service:
                     raise ValueError(f"Unknown service type: {service_type}")
                 duration_minutes = service["duration_minutes"]
 
             # Define business hours (9 AM to 7 PM)
-            start_time = datetime.combine(date.date(), datetime.min.time().replace(hour=9))
-            end_time = datetime.combine(date.date(), datetime.min.time().replace(hour=19))
+            start_time = datetime.combine(
+                date.date(), datetime.min.time().replace(hour=9)
+            )
+            end_time = datetime.combine(
+                date.date(), datetime.min.time().replace(hour=19)
+            )
 
             # Make timezone aware (using Eastern time)
             start_time = EASTERN_TZ.localize(start_time)
             end_time = EASTERN_TZ.localize(end_time)
 
             # Get existing events for the day
-            events_result = self.service.events().list(
-                calendarId=settings.GOOGLE_CALENDAR_ID,
-                timeMin=start_time.isoformat(),
-                timeMax=end_time.isoformat(),
-                singleEvents=True,
-                orderBy='startTime'
-            ).execute()
+            events_result = (
+                self.service.events()
+                .list(
+                    calendarId=settings.GOOGLE_CALENDAR_ID,
+                    timeMin=start_time.isoformat(),
+                    timeMax=end_time.isoformat(),
+                    singleEvents=True,
+                    orderBy="startTime",
+                )
+                .execute()
+            )
 
-            events = events_result.get('items', [])
+            events = events_result.get("items", [])
 
             # Convert events to busy periods
             busy_periods = []
             for event in events:
-                start = event['start'].get('dateTime', event['start'].get('date'))
-                end = event['end'].get('dateTime', event['end'].get('date'))
-                busy_periods.append({
-                    'start': datetime.fromisoformat(start.replace('Z', '+00:00')).astimezone(EASTERN_TZ),
-                    'end': datetime.fromisoformat(end.replace('Z', '+00:00')).astimezone(EASTERN_TZ)
-                })
+                start = event["start"].get("dateTime", event["start"].get("date"))
+                end = event["end"].get("dateTime", event["end"].get("date"))
+                busy_periods.append(
+                    {
+                        "start": datetime.fromisoformat(
+                            start.replace("Z", "+00:00")
+                        ).astimezone(EASTERN_TZ),
+                        "end": datetime.fromisoformat(
+                            end.replace("Z", "+00:00")
+                        ).astimezone(EASTERN_TZ),
+                    }
+                )
 
             # Generate available slots
             available_slots = []
@@ -178,27 +202,33 @@ class GoogleCalendarService:
                 # Check if slot overlaps with any busy period
                 is_available = True
                 for busy in busy_periods:
-                    if (current_time < busy['end'] and slot_end > busy['start']):
+                    if current_time < busy["end"] and slot_end > busy["start"]:
                         is_available = False
                         # Jump to end of busy period
-                        current_time = busy['end']
+                        current_time = busy["end"]
                         break
 
                 if is_available:
-                    available_slots.append({
-                        'start': current_time.isoformat(),
-                        'end': slot_end.isoformat(),
-                        'start_time': current_time.strftime('%I:%M %p'),
-                        'end_time': slot_end.strftime('%I:%M %p')
-                    })
-                    current_time += timedelta(minutes=30)  # Move to next 30-min interval
+                    available_slots.append(
+                        {
+                            "start": current_time.isoformat(),
+                            "end": slot_end.isoformat(),
+                            "start_time": current_time.strftime("%I:%M %p"),
+                            "end_time": slot_end.strftime("%I:%M %p"),
+                        }
+                    )
+                    current_time += timedelta(
+                        minutes=30
+                    )  # Move to next 30-min interval
                 else:
                     continue
 
             return available_slots
 
         except HttpError as error:
-            logger.exception("Google Calendar API error while fetching slots: %s", error)
+            logger.exception(
+                "Google Calendar API error while fetching slots: %s", error
+            )
             return []
 
     def book_appointment(
@@ -210,7 +240,8 @@ class GoogleCalendarService:
         customer_phone: str,
         service_type: str,
         provider: Optional[str] = None,
-        notes: Optional[str] = None
+        notes: Optional[str] = None,
+        services_dict: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """
         Book an appointment in Google Calendar.
@@ -224,19 +255,21 @@ class GoogleCalendarService:
             service_type: Type of service
             provider: Provider name (optional)
             notes: Special requests or notes
+            services_dict: Optional services dictionary (uses FALLBACK_SERVICES if not provided)
 
         Returns:
             Google Calendar event ID if successful, None otherwise
         """
         try:
-            service_info = SERVICES.get(service_type, {})
-            service_name = service_info.get('name', service_type)
+            services = services_dict if services_dict is not None else FALLBACK_SERVICES
+            service_info = services.get(service_type, {})
+            service_name = service_info.get("name", service_type)
 
             # Create event
-            summary = f'{service_name} - {customer_name}'
+            summary = f"{service_name} - {customer_name}"
             event = {
-                'summary': summary,
-                'description': f"""
+                "summary": summary,
+                "description": f"""
 Service: {service_name}
 Customer: {customer_name}
 Phone: {customer_phone}
@@ -244,36 +277,35 @@ Email: {customer_email}
 Provider: {provider or 'Not specified'}
 Notes: {notes or 'None'}
 """.strip(),
-                'start': {
-                    'dateTime': start_time.astimezone(EASTERN_TZ).isoformat(),
-                    'timeZone': 'America/New_York',
+                "start": {
+                    "dateTime": start_time.astimezone(EASTERN_TZ).isoformat(),
+                    "timeZone": "America/New_York",
                 },
-                'end': {
-                    'dateTime': end_time.astimezone(EASTERN_TZ).isoformat(),
-                    'timeZone': 'America/New_York',
+                "end": {
+                    "dateTime": end_time.astimezone(EASTERN_TZ).isoformat(),
+                    "timeZone": "America/New_York",
                 },
-                'attendees': [
-                    {'email': customer_email} if customer_email else None
-                ],
-                'reminders': {
-                    'useDefault': False,
-                    'overrides': [
-                        {'method': 'email', 'minutes': 24 * 60},  # 1 day before
-                        {'method': 'popup', 'minutes': 60},  # 1 hour before
+                "attendees": [{"email": customer_email} if customer_email else None],
+                "reminders": {
+                    "useDefault": False,
+                    "overrides": [
+                        {"method": "email", "minutes": 24 * 60},  # 1 day before
+                        {"method": "popup", "minutes": 60},  # 1 hour before
                     ],
                 },
             }
 
             # Remove None attendees
-            event['attendees'] = [a for a in event['attendees'] if a is not None]
+            event["attendees"] = [a for a in event["attendees"] if a is not None]
 
             # Insert event
-            event = self.service.events().insert(
-                calendarId=settings.GOOGLE_CALENDAR_ID,
-                body=event
-            ).execute()
+            event = (
+                self.service.events()
+                .insert(calendarId=settings.GOOGLE_CALENDAR_ID, body=event)
+                .execute()
+            )
 
-            event_id = event.get('id')
+            event_id = event.get("id")
             if event_id:
                 return event_id
 
@@ -312,38 +344,50 @@ Notes: {notes or 'None'}
         window_end = (end_time + timedelta(minutes=1)).astimezone(EASTERN_TZ)
 
         try:
-            events_result = self.service.events().list(
-                calendarId=settings.GOOGLE_CALENDAR_ID,
-                timeMin=window_start.isoformat(),
-                timeMax=window_end.isoformat(),
-                singleEvents=True,
-                orderBy='startTime',
-            ).execute()
-        except HttpError as lookup_error:  # pragma: no cover - defensive
-            logger.exception(
-                "Google Calendar fallback lookup failed: %s", lookup_error
+            events_result = (
+                self.service.events()
+                .list(
+                    calendarId=settings.GOOGLE_CALENDAR_ID,
+                    timeMin=window_start.isoformat(),
+                    timeMax=window_end.isoformat(),
+                    singleEvents=True,
+                    orderBy="startTime",
+                )
+                .execute()
             )
+        except HttpError as lookup_error:  # pragma: no cover - defensive
+            logger.exception("Google Calendar fallback lookup failed: %s", lookup_error)
             return None
 
-        for event in events_result.get('items', []):
-            event_id = event.get('id')
+        for event in events_result.get("items", []):
+            event_id = event.get("id")
             if not event_id:
                 continue
 
-            event_summary = event.get('summary') or ""
+            event_summary = event.get("summary") or ""
             if event_summary.strip() != summary.strip():
                 continue
 
-            raw_start = event.get('start', {}).get('dateTime') or event.get('start', {}).get('date')
+            raw_start = event.get("start", {}).get("dateTime") or event.get(
+                "start", {}
+            ).get("date")
             if not raw_start:
                 continue
 
             try:
-                event_start = datetime.fromisoformat(raw_start.replace('Z', '+00:00'))
+                event_start = datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
             except ValueError:
                 continue
 
-            if abs((event_start.astimezone(EASTERN_TZ) - start_time.astimezone(EASTERN_TZ)).total_seconds()) <= 60:
+            if (
+                abs(
+                    (
+                        event_start.astimezone(EASTERN_TZ)
+                        - start_time.astimezone(EASTERN_TZ)
+                    ).total_seconds()
+                )
+                <= 60
+            ):
                 return event_id
 
         return None
@@ -352,8 +396,7 @@ Notes: {notes or 'None'}
         """Cancel an appointment in Google Calendar."""
         try:
             self.service.events().delete(
-                calendarId=settings.GOOGLE_CALENDAR_ID,
-                eventId=event_id
+                calendarId=settings.GOOGLE_CALENDAR_ID, eventId=event_id
             ).execute()
             return True
 
@@ -362,31 +405,27 @@ Notes: {notes or 'None'}
             return False
 
     def reschedule_appointment(
-        self,
-        event_id: str,
-        new_start_time: datetime,
-        new_end_time: datetime
+        self, event_id: str, new_start_time: datetime, new_end_time: datetime
     ) -> bool:
         """Reschedule an existing appointment."""
         try:
-            event = self.service.events().get(
-                calendarId=settings.GOOGLE_CALENDAR_ID,
-                eventId=event_id
-            ).execute()
+            event = (
+                self.service.events()
+                .get(calendarId=settings.GOOGLE_CALENDAR_ID, eventId=event_id)
+                .execute()
+            )
 
-            event['start'] = {
-                'dateTime': new_start_time.isoformat(),
-                'timeZone': 'America/Los_Angeles',
+            event["start"] = {
+                "dateTime": new_start_time.isoformat(),
+                "timeZone": "America/Los_Angeles",
             }
-            event['end'] = {
-                'dateTime': new_end_time.isoformat(),
-                'timeZone': 'America/Los_Angeles',
+            event["end"] = {
+                "dateTime": new_end_time.isoformat(),
+                "timeZone": "America/Los_Angeles",
             }
 
             self.service.events().update(
-                calendarId=settings.GOOGLE_CALENDAR_ID,
-                eventId=event_id,
-                body=event
+                calendarId=settings.GOOGLE_CALENDAR_ID, eventId=event_id, body=event
             ).execute()
 
             return True
@@ -398,21 +437,22 @@ Notes: {notes or 'None'}
     def get_appointment_details(self, event_id: str) -> Optional[Dict[str, Any]]:
         """Get details of an appointment."""
         try:
-            event = self.service.events().get(
-                calendarId=settings.GOOGLE_CALENDAR_ID,
-                eventId=event_id
-            ).execute()
+            event = (
+                self.service.events()
+                .get(calendarId=settings.GOOGLE_CALENDAR_ID, eventId=event_id)
+                .execute()
+            )
 
-            start = event['start'].get('dateTime', event['start'].get('date'))
-            end = event['end'].get('dateTime', event['end'].get('date'))
+            start = event["start"].get("dateTime", event["start"].get("date"))
+            end = event["end"].get("dateTime", event["end"].get("date"))
 
             return {
-                'id': event['id'],
-                'summary': event.get('summary', ''),
-                'description': event.get('description', ''),
-                'start': datetime.fromisoformat(start.replace('Z', '+00:00')),
-                'end': datetime.fromisoformat(end.replace('Z', '+00:00')),
-                'status': event.get('status', '')
+                "id": event["id"],
+                "summary": event.get("summary", ""),
+                "description": event.get("description", ""),
+                "start": datetime.fromisoformat(start.replace("Z", "+00:00")),
+                "end": datetime.fromisoformat(end.replace("Z", "+00:00")),
+                "status": event.get("status", ""),
             }
 
         except HttpError as error:
@@ -492,10 +532,7 @@ def check_calendar_credentials() -> Dict[str, Any]:
     status["ok"] = (
         status["dependencies_ok"]
         and status["credentials_file"]["exists"]
-        and (
-            status["token_file"]["valid"]
-            or status["token_file"]["needs_refresh"]
-        )
+        and (status["token_file"]["valid"] or status["token_file"]["needs_refresh"])
     )
 
     if status["ok"]:

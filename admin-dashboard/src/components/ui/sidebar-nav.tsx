@@ -8,6 +8,9 @@ import {
   Waves,
   FileBarChart2,
   MessageSquare,
+  Stethoscope,
+  UserCog,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,10 +18,13 @@ import { buttonVariants } from "@/components/ui/button";
 
 const ICONS = {
   dashboard: LayoutDashboard,
+  customers: Users,
   appointments: CalendarDays,
+  messaging: MessageSquare,
+  consultation: Stethoscope,
+  providers: UserCog,
   voice: Waves,
   reports: FileBarChart2,
-  messaging: MessageSquare,
 } satisfies Record<string, LucideIcon>;
 
 export type SidebarNavIconKey = keyof typeof ICONS;

@@ -29,7 +29,7 @@ type CallEvent = {
   id: string;
   event_type: string;
   timestamp: string;
-  data: any;
+  data: Record<string, unknown>;
 };
 
 type Customer = {
@@ -58,6 +58,92 @@ type CallDetails = {
   events: CallEvent[];
 };
 
+type VoiceTranscriptSegment = {
+  speaker: string;
+  text: string;
+  timestamp: string;
+};
+
+type MessagingConversationMessage = {
+  id: string;
+  channel: string;
+  direction: "inbound" | "outbound";
+  content: string;
+  sent_at: string | null;
+  metadata?: Record<string, unknown>;
+  voice?: {
+    transcript_segments?: VoiceTranscriptSegment[] | string | null;
+  };
+};
+
+type ConversationEventsResponse = {
+  id?: string;
+  event_type: string;
+  timestamp: string;
+  details?: Record<string, unknown> | null;
+};
+
+type ConversationResponse = {
+  conversation: {
+    id: string;
+    initiated_at: string;
+    completed_at: string | null;
+    satisfaction_score: number | null;
+    sentiment: string | null;
+    outcome: string | null;
+    metadata?: {
+      legacy_call_session_id?: string | null;
+      session_id?: string | null;
+      phone_number?: string | null;
+      escalated?: boolean;
+      escalation_reason?: string | null;
+    };
+    customer?: Customer | null;
+  };
+  messages?: MessagingConversationMessage[];
+  events: ConversationEventsResponse[];
+};
+
+type ConversationMessagesResponse = {
+  messages: MessagingConversationMessage[];
+};
+
+type TranscriptSegmentLike = Partial<VoiceTranscriptSegment> & Record<string, unknown>;
+
+function normalizeSegments(raw: unknown): VoiceTranscriptSegment[] {
+  if (!raw) {
+    return [];
+  }
+
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((segment): segment is TranscriptSegmentLike => typeof segment === "object" && segment !== null)
+      .map((segment) => ({
+        speaker: typeof segment.speaker === "string" ? segment.speaker : "unknown",
+        text: typeof segment.text === "string" ? segment.text : "",
+        timestamp:
+          typeof segment.timestamp === "string"
+            ? segment.timestamp
+            : typeof segment.timestamp === "number"
+              ? new Date(segment.timestamp * 1000).toISOString()
+              : new Date().toISOString(),
+      }));
+  }
+
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return normalizeSegments(parsed);
+      }
+    } catch {
+      // ignore invalid JSON payloads
+    }
+  }
+
+  return [];
+}
+
 function getAppOrigin(): string {
   if (process.env.NEXT_PUBLIC_SITE_URL) {
     return process.env.NEXT_PUBLIC_SITE_URL;
@@ -83,36 +169,29 @@ async function fetchCallDetails(id: string): Promise<CallDetails | null> {
       throw new Error(`Failed to fetch conversation details: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as ConversationResponse;
 
-    // Map new conversations schema to old CallDetails format
-    const { conversation, messages, events } = data;
+    const { conversation, messages = [], events } = data;
 
     // Extract transcript from voice message content
     let transcript: TranscriptEntry[] = [];
-    const voiceMessage = messages.find((m: any) => m.voice);
-    if (voiceMessage?.voice?.transcript_segments) {
-      // Parse transcript segments
-      const segments = voiceMessage.voice.transcript_segments;
-      if (Array.isArray(segments) && segments.length > 0) {
-        // If transcript_segments is array of parsed objects
-        if (typeof segments[0] === 'object' && 'speaker' in segments[0]) {
-          transcript = segments.map((seg: any) => ({
-            speaker: seg.speaker || 'unknown',
-            text: seg.text || '',
-            timestamp: seg.timestamp || new Date().toISOString()
-          }));
-        } else {
-          // If it's stored as JSON string, try to parse content
-          try {
-            const parsed = JSON.parse(voiceMessage.content || '[]');
-            if (Array.isArray(parsed)) {
-              transcript = parsed;
-            }
-          } catch (e) {
-            console.warn('Failed to parse transcript:', e);
-          }
-        }
+    const voiceMessage = messages.find((message) => message.voice);
+
+    const normalizedVoiceSegments = normalizeSegments(voiceMessage?.voice?.transcript_segments ?? null);
+    if (normalizedVoiceSegments.length > 0) {
+      transcript = normalizedVoiceSegments.map((segment) => ({
+        speaker: segment.speaker,
+        text: segment.text,
+        timestamp: segment.timestamp,
+      }));
+    } else if (voiceMessage?.content) {
+      const fallbackSegments = normalizeSegments(voiceMessage.content);
+      if (fallbackSegments.length > 0) {
+        transcript = fallbackSegments.map((segment) => ({
+          speaker: segment.speaker,
+          text: segment.text,
+          timestamp: segment.timestamp,
+        }));
       }
     }
 
@@ -120,6 +199,13 @@ async function fetchCallDetails(id: string): Promise<CallDetails | null> {
     const duration = conversation.completed_at
       ? Math.floor((new Date(conversation.completed_at).getTime() - new Date(conversation.initiated_at).getTime()) / 1000)
       : 0;
+
+    const normalizedEvents: CallEvent[] = events.map((event, index) => ({
+      id: event.id ?? index.toString(),
+      event_type: event.event_type,
+      timestamp: event.timestamp,
+      data: event.details ?? {},
+    }));
 
     return {
       call: {
@@ -137,12 +223,7 @@ async function fetchCallDetails(id: string): Promise<CallDetails | null> {
       },
       customer: conversation.customer || null,
       transcript,
-      events: events.map((event: any, index: number) => ({
-        id: typeof event.id === "string" ? event.id : index.toString(),
-        event_type: event.event_type,
-        timestamp: event.timestamp,
-        data: event.details,
-      })),
+      events: normalizedEvents,
     };
   } catch (error) {
     console.error("Error fetching conversation details:", error);
@@ -161,16 +242,7 @@ async function fetchConversationMessages(conversationId: string): Promise<Commun
       return [];
     }
 
-    const data = (await response.json()) as {
-      messages: Array<{
-        id: string;
-        channel: string;
-        direction: "inbound" | "outbound";
-        content: string;
-        sent_at: string | null;
-        metadata?: Record<string, unknown>;
-      }>;
-    };
+    const data = (await response.json()) as ConversationMessagesResponse;
 
     return data.messages.map((message) => ({
       id: message.id,

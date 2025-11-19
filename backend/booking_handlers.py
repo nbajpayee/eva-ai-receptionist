@@ -1,14 +1,28 @@
 """Shared booking handler utilities for conversational agents."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, time
+from datetime import datetime, time, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from config import PROVIDERS, SERVICES
+# Import SERVICES and PROVIDERS as fallbacks for backward compatibility
+try:
+    from config import PROVIDERS as FALLBACK_PROVIDERS
+    from config import SERVICES as FALLBACK_SERVICES
+except ImportError:
+    FALLBACK_PROVIDERS = {}
+    FALLBACK_SERVICES = {}
+
+# Aliases for backward compatibility
+SERVICES = FALLBACK_SERVICES
+PROVIDERS = FALLBACK_PROVIDERS
+
 from booking.time_utils import EASTERN_TZ, parse_iso_datetime, to_eastern
 
 
-def _ensure_future_datetime(start_dt: datetime, reference: Optional[datetime] = None) -> Tuple[datetime, bool]:
+def _ensure_future_datetime(
+    start_dt: datetime, reference: Optional[datetime] = None
+) -> Tuple[datetime, bool]:
     """Ensure the requested start datetime is not in the past.
 
     Returns the adjusted datetime (always Eastern) and whether an adjustment occurred.
@@ -26,14 +40,18 @@ def _ensure_future_datetime(start_dt: datetime, reference: Optional[datetime] = 
     return candidate, adjusted
 
 
-def normalize_datetime_to_future(value: str, *, reference: Optional[datetime] = None) -> str:
+def normalize_datetime_to_future(
+    value: str, *, reference: Optional[datetime] = None
+) -> str:
     """Return ISO string ensured to represent a future datetime in Eastern time."""
     start_dt = parse_iso_datetime(value)
     adjusted_dt, _ = _ensure_future_datetime(start_dt, reference)
     return adjusted_dt.isoformat()
 
 
-def normalize_date_to_future(value: str, *, reference: Optional[datetime] = None) -> str:
+def normalize_date_to_future(
+    value: str, *, reference: Optional[datetime] = None
+) -> str:
     """Return YYYY-MM-DD string ensured to represent a present/future date (Eastern)."""
     try:
         parsed_date = datetime.strptime(value.strip(), "%Y-%m-%d").date()
@@ -61,7 +79,9 @@ def _format_time_display(dt: datetime) -> str:
     return formatted
 
 
-def _build_availability_windows(slots: List[Dict[str, Any]]) -> Tuple[List[Tuple[datetime, datetime]], List[Dict[str, Any]]]:
+def _build_availability_windows(
+    slots: List[Dict[str, Any]],
+) -> Tuple[List[Tuple[datetime, datetime]], List[Dict[str, Any]]]:
     if not slots:
         return [], []
 
@@ -136,7 +156,9 @@ def _availability_summary_text(windows: List[Dict[str, Any]]) -> str:
     return f"We have availability from {joined}."
 
 
-def _suggested_slots(slots: List[Dict[str, Any]], raw_windows: List[Tuple[datetime, datetime]]) -> List[Dict[str, Any]]:
+def _suggested_slots(
+    slots: List[Dict[str, Any]], raw_windows: List[Tuple[datetime, datetime]]
+) -> List[Dict[str, Any]]:
     if not slots:
         return []
 
@@ -200,6 +222,7 @@ def handle_check_availability(
     date: str,
     service_type: str,
     limit: Optional[int] = 10,
+    services_dict: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return available slots for the given date/service."""
     try:
@@ -208,7 +231,9 @@ def handle_check_availability(
         return {"success": False, "error": f"Invalid date format: {exc}"}
 
     try:
-        slots = calendar_service.get_available_slots(target_date, service_type)
+        slots = calendar_service.get_available_slots(
+            target_date, service_type, services_dict=services_dict
+        )
     except Exception as exc:  # noqa: BLE001
         return {"success": False, "error": f"Failed to fetch availability: {exc}"}
 
@@ -241,7 +266,8 @@ def handle_check_availability(
     if limit is not None and limit > 0:
         limited_slots = future_slots[:limit]
 
-    service_config = SERVICES.get(service_type, {})
+    services = services_dict if services_dict is not None else FALLBACK_SERVICES
+    service_config = services.get(service_type, {})
     return {
         "success": True,
         "available_slots": limited_slots,
@@ -264,6 +290,7 @@ def handle_book_appointment(
     service_type: str,
     provider: Optional[str] = None,
     notes: Optional[str] = None,
+    services_dict: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Book an appointment and return booking metadata."""
     try:
@@ -273,7 +300,8 @@ def handle_book_appointment(
 
     start_dt, was_adjusted = _ensure_future_datetime(start_dt_original)
 
-    service_config = SERVICES.get(service_type)
+    services = services_dict if services_dict is not None else FALLBACK_SERVICES
+    service_config = services.get(service_type)
     if not service_config:
         return {"success": False, "error": f"Unknown service type: {service_type}"}
 
@@ -296,9 +324,7 @@ def handle_book_appointment(
         }
 
     available_slots = (
-        availability.get("all_slots")
-        or availability.get("available_slots")
-        or []
+        availability.get("all_slots") or availability.get("available_slots") or []
     )
     requested_start_iso = start_dt.isoformat()
 
@@ -337,6 +363,7 @@ def handle_book_appointment(
             customer_email=email_value,
             customer_phone=customer_phone,
             service_type=service_type,
+            services_dict=services_dict,
             provider=provider,
             notes=notes,
         )
@@ -382,7 +409,10 @@ def handle_reschedule_appointment(
         return {"success": False, "error": f"Invalid new start time: {exc}"}
 
     if not service_type:
-        return {"success": False, "error": "Service type required to determine duration"}
+        return {
+            "success": False,
+            "error": "Service type required to determine duration",
+        }
 
     service_config = SERVICES.get(service_type)
     if not service_config:
@@ -429,7 +459,11 @@ def handle_cancel_appointment(
     if not success:
         return {"success": False, "error": "Calendar cancellation failed"}
 
-    return {"success": True, "appointment_id": appointment_id, "reason": cancellation_reason}
+    return {
+        "success": True,
+        "appointment_id": appointment_id,
+        "reason": cancellation_reason,
+    }
 
 
 def handle_get_service_info(*, service_type: str) -> Dict[str, Any]:
@@ -462,12 +496,17 @@ def handle_search_customer(*, phone: str) -> Dict[str, Any]:
     }
 
 
-def handle_get_appointment_details(calendar_service, *, appointment_id: str) -> Dict[str, Any]:
+def handle_get_appointment_details(
+    calendar_service, *, appointment_id: str
+) -> Dict[str, Any]:
     """Fetch appointment metadata from the calendar service."""
     try:
         details = calendar_service.get_appointment_details(appointment_id)
     except Exception as exc:  # noqa: BLE001
-        return {"success": False, "error": f"Failed to fetch appointment details: {exc}"}
+        return {
+            "success": False,
+            "error": f"Failed to fetch appointment details: {exc}",
+        }
 
     if not details:
         return {"success": False, "error": "Appointment not found"}

@@ -1,4 +1,5 @@
 """Tests for messaging service customer update behavior."""
+
 from __future__ import annotations
 
 from typing import Callable, Tuple
