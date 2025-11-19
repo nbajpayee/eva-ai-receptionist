@@ -2,10 +2,32 @@
  * Utility functions for exporting data to CSV and PNG formats
  */
 
+// Type definitions
+type CSVRow = Record<string, string | number | boolean | null | undefined>;
+
+type FunnelStage = {
+  name: string;
+  value: number;
+  color: string;
+};
+
+type HeatmapCell = {
+  day: number;
+  hour: number;
+  value: number;
+};
+
+type TimeSeriesDataPoint = {
+  timestamp: string;
+  total_calls?: number;
+  appointments_booked?: number;
+  avg_satisfaction_score?: number;
+};
+
 /**
  * Convert array of objects to CSV string
  */
-export function convertToCSV(data: Record<string, any>[]): string {
+export function convertToCSV(data: CSVRow[]): string {
   if (data.length === 0) return "";
 
   // Get headers from first object
@@ -35,7 +57,7 @@ export function convertToCSV(data: Record<string, any>[]): string {
 /**
  * Download data as CSV file
  */
-export function downloadCSV(data: Record<string, any>[], filename: string): void {
+export function downloadCSV(data: CSVRow[], filename: string): void {
   const csv = convertToCSV(data);
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
@@ -102,7 +124,7 @@ export async function exportChartAsPNG(
 /**
  * Format funnel data for CSV export
  */
-export function formatFunnelDataForCSV(stages: any[]): Record<string, any>[] {
+export function formatFunnelDataForCSV(stages: FunnelStage[]): CSVRow[] {
   return stages.map((stage, index) => ({
     stage: index + 1,
     name: stage.name,
@@ -117,7 +139,7 @@ export function formatFunnelDataForCSV(stages: any[]): Record<string, any>[] {
 /**
  * Format heatmap data for CSV export
  */
-export function formatHeatmapDataForCSV(data: any[]): Record<string, any>[] {
+export function formatHeatmapDataForCSV(data: HeatmapCell[]): CSVRow[] {
   const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
   return data.map((cell) => ({
@@ -130,7 +152,7 @@ export function formatHeatmapDataForCSV(data: any[]): Record<string, any>[] {
 /**
  * Format time series data for CSV export
  */
-export function formatTimeSeriesDataForCSV(data: any[]): Record<string, any>[] {
+export function formatTimeSeriesDataForCSV(data: TimeSeriesDataPoint[]): CSVRow[] {
   return data.map((item) => ({
     timestamp: item.timestamp,
     total_calls: item.total_calls ?? 0,
@@ -139,4 +161,17 @@ export function formatTimeSeriesDataForCSV(data: any[]): Record<string, any>[] {
       ? item.avg_satisfaction_score.toFixed(2)
       : "N/A",
   }));
+}
+
+/**
+ * Helper to export data to CSV (alias for downloadCSV for compatibility)
+ */
+export const exportToCSV = downloadCSV;
+
+/**
+ * Generate export filename with timestamp
+ */
+export function generateExportFilename(prefix: string): string {
+  const timestamp = new Date().toISOString().split('T')[0];
+  return `${prefix}-${timestamp}`;
 }
