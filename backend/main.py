@@ -2336,23 +2336,133 @@ async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
     Twilio SMS webhook handler.
     Receives incoming SMS, finds or creates conversation, generates AI response.
     """
-    # TODO: Implement Twilio SMS handling
-    # 1. Parse incoming SMS from Twilio webhook
-    # 2. Find or create customer by phone number
-    # 3. Find active SMS conversation or create new one
-    # 4. Add inbound message
-    # 5. Generate AI response (use GPT-4 or similar)
-    # 6. Send outbound SMS via Twilio
-    # 7. Add outbound message to conversation
-    # 8. If conversation complete, score satisfaction
-
     from twilio.twiml.messaging_response import MessagingResponse
+    from research.outbound_service import OutboundService
+    import logging
 
-    # Placeholder response
-    resp = MessagingResponse()
-    resp.message("Thank you for contacting us! This feature is coming soon.")
+    logger = logging.getLogger(__name__)
 
-    return Response(content=str(resp), media_type="application/xml")
+    try:
+        # Parse Twilio webhook data
+        form_data = await request.form()
+        from_number = form_data.get("From")
+        to_number = form_data.get("To")
+        message_body = form_data.get("Body")
+        message_sid = form_data.get("MessageSid")
+
+        if not from_number or not message_body:
+            logger.error("Missing required Twilio webhook fields")
+            resp = MessagingResponse()
+            return Response(content=str(resp), media_type="application/xml")
+
+        logger.info(f"Received SMS from {from_number}: {message_body[:100]}")
+
+        # Find or create customer by phone
+        customer = db.query(Customer).filter(Customer.phone == from_number).first()
+        if not customer:
+            # Create new customer
+            customer = Customer(
+                name=f"Customer {from_number[-4:]}",  # Temp name
+                phone=from_number,
+                created_at=datetime.utcnow()
+            )
+            db.add(customer)
+            db.commit()
+            db.refresh(customer)
+            logger.info(f"Created new customer {customer.id} for {from_number}")
+
+        # Find active SMS conversation (non-campaign) or create new
+        conversation = MessagingService.find_active_conversation(
+            db=db,
+            customer_id=customer.id,
+            channel="sms"
+        )
+
+        # If no active conversation, create one
+        if not conversation:
+            conversation = MessagingService.create_conversation(
+                db=db,
+                customer_id=customer.id,
+                channel="sms",
+                metadata={"twilio_from": to_number}
+            )
+            logger.info(f"Created new SMS conversation {conversation.id}")
+
+        # Add inbound message
+        inbound_msg = AnalyticsService.add_message(
+            db=db,
+            conversation_id=conversation.id,
+            direction="inbound",
+            content=message_body,
+            metadata={"message_sid": message_sid}
+        )
+
+        # Add SMS details
+        AnalyticsService.add_sms_details(
+            db=db,
+            message_id=inbound_msg.id,
+            from_number=from_number,
+            to_number=to_number,
+            provider_message_id=message_sid,
+            delivery_status="received"
+        )
+
+        # Update conversation last activity
+        conversation.last_activity_at = datetime.utcnow()
+        db.commit()
+
+        # Check if this is a response to a campaign
+        if conversation.campaign_id:
+            outbound_service = OutboundService(db_session_factory=SessionLocal)
+            outbound_service.check_customer_response(db, conversation.id)
+            logger.info(f"Tracked campaign response for conversation {conversation.id}")
+
+        # Generate AI response
+        ai_response_text = MessagingService.generate_ai_response(
+            db=db,
+            conversation_id=conversation.id,
+            user_message=message_body
+        )
+
+        # Add outbound message to database
+        outbound_msg = MessagingService.add_assistant_message(
+            db=db,
+            conversation=conversation,
+            content=ai_response_text,
+            metadata={}
+        )
+
+        # TODO: In production, send SMS via Twilio:
+        # from twilio.rest import Client
+        # client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+        # sent_message = client.messages.create(
+        #     body=ai_response_text,
+        #     from_=to_number,
+        #     to=from_number
+        # )
+        # # Update SMS details with sent message SID
+        # AnalyticsService.add_sms_details(
+        #     db=db,
+        #     message_id=outbound_msg.id,
+        #     from_number=to_number,
+        #     to_number=from_number,
+        #     provider_message_id=sent_message.sid,
+        #     delivery_status="sent"
+        # )
+
+        logger.info(f"Generated AI response for conversation {conversation.id}")
+
+        # Return TwiML response with AI-generated text
+        resp = MessagingResponse()
+        resp.message(ai_response_text)
+        return Response(content=str(resp), media_type="application/xml")
+
+    except Exception as e:
+        logger.error(f"Error handling SMS webhook: {str(e)}", exc_info=True)
+        # Return generic error response
+        resp = MessagingResponse()
+        resp.message(f"We're experiencing technical difficulties. Please call us at {settings.MED_SPA_PHONE}")
+        return Response(content=str(resp), media_type="application/xml")
 
 
 @app.post("/api/webhooks/sendgrid/email")
@@ -2361,17 +2471,150 @@ async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db))
     SendGrid inbound email webhook handler.
     Receives incoming emails, finds or creates conversation, generates AI response.
     """
-    # TODO: Implement SendGrid email handling
-    # 1. Parse incoming email from SendGrid webhook
-    # 2. Find or create customer by email address
-    # 3. Find email thread or create new conversation
-    # 4. Add inbound message
-    # 5. Generate AI response
-    # 6. Send outbound email via SendGrid
-    # 7. Add outbound message to conversation
-    # 8. If conversation complete, score satisfaction
+    from research.outbound_service import OutboundService
+    import logging
 
-    return {"status": "received", "message": "Email webhook handler coming soon"}
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Parse SendGrid webhook data (multipart form data)
+        form_data = await request.form()
+        from_email = form_data.get("from")
+        to_email = form_data.get("to")
+        subject = form_data.get("subject", "")
+        text_body = form_data.get("text", "")
+        html_body = form_data.get("html", "")
+
+        if not from_email or not (text_body or html_body):
+            logger.error("Missing required SendGrid webhook fields")
+            return {"status": "error", "message": "Missing required fields"}
+
+        logger.info(f"Received email from {from_email}: {subject}")
+
+        # Extract plain email address (remove name if present)
+        import re
+        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', from_email)
+        from_email_clean = email_match.group(0) if email_match else from_email
+
+        # Find or create customer by email
+        customer = db.query(Customer).filter(Customer.email == from_email_clean).first()
+        if not customer:
+            # Create new customer
+            customer = Customer(
+                name=f"Customer ({from_email_clean})",  # Temp name
+                email=from_email_clean,
+                created_at=datetime.utcnow()
+            )
+            db.add(customer)
+            db.commit()
+            db.refresh(customer)
+            logger.info(f"Created new customer {customer.id} for {from_email_clean}")
+
+        # Find active email conversation or create new
+        conversation = MessagingService.find_active_conversation(
+            db=db,
+            customer_id=customer.id,
+            channel="email"
+        )
+
+        # If no active conversation, create one
+        if not conversation:
+            conversation = MessagingService.create_conversation(
+                db=db,
+                customer_id=customer.id,
+                channel="email",
+                subject=subject,
+                metadata={"original_subject": subject}
+            )
+            logger.info(f"Created new email conversation {conversation.id}")
+
+        # Add inbound message (prefer text over HTML for AI processing)
+        message_content = text_body if text_body else html_body
+        inbound_msg = AnalyticsService.add_message(
+            db=db,
+            conversation_id=conversation.id,
+            direction="inbound",
+            content=message_content,
+            metadata={"subject": subject}
+        )
+
+        # Add email details
+        AnalyticsService.add_email_details(
+            db=db,
+            message_id=inbound_msg.id,
+            subject=subject,
+            from_address=from_email_clean,
+            to_address=to_email or settings.MED_SPA_EMAIL,
+            body_text=text_body,
+            body_html=html_body,
+            provider_message_id=form_data.get("message-id", f"sg_{inbound_msg.id}"),
+            delivery_status="received"
+        )
+
+        # Update conversation last activity
+        conversation.last_activity_at = datetime.utcnow()
+        db.commit()
+
+        # Check if this is a response to a campaign
+        if conversation.campaign_id:
+            outbound_service = OutboundService(db_session_factory=SessionLocal)
+            outbound_service.check_customer_response(db, conversation.id)
+            logger.info(f"Tracked campaign response for conversation {conversation.id}")
+
+        # Generate AI response
+        ai_response_text = MessagingService.generate_ai_response(
+            db=db,
+            conversation_id=conversation.id,
+            user_message=message_content
+        )
+
+        # Add outbound message to database
+        reply_subject = f"Re: {subject}" if not subject.startswith("Re:") else subject
+        outbound_msg = MessagingService.add_assistant_message(
+            db=db,
+            conversation=conversation,
+            content=ai_response_text,
+            metadata={"subject": reply_subject}
+        )
+
+        # TODO: In production, send email via SendGrid:
+        # from sendgrid import SendGridAPIClient
+        # from sendgrid.helpers.mail import Mail
+        # sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
+        # message = Mail(
+        #     from_email=to_email or settings.MED_SPA_EMAIL,
+        #     to_emails=from_email_clean,
+        #     subject=reply_subject,
+        #     html_content=f"<p>{ai_response_text.replace(chr(10), '<br>')}</p>"
+        # )
+        # response = sg.send(message)
+        # # Update email details with sent message ID
+        # AnalyticsService.add_email_details(
+        #     db=db,
+        #     message_id=outbound_msg.id,
+        #     subject=reply_subject,
+        #     from_address=to_email or settings.MED_SPA_EMAIL,
+        #     to_address=from_email_clean,
+        #     body_text=ai_response_text,
+        #     body_html=f"<p>{ai_response_text.replace(chr(10), '<br>')}</p>",
+        #     provider_message_id=response.headers.get('X-Message-Id'),
+        #     delivery_status="sent"
+        # )
+
+        logger.info(f"Generated AI email response for conversation {conversation.id}")
+
+        return {
+            "status": "success",
+            "conversation_id": str(conversation.id),
+            "message": "Email received and response generated"
+        }
+
+    except Exception as e:
+        logger.error(f"Error handling email webhook: {str(e)}", exc_info=True)
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 
 # ==================== Provider Analytics Endpoints ====================
