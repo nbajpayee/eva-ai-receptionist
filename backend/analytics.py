@@ -4,25 +4,27 @@ Analytics service for call tracking, sentiment analysis, and satisfaction scorin
 
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, Optional, List
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from typing import Any, Dict, List, Optional
+
 from openai import OpenAI
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from config import get_settings
 from database import (
-    CallSession,
-    CallEvent,
-    Customer,
     Appointment,
-    DailyMetric,
-    Conversation,
+    CallEvent,
+    CallSession,
+    CommunicationEvent,
     CommunicationMessage,
-    VoiceCallDetails,
+    Conversation,
+    Customer,
+    DailyMetric,
     EmailDetails,
     SMSDetails,
-    CommunicationEvent,
+    VoiceCallDetails,
 )
-from config import get_settings
 
 settings = get_settings()
 openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
@@ -983,7 +985,8 @@ Consider:
             List of time-series data points
         """
         from datetime import timedelta
-        from sqlalchemy import func, cast, Integer
+
+        from sqlalchemy import Integer, cast, func
 
         now = _utcnow()
 
@@ -1150,6 +1153,7 @@ Consider:
             List of heatmap cells with day/hour/value
         """
         from datetime import timedelta
+
         from sqlalchemy import extract
 
         now = _utcnow()

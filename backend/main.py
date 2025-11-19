@@ -2,31 +2,33 @@
 Main FastAPI application for Med Spa Voice AI.
 """
 
-import uuid
 import asyncio
 import logging
+import uuid
+from datetime import datetime
+from typing import Dict, List, Optional
+
 from fastapi import (
-    FastAPI,
-    WebSocket,
-    WebSocketDisconnect,
     Depends,
+    FastAPI,
     HTTPException,
     Query,
     Request,
+    WebSocket,
+    WebSocketDisconnect,
 )
-from starlette.websockets import WebSocketState
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
-from typing import Optional, Dict, List
-from datetime import datetime
-from config import get_settings
-from database import get_db, init_db, Customer, Appointment, CallSession, Conversation
-from realtime_client import RealtimeClient
+from sqlalchemy.orm import Session, joinedload
+from starlette.websockets import WebSocketState
+
 from analytics import AnalyticsService
 from api_messaging import messaging_router
 from calendar_service import check_calendar_credentials
+from config import get_settings
+from database import Appointment, CallSession, Conversation, Customer, get_db, init_db
+from realtime_client import RealtimeClient
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -597,8 +599,9 @@ async def get_daily_analytics(
     days: int = Query(30, ge=1, le=90), db: Session = Depends(get_db)
 ):
     """Get daily analytics for the specified number of days."""
-    from database import DailyMetric
     from datetime import timedelta
+
+    from database import DailyMetric
 
     start_date = datetime.utcnow().date() - timedelta(days=days)
 
@@ -810,6 +813,7 @@ async def get_communications(
     Replaces /api/admin/calls for omnichannel support.
     """
     from sqlalchemy.orm import joinedload
+
     from database import Conversation, Customer
 
     query = db.query(Conversation).options(joinedload(Conversation.customer))
@@ -877,9 +881,11 @@ async def get_conversation_detail(conversation_id: str, db: Session = Depends(ge
     """
     Get full conversation with all messages, events, and channel-specific details.
     """
-    from sqlalchemy.orm import joinedload
-    from database import Conversation
     from uuid import UUID
+
+    from sqlalchemy.orm import joinedload
+
+    from database import Conversation
 
     try:
         conv_uuid = UUID(conversation_id)
