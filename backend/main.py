@@ -2160,7 +2160,9 @@ async def create_service(service_data: ServiceCreate, db: Session = Depends(get_
     except IntegrityError as e:
         db.rollback()
         if "slug" in str(e):
-            raise HTTPException(status_code=400, detail="Service with this slug already exists")
+            raise HTTPException(
+                status_code=400, detail="Service with this slug already exists"
+            )
         raise HTTPException(status_code=400, detail="Database integrity error")
 
 
@@ -2191,7 +2193,9 @@ async def update_service(
     except IntegrityError as e:
         db.rollback()
         if "slug" in str(e):
-            raise HTTPException(status_code=400, detail="Service with this slug already exists")
+            raise HTTPException(
+                status_code=400, detail="Service with this slug already exists"
+            )
         raise HTTPException(status_code=400, detail="Database integrity error")
 
 
@@ -2276,7 +2280,9 @@ async def create_provider(provider_data: ProviderCreate, db: Session = Depends(g
     except IntegrityError as e:
         db.rollback()
         if "email" in str(e):
-            raise HTTPException(status_code=400, detail="Provider with this email already exists")
+            raise HTTPException(
+                status_code=400, detail="Provider with this email already exists"
+            )
         raise HTTPException(status_code=400, detail="Database integrity error")
 
 
@@ -2306,7 +2312,9 @@ async def update_provider(
     except IntegrityError as e:
         db.rollback()
         if "email" in str(e):
-            raise HTTPException(status_code=400, detail="Provider with this email already exists")
+            raise HTTPException(
+                status_code=400, detail="Provider with this email already exists"
+            )
         raise HTTPException(status_code=400, detail="Database integrity error")
 
 
