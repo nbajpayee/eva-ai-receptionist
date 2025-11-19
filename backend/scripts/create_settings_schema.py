@@ -31,13 +31,8 @@ def create_settings_tables():
     existing_tables = inspector.get_table_names()
 
     # Tables we want to create
-    settings_tables = [
-        "med_spa_settings",
-        "locations",
-        "business_hours",
-        "services",
-        "providers",
-    ]
+    # Note: 'providers' table already exists from main branch - not creating it here
+    settings_tables = ["med_spa_settings", "locations", "business_hours", "services"]
 
     # Check which tables need to be created
     tables_to_create = [t for t in settings_tables if t not in existing_tables]
