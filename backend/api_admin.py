@@ -18,8 +18,14 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from analytics import AnalyticsService
-from database import (Appointment, CallSession, CommunicationMessage,
-                      Conversation, Customer, get_db)
+from database import (
+    Appointment,
+    CallSession,
+    CommunicationMessage,
+    Conversation,
+    Customer,
+    get_db,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 

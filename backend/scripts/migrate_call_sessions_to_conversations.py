@@ -43,8 +43,14 @@ else:
 
 from config import get_settings  # noqa: E402
 from database import CommunicationEvent  # noqa: E402
-from database import (CallEvent, CallSession, CommunicationMessage,
-                      Conversation, SessionLocal, VoiceCallDetails)
+from database import (
+    CallEvent,
+    CallSession,
+    CommunicationMessage,
+    Conversation,
+    SessionLocal,
+    VoiceCallDetails,
+)
 
 
 def infer_outcome_from_session(session: CallSession) -> str:

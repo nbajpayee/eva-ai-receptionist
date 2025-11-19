@@ -21,9 +21,12 @@ from booking.manager import SlotSelectionManager
 from booking.time_utils import to_eastern
 from database import Appointment, Customer
 from messaging_service import MessagingService
-from tests.conftest import (build_availability_response,
-                            build_booking_response, mock_ai_response_with_text,
-                            mock_ai_response_with_tool_call)
+from tests.conftest import (
+    build_availability_response,
+    build_booking_response,
+    mock_ai_response_with_text,
+    mock_ai_response_with_tool_call,
+)
 
 
 @pytest.mark.integration

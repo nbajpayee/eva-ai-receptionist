@@ -17,8 +17,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from config import get_settings
-from database import (Appointment, Base, CommunicationMessage, Conversation,
-                      Customer)
+from database import Appointment, Base, CommunicationMessage, Conversation, Customer
 
 fake = Faker()
 

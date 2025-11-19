@@ -22,17 +22,19 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from analytics import AnalyticsService, openai_client
 from booking.manager import SlotSelectionError, SlotSelectionManager
-from booking.time_utils import (EASTERN_TZ, format_for_display,
-                                parse_iso_datetime)
-from booking_handlers import (handle_book_appointment,
-                              handle_cancel_appointment,
-                              handle_check_availability,
-                              handle_get_appointment_details,
-                              handle_get_provider_info,
-                              handle_get_service_info,
-                              handle_reschedule_appointment,
-                              handle_search_customer, normalize_date_to_future,
-                              normalize_datetime_to_future)
+from booking.time_utils import EASTERN_TZ, format_for_display, parse_iso_datetime
+from booking_handlers import (
+    handle_book_appointment,
+    handle_cancel_appointment,
+    handle_check_availability,
+    handle_get_appointment_details,
+    handle_get_provider_info,
+    handle_get_service_info,
+    handle_reschedule_appointment,
+    handle_search_customer,
+    normalize_date_to_future,
+    normalize_datetime_to_future,
+)
 from booking_tools import get_booking_tools
 from calendar_service import get_calendar_service
 from config import SERVICES, get_settings

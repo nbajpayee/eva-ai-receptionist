@@ -12,9 +12,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from config import get_settings
-from database import (Appointment, CallEvent, CallSession, CommunicationEvent,
-                      CommunicationMessage, Conversation, Customer,
-                      DailyMetric, EmailDetails, SMSDetails, VoiceCallDetails)
+from database import (
+    Appointment,
+    CallEvent,
+    CallSession,
+    CommunicationEvent,
+    CommunicationMessage,
+    Conversation,
+    Customer,
+    DailyMetric,
+    EmailDetails,
+    SMSDetails,
+    VoiceCallDetails,
+)
 
 settings = get_settings()
 openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)

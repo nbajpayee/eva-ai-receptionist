@@ -8,8 +8,15 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from fastapi import (Depends, FastAPI, HTTPException, Query, Request,
-                     WebSocket, WebSocketDisconnect)
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
@@ -22,8 +29,7 @@ from api_admin import router as admin_router
 from api_messaging import messaging_router
 from calendar_service import check_calendar_credentials
 from config import get_settings
-from database import (Appointment, CallSession, Conversation, Customer, get_db,
-                      init_db)
+from database import Appointment, CallSession, Conversation, Customer, get_db, init_db
 from realtime_client import RealtimeClient
 
 settings = get_settings()

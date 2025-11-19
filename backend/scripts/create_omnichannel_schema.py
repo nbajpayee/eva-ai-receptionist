@@ -33,8 +33,15 @@ else:
 
 from config import get_settings  # noqa: E402
 from database import CommunicationEvent  # noqa: E402
-from database import (Base, CommunicationMessage, Conversation, EmailDetails,
-                      SMSDetails, VoiceCallDetails, engine)
+from database import (
+    Base,
+    CommunicationMessage,
+    Conversation,
+    EmailDetails,
+    SMSDetails,
+    VoiceCallDetails,
+    engine,
+)
 
 
 def create_omnichannel_tables():

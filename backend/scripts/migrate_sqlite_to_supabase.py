@@ -43,8 +43,7 @@ from sqlalchemy import create_engine  # noqa: E402
 
 from config import get_settings  # noqa: E402
 from database import CallSession  # noqa: E402
-from database import (Appointment, Base, CallEvent, Customer, DailyMetric,
-                      engine)
+from database import Appointment, Base, CallEvent, Customer, DailyMetric, engine
 
 MODELS_IN_ORDER: Tuple[Type[Base], ...] = (
     Customer,
