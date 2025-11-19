@@ -8,6 +8,8 @@ import {
   Waves,
   FileBarChart2,
   MessageSquare,
+  Stethoscope,
+  UserCog,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -19,6 +21,8 @@ const ICONS = {
   customers: Users,
   appointments: CalendarDays,
   messaging: MessageSquare,
+  consultation: Stethoscope,
+  providers: UserCog,
   voice: Waves,
   reports: FileBarChart2,
 } satisfies Record<string, LucideIcon>;
