@@ -468,10 +468,36 @@ def handle_cancel_appointment(
 
 def handle_get_service_info(*, service_type: str) -> Dict[str, Any]:
     """Fetch service metadata for conversational use."""
-    service = SERVICES.get(service_type)
-    if not service:
-        return {"success": False, "error": "Service not found"}
-    return {"success": True, "service": service}
+    # First try exact match (case-insensitive)
+    service_type_lower = service_type.lower()
+
+    # Try direct lookup with normalized key
+    service = SERVICES.get(service_type_lower)
+    if service:
+        return {"success": True, "service": service}
+
+    # Try fuzzy matching on service names and common aliases
+    aliases = {
+        "botox": ["botox", "botulinum toxin", "botulinum toxin treatment", "neurotoxin"],
+        "dermal_fillers": ["dermal fillers", "fillers", "hyaluronic acid", "juvederm", "restylane"],
+        "laser_hair_removal": ["laser hair removal", "laser hair", "hair removal"],
+        "chemical_peels": ["chemical peels", "chemical peel", "peel"],
+        "microneedling": ["microneedling", "micro needling", "collagen induction"],
+        "hydrafacial": ["hydrafacial", "hydra facial", "facial"],
+        "prp_therapy": ["prp", "prp therapy", "platelet rich plasma", "vampire facial"],
+        "coolsculpting": ["coolsculpting", "cool sculpting", "cryolipolysis", "fat freezing"],
+        "medical_grade_facials": ["medical grade facial", "medical facial", "medical grade facials"],
+    }
+
+    # Search through aliases
+    for service_key, alias_list in aliases.items():
+        for alias in alias_list:
+            if alias in service_type_lower:
+                service = SERVICES.get(service_key)
+                if service:
+                    return {"success": True, "service": service}
+
+    return {"success": False, "error": "Service not found"}
 
 
 def handle_get_provider_info(*, provider_name: Optional[str] = None) -> Dict[str, Any]:

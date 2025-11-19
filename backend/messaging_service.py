@@ -264,6 +264,12 @@ class MessagingService:
         if not customer or not customer.name or not customer.phone:
             return None
 
+        # Don't book with placeholder/guest data - force AI to collect real info
+        if "guest" in customer.name.lower() or "console" in customer.name.lower():
+            return None
+        if customer.phone and ("+15555550100" in customer.phone or "+1234567890" in customer.phone):
+            return None
+
         last_message = MessagingService._latest_customer_message(conversation)
         if not last_message or not last_message.content:
             return None

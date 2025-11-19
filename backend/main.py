@@ -182,7 +182,9 @@ async def voice_websocket(
     )
 
     # Initialize OpenAI Realtime client
-    realtime_client = RealtimeClient(db=db, conversation=conversation)
+    realtime_client = RealtimeClient(
+        session_id=session_id, db=db, conversation=conversation
+    )
 
     session_finalized = False
     finalize_lock = asyncio.Lock()

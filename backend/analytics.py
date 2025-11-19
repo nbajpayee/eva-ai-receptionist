@@ -713,6 +713,39 @@ Consider these factors:
         return email_details
 
     @staticmethod
+    def add_communication_event(
+        db: Session,
+        conversation_id: Any,  # UUID
+        event_type: str,
+        message_id: Optional[Any] = None,  # UUID
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Add an event to a conversation.
+
+        Args:
+            db: Database session
+            conversation_id: Conversation UUID
+            event_type: Type of event
+            message_id: Optional message UUID this event relates to
+            details: Optional event details as JSON
+        """
+        from database import CommunicationEvent
+        from datetime import datetime, timezone
+
+        event = CommunicationEvent(
+            conversation_id=conversation_id,
+            message_id=message_id,
+            event_type=event_type,
+            timestamp=datetime.now(timezone.utc),
+            details=details or {},
+        )
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+        return event
+
+    @staticmethod
     def complete_conversation(
         db: Session, conversation_id: Any, outcome: Optional[str] = None  # UUID
     ):
