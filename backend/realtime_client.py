@@ -110,10 +110,7 @@ class RealtimeClient:
             metadata["legacy_call_session_id"] = legacy_call_session_id
 
         conversation = AnalyticsService.create_conversation(
-            db=self.db,
-            customer_id=None,
-            channel="voice",
-            metadata=metadata,
+            db=self.db, customer_id=None, channel="voice", metadata=metadata,
         )
         return conversation
 
@@ -444,9 +441,7 @@ class RealtimeClient:
                 normalization_arguments = dict(arguments)
                 try:
                     normalized_args, _ = SlotSelectionManager.enforce_booking(
-                        self.db,
-                        self.conversation,
-                        normalization_arguments,
+                        self.db, self.conversation, normalization_arguments,
                     )
                 except SlotSelectionError as exc:
                     logger.warning("Voice booking enforcement failed: %s", exc)
@@ -478,12 +473,11 @@ class RealtimeClient:
                     formatted_voice_time = None
                     if start_iso:
                         formatted_voice_time = format_for_display(
-                            parse_iso_datetime(start_iso),
-                            channel="voice",
+                            parse_iso_datetime(start_iso), channel="voice",
                         )
-                        booking_result["spoken_confirmation"] = (
-                            f"Perfect! I've booked your {booking_result.get('service', service_type)} appointment for {formatted_voice_time}."
-                        )
+                        booking_result[
+                            "spoken_confirmation"
+                        ] = f"Perfect! I've booked your {booking_result.get('service', service_type)} appointment for {formatted_voice_time}."
 
                     self.session_data["customer_data"] = {
                         "name": customer_name,
@@ -945,9 +939,7 @@ class RealtimeClient:
         if self._infer_slot_selection_from_text(message, sanitized):
             self._refresh_conversation()
 
-    def _infer_slot_selection_from_text(
-        self, message: Any, text: str
-    ) -> bool:
+    def _infer_slot_selection_from_text(self, message: Any, text: str) -> bool:
         """Attempt to infer slot selection from natural-language time references."""
         pending = SlotSelectionManager.get_pending_slot_offers(
             self.db, self.conversation, enforce_expiry=False
@@ -967,7 +959,9 @@ class RealtimeClient:
         matched_slot: Optional[Dict[str, Any]] = None
 
         if time_preferences:
-            matched_index, matched_slot = self._match_slot_by_time(slots, time_preferences)
+            matched_index, matched_slot = self._match_slot_by_time(
+                slots, time_preferences
+            )
 
         if matched_slot is None:
             matched_index, matched_slot = self._match_slot_by_label(
@@ -983,9 +977,9 @@ class RealtimeClient:
         pending_metadata["selected_slot"] = matched_slot
         pending_metadata["selected_by_message_id"] = str(getattr(message, "id", ""))
         pending_metadata["selected_content_preview"] = text[:120]
-        pending_metadata["selected_at"] = datetime.utcnow().replace(
-            tzinfo=pytz.utc
-        ).isoformat()
+        pending_metadata["selected_at"] = (
+            datetime.utcnow().replace(tzinfo=pytz.utc).isoformat()
+        )
 
         metadata["pending_slot_offers"] = pending_metadata
         SlotSelectionManager.persist_conversation_metadata(

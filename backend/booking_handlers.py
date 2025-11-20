@@ -423,9 +423,7 @@ def handle_reschedule_appointment(
 
     try:
         success = calendar_service.reschedule_appointment(
-            event_id=appointment_id,
-            new_start_time=new_start,
-            new_end_time=new_end,
+            event_id=appointment_id, new_start_time=new_start, new_end_time=new_end,
         )
     except Exception as exc:  # noqa: BLE001
         return {"success": False, "error": f"Reschedule failed: {exc}"}
@@ -445,10 +443,7 @@ def handle_reschedule_appointment(
 
 
 def handle_cancel_appointment(
-    calendar_service,
-    *,
-    appointment_id: str,
-    cancellation_reason: Optional[str] = None,
+    calendar_service, *, appointment_id: str, cancellation_reason: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Cancel an appointment by ID."""
     try:
@@ -478,15 +473,35 @@ def handle_get_service_info(*, service_type: str) -> Dict[str, Any]:
 
     # Try fuzzy matching on service names and common aliases
     aliases = {
-        "botox": ["botox", "botulinum toxin", "botulinum toxin treatment", "neurotoxin"],
-        "dermal_fillers": ["dermal fillers", "fillers", "hyaluronic acid", "juvederm", "restylane"],
+        "botox": [
+            "botox",
+            "botulinum toxin",
+            "botulinum toxin treatment",
+            "neurotoxin",
+        ],
+        "dermal_fillers": [
+            "dermal fillers",
+            "fillers",
+            "hyaluronic acid",
+            "juvederm",
+            "restylane",
+        ],
         "laser_hair_removal": ["laser hair removal", "laser hair", "hair removal"],
         "chemical_peels": ["chemical peels", "chemical peel", "peel"],
         "microneedling": ["microneedling", "micro needling", "collagen induction"],
         "hydrafacial": ["hydrafacial", "hydra facial", "facial"],
         "prp_therapy": ["prp", "prp therapy", "platelet rich plasma", "vampire facial"],
-        "coolsculpting": ["coolsculpting", "cool sculpting", "cryolipolysis", "fat freezing"],
-        "medical_grade_facials": ["medical grade facial", "medical facial", "medical grade facials"],
+        "coolsculpting": [
+            "coolsculpting",
+            "cool sculpting",
+            "cryolipolysis",
+            "fat freezing",
+        ],
+        "medical_grade_facials": [
+            "medical grade facial",
+            "medical facial",
+            "medical grade facials",
+        ],
     }
 
     # Search through aliases

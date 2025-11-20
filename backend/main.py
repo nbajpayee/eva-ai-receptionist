@@ -310,8 +310,12 @@ def _serialize_service(service: Service) -> Dict[str, Any]:
         "slug": service.slug,
         "description": service.description,
         "duration_minutes": service.duration_minutes,
-        "price_min": float(service.price_min) if service.price_min is not None else None,
-        "price_max": float(service.price_max) if service.price_max is not None else None,
+        "price_min": float(service.price_min)
+        if service.price_min is not None
+        else None,
+        "price_max": float(service.price_max)
+        if service.price_max is not None
+        else None,
         "price_display": service.price_display,
         "prep_instructions": service.prep_instructions,
         "aftercare_instructions": service.aftercare_instructions,
@@ -344,7 +348,8 @@ def _parse_hire_date(value: Optional[str]) -> Optional[datetime]:
         return datetime.fromisoformat(value)
     except ValueError as exc:  # noqa: BLE001
         raise HTTPException(
-            status_code=400, detail="Invalid hire_date format. Use ISO 8601 date string."
+            status_code=400,
+            detail="Invalid hire_date format. Use ISO 8601 date string.",
         ) from exc
 
 
@@ -355,8 +360,7 @@ def _parse_time(value: Optional[str]) -> Optional[time]:
         return time.fromisoformat(value)
     except ValueError as exc:  # noqa: BLE001
         raise HTTPException(
-            status_code=400,
-            detail="Invalid time format. Use HH:MM or HH:MM:SS",
+            status_code=400, detail="Invalid time format. Use HH:MM or HH:MM:SS",
         ) from exc
 
 
@@ -366,15 +370,21 @@ def _serialize_business_hours(hours: List[BusinessHours]) -> List[Dict[str, Any]
         serialized.append(
             {
                 "day_of_week": entry.day_of_week,
-                "open_time": entry.open_time.strftime("%H:%M") if entry.open_time else None,
-                "close_time": entry.close_time.strftime("%H:%M") if entry.close_time else None,
+                "open_time": entry.open_time.strftime("%H:%M")
+                if entry.open_time
+                else None,
+                "close_time": entry.close_time.strftime("%H:%M")
+                if entry.close_time
+                else None,
                 "is_closed": entry.is_closed,
             }
         )
     return serialized
 
 
-def _serialize_location(location: Location, hours: List[BusinessHours]) -> Dict[str, Any]:
+def _serialize_location(
+    location: Location, hours: List[BusinessHours]
+) -> Dict[str, Any]:
     return {
         "id": location.id,
         "name": location.name,
@@ -386,7 +396,9 @@ def _serialize_location(location: Location, hours: List[BusinessHours]) -> Dict[
     }
 
 
-def _write_business_hours(db: Session, location_id: int, entries: List[BusinessHourEntry]) -> None:
+def _write_business_hours(
+    db: Session, location_id: int, entries: List[BusinessHourEntry]
+) -> None:
     normalized: List[Dict[str, Any]] = []
     for entry in entries:
         if entry.is_closed:
@@ -443,8 +455,12 @@ def _serialize_consultation(consultation: InPersonConsultation) -> Dict[str, Any
         "satisfaction_score": consultation.satisfaction_score,
         "sentiment": consultation.sentiment,
         "ai_summary": consultation.ai_summary,
-        "created_at": consultation.created_at.isoformat() if consultation.created_at else None,
-        "ended_at": consultation.ended_at.isoformat() if consultation.ended_at else None,
+        "created_at": consultation.created_at.isoformat()
+        if consultation.created_at
+        else None,
+        "ended_at": consultation.ended_at.isoformat()
+        if consultation.ended_at
+        else None,
     }
 
 
@@ -543,14 +559,14 @@ def update_service(
 def delete_service(service_id: int, db: Session = Depends(get_db)):
     deleted = SettingsService.delete_service(db, service_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Service not found or already inactive")
+        raise HTTPException(
+            status_code=404, detail="Service not found or already inactive"
+        )
     return {"success": True}
 
 
 @app.get("/api/admin/providers", response_model=List[ProviderResponse])
-def list_providers(
-    active_only: bool = Query(False), db: Session = Depends(get_db)
-):
+def list_providers(active_only: bool = Query(False), db: Session = Depends(get_db)):
     providers = SettingsService.get_all_providers(db, active_only=active_only)
     return [_serialize_provider(provider) for provider in providers]
 
@@ -590,14 +606,14 @@ def update_provider(
 def delete_provider(provider_id: str, db: Session = Depends(get_db)):
     deleted = SettingsService.delete_provider(db, provider_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Provider not found or already inactive")
+        raise HTTPException(
+            status_code=404, detail="Provider not found or already inactive"
+        )
     return {"success": True}
 
 
 @app.get("/api/admin/locations", response_model=List[LocationResponse])
-def list_locations(
-    active_only: bool = Query(False), db: Session = Depends(get_db)
-):
+def list_locations(active_only: bool = Query(False), db: Session = Depends(get_db)):
     locations = SettingsService.get_all_locations(db, active_only=active_only)
     serialized = []
     for location in locations:
@@ -615,7 +631,9 @@ def get_location(location_id: int, db: Session = Depends(get_db)):
     return _serialize_location(location, hours)
 
 
-@app.get("/api/admin/locations/{location_id}/hours", response_model=List[BusinessHourEntry])
+@app.get(
+    "/api/admin/locations/{location_id}/hours", response_model=List[BusinessHourEntry]
+)
 def get_location_hours(location_id: int, db: Session = Depends(get_db)):
     location = SettingsService.get_location(db, location_id)
     if not location:
@@ -660,9 +678,7 @@ def update_location(
 
 @app.put("/api/admin/locations/{location_id}/hours", response_model=LocationResponse)
 def update_location_hours(
-    location_id: int,
-    entries: List[BusinessHourEntry],
-    db: Session = Depends(get_db),
+    location_id: int, entries: List[BusinessHourEntry], db: Session = Depends(get_db),
 ):
     location = SettingsService.get_location(db, location_id)
     if not location:
@@ -687,20 +703,20 @@ def delete_location(location_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/providers", response_model=ProvidersSummaryResponse)
 def get_providers_summary(
-    days: int = Query(30, ge=1, le=365),
-    db: Session = Depends(get_db),
+    days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db),
 ):
     service = ProviderAnalyticsService(db)
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
-    summaries = service.get_all_providers_summary(start_date=start_date, end_date=end_date)
+    summaries = service.get_all_providers_summary(
+        start_date=start_date, end_date=end_date
+    )
     return {"providers": summaries, "period_days": days}
 
 
 @app.get("/api/providers/summary", response_model=ProvidersSummaryResponse)
 def get_providers_summary_alias(
-    days: int = Query(30, ge=1, le=365),
-    db: Session = Depends(get_db),
+    days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db),
 ):
     return get_providers_summary(days=days, db=db)
 
@@ -727,8 +743,12 @@ def get_provider_metrics(
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
 
-    summaries = analytics.get_all_providers_summary(start_date=start_date, end_date=end_date)
-    summary = next((item for item in summaries if item["provider_id"] == provider_id), None)
+    summaries = analytics.get_all_providers_summary(
+        start_date=start_date, end_date=end_date
+    )
+    summary = next(
+        (item for item in summaries if item["provider_id"] == provider_id), None
+    )
     if not summary:
         summary = {
             "provider_id": provider_id,
@@ -764,7 +784,9 @@ def get_provider_metrics(
     }
 
 
-@app.get("/api/providers/{provider_id}/insights", response_model=ProviderInsightsResponse)
+@app.get(
+    "/api/providers/{provider_id}/insights", response_model=ProviderInsightsResponse
+)
 def get_provider_insights(
     provider_id: str,
     limit: int = Query(50, ge=1, le=200),
@@ -801,6 +823,7 @@ def get_provider_consultations(
     )
 
     return {"consultations": [_serialize_consultation(c) for c in consultations]}
+
 
 # CORS middleware
 app.add_middleware(
@@ -1050,9 +1073,7 @@ async def voice_websocket(
                 print("📤 Skipping audio send; websocket no longer connected")
                 return
 
-            print(
-                f"📤 Audio callback called, sending {len(audio_b64)} chars to browser"
-            )
+            print(f"📤 Audio callback called, sending {len(audio_b64)} chars to browser")
             await websocket.send_json({"type": "audio", "data": audio_b64})
             print("📤 Audio sent to browser")
 
@@ -1142,8 +1163,7 @@ async def voice_websocket(
             openai_task = asyncio.create_task(handle_openai_messages())
 
             done, pending = await asyncio.wait(
-                {client_task, openai_task},
-                return_when=asyncio.FIRST_COMPLETED,
+                {client_task, openai_task}, return_when=asyncio.FIRST_COMPLETED,
             )
 
             done_tasks = set(done)
