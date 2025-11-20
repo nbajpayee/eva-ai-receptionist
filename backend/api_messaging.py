@@ -135,7 +135,9 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
 
     if conversation is None:
         conversation = MessagingService.find_active_conversation(
-            db=db, customer_id=customer.id, channel=channel,
+            db=db,
+            customer_id=customer.id,
+            channel=channel,
         )
 
     if conversation is None:
@@ -179,7 +181,9 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
     if channel == "sms":
         sms_meta = MessagingService.sms_metadata_for_customer(customer.phone)
         AnalyticsService.add_sms_details(
-            db=db, message_id=inbound_message.id, **sms_meta,
+            db=db,
+            message_id=inbound_message.id,
+            **sms_meta,
         )
     else:
         email_meta = MessagingService.email_metadata_for_customer(
@@ -279,8 +283,11 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
                         result.get("name") == "book_appointment"
                         and not booking_confirmation_message
                     ):
-                        booking_confirmation_message = MessagingService.build_booking_confirmation_message(
-                            channel=channel, tool_output=result.get("output") or {},
+                        booking_confirmation_message = (
+                            MessagingService.build_booking_confirmation_message(
+                                channel=channel,
+                                tool_output=result.get("output") or {},
+                            )
                         )
 
             tool_results[-1]["normalized_arguments"] = normalized_arguments
@@ -357,7 +364,9 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
     if channel == "sms":
         sms_meta_outgoing = MessagingService.sms_metadata_for_assistant(customer.phone)
         AnalyticsService.add_sms_details(
-            db=db, message_id=outbound_message.id, **sms_meta_outgoing,
+            db=db,
+            message_id=outbound_message.id,
+            **sms_meta_outgoing,
         )
     else:
         email_meta_outgoing = MessagingService.email_metadata_for_assistant(

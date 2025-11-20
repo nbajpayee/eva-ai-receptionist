@@ -98,7 +98,9 @@ class TestExpiredSlots:
         }
 
         result1 = handle_check_availability(
-            db_session, date="2025-12-07", service_type="botox",
+            db_session,
+            date="2025-12-07",
+            service_type="botox",
         )
 
         assert result1["success"] is True
@@ -111,7 +113,9 @@ class TestExpiredSlots:
         }
 
         result2 = handle_check_availability(
-            db_session, date="2025-12-07", service_type="botox",
+            db_session,
+            date="2025-12-07",
+            service_type="botox",
         )
 
         # Should reflect updated hours
@@ -136,7 +140,9 @@ class TestExpiredSlots:
         }
 
         result1 = handle_check_availability(
-            db_session, date="2025-12-08", service_type="fillers",
+            db_session,
+            date="2025-12-08",
+            service_type="fillers",
         )
 
         assert len(result1.get("available_slots", [])) > 0
@@ -149,7 +155,9 @@ class TestExpiredSlots:
         }
 
         result2 = handle_check_availability(
-            db_session, date="2025-12-08", service_type="fillers",
+            db_session,
+            date="2025-12-08",
+            service_type="fillers",
         )
 
         assert len(result2.get("available_slots", [])) == 0
@@ -174,7 +182,9 @@ class TestExpiredSlots:
         }
 
         result1 = handle_check_availability(
-            db_session, date="2025-12-09", service_type="botox",
+            db_session,
+            date="2025-12-09",
+            service_type="botox",
         )
 
         assert result1["success"] is True
@@ -187,7 +197,9 @@ class TestExpiredSlots:
         }
 
         result2 = handle_check_availability(
-            db_session, date="2025-12-09", service_type="botox",
+            db_session,
+            date="2025-12-09",
+            service_type="botox",
         )
 
         assert len(result2.get("available_slots", [])) == 0
@@ -251,7 +263,9 @@ class TestExpiredSlots:
         }
 
         result = handle_check_availability(
-            db_session, date="2025-12-10", service_type="botox",
+            db_session,
+            date="2025-12-10",
+            service_type="botox",
         )
 
         # Should offer alternatives

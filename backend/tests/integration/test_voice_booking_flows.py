@@ -39,7 +39,12 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_book_appointment")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_complete_booking_flow_new_customer(
-        self, mock_openai, mock_book, mock_check_avail, db_session, voice_conversation,
+        self,
+        mock_openai,
+        mock_book,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
     ):
         """
         Test complete booking flow for a new customer.
@@ -70,7 +75,9 @@ class TestVoiceBookingFlow:
 
         # Generate AI response (should trigger preemptive check_availability)
         content, message = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         # Verify availability was checked
@@ -124,7 +131,9 @@ class TestVoiceBookingFlow:
         # Generate final response (should auto-book)
         mock_openai.return_value = mock_ai_response_with_text("Confirming booking...")
         final_content, final_message = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         # Verify booking was attempted (may or may not happen depending on implementation)
@@ -137,7 +146,11 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_complete_booking_flow_existing_customer(
-        self, mock_openai, mock_check_avail, db_session, returning_customer,
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        returning_customer,
     ):
         """Test booking flow for an existing customer with history."""
         # Create conversation for returning customer
@@ -166,7 +179,9 @@ class TestVoiceBookingFlow:
         )
 
         content, message = MessagingService.generate_ai_response(
-            db_session, conversation.id, "voice",
+            db_session,
+            conversation.id,
+            "voice",
         )
 
         # Verify customer history is accessible
@@ -184,7 +199,11 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_booking_with_service_selection(
-        self, mock_openai, mock_check_avail, db_session, voice_conversation,
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
     ):
         """Test booking flow when customer asks about multiple services."""
         # User asks about services
@@ -201,7 +220,9 @@ class TestVoiceBookingFlow:
         )
 
         content, message = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         # Verify no preemptive availability check for info query
@@ -226,7 +247,9 @@ class TestVoiceBookingFlow:
         )
 
         content2, message2 = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         # Verify availability was checked for booking intent
@@ -235,7 +258,11 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_booking_with_provider_preference(
-        self, mock_openai, mock_check_avail, db_session, voice_conversation,
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
     ):
         """Test booking flow when customer requests specific provider."""
         _ = AnalyticsService.add_message(
@@ -254,7 +281,9 @@ class TestVoiceBookingFlow:
         )
 
         content, message = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         # Store provider preference in metadata
@@ -273,7 +302,11 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_booking_with_special_requests(
-        self, mock_openai, mock_check_avail, db_session, voice_conversation,
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
     ):
         """Test booking flow with special requests."""
         _ = AnalyticsService.add_message(
@@ -292,7 +325,9 @@ class TestVoiceBookingFlow:
         )
 
         content, message = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         # Store special requests in metadata
@@ -312,7 +347,11 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_booking_multiple_services_same_day(
-        self, mock_openai, mock_check_avail, db_session, voice_conversation,
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
     ):
         """Test booking flow when customer wants multiple services."""
         _ = AnalyticsService.add_message(
@@ -334,7 +373,9 @@ class TestVoiceBookingFlow:
         )
 
         content, message = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         # Verify combined booking intent detected
@@ -351,7 +392,11 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_booking_earliest_available_slot(
-        self, mock_openai, mock_check_avail, db_session, voice_conversation,
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
     ):
         """Test booking flow when customer requests earliest available."""
         _ = AnalyticsService.add_message(
@@ -371,7 +416,9 @@ class TestVoiceBookingFlow:
         )
 
         content, message = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         assert "earliest" in content.lower() or earliest_slot["start_time"] in content
@@ -379,7 +426,11 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_booking_specific_date_time(
-        self, mock_openai, mock_check_avail, db_session, voice_conversation,
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
     ):
         """Test booking flow when customer specifies exact date and time."""
         _ = AnalyticsService.add_message(
@@ -406,7 +457,9 @@ class TestVoiceBookingFlow:
         )
 
         content, message = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         assert "3 PM" in content or "3pm" in content.lower() or "15:00" in content
@@ -414,7 +467,12 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_booking_with_medical_screening(
-        self, mock_openai, mock_check_avail, db_session, voice_conversation, customer,
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
+        customer,
     ):
         """Test booking flow with medical screening questions."""
         # Update customer with medical info
@@ -439,7 +497,9 @@ class TestVoiceBookingFlow:
         )
 
         content, message = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         # Verify medical screening was considered
@@ -449,7 +509,11 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_booking_flow_interruption_recovery(
-        self, mock_openai, mock_check_avail, db_session, voice_conversation,
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
     ):
         """Test booking flow recovery after interruption."""
         # Start booking
@@ -469,7 +533,9 @@ class TestVoiceBookingFlow:
         )
 
         content1, message1 = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         # Simulate interruption and recovery
@@ -490,7 +556,9 @@ class TestVoiceBookingFlow:
         )
 
         content2, message2 = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         # Verify system adapted to changed request
@@ -500,7 +568,12 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_book_appointment")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_booking_slot_taken_during_conversation(
-        self, mock_openai, mock_book, mock_check_avail, db_session, voice_conversation,
+        self,
+        mock_openai,
+        mock_book,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
     ):
         """Test handling when slot is taken during conversation."""
         # Initial availability check
@@ -541,7 +614,11 @@ class TestVoiceBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_booking_past_business_hours(
-        self, mock_openai, mock_check_avail, db_session, voice_conversation,
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
     ):
         """Test booking request outside business hours."""
         _ = AnalyticsService.add_message(
@@ -563,7 +640,9 @@ class TestVoiceBookingFlow:
         )
 
         content, message = MessagingService.generate_ai_response(
-            db_session, voice_conversation.id, "voice",
+            db_session,
+            voice_conversation.id,
+            "voice",
         )
 
         # Verify system offers alternative within business hours

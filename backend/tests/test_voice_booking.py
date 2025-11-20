@@ -136,7 +136,9 @@ def test_enforce_booking_aligns_with_selected_slot(db_session):
         }
 
         normalized_args, adjustments = SlotSelectionManager.enforce_booking(
-            db_session, conversation, arguments,
+            db_session,
+            conversation,
+            arguments,
         )
 
         assert normalized_args["start_time"] == pending["slots"][0]["start"]

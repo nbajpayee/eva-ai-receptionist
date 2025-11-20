@@ -423,7 +423,9 @@ def handle_reschedule_appointment(
 
     try:
         success = calendar_service.reschedule_appointment(
-            event_id=appointment_id, new_start_time=new_start, new_end_time=new_end,
+            event_id=appointment_id,
+            new_start_time=new_start,
+            new_end_time=new_end,
         )
     except Exception as exc:  # noqa: BLE001
         return {"success": False, "error": f"Reschedule failed: {exc}"}
@@ -443,7 +445,10 @@ def handle_reschedule_appointment(
 
 
 def handle_cancel_appointment(
-    calendar_service, *, appointment_id: str, cancellation_reason: Optional[str] = None,
+    calendar_service,
+    *,
+    appointment_id: str,
+    cancellation_reason: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Cancel an appointment by ID."""
     try:

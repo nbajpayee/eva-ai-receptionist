@@ -240,7 +240,13 @@ class TestBookingFailures:
 
     @pytest.mark.parametrize(
         "invalid_email",
-        ["not-an-email", "missing@domain", "@nodomain.com", "spaces in@email.com", "",],
+        [
+            "not-an-email",
+            "missing@domain",
+            "@nodomain.com",
+            "spaces in@email.com",
+            "",
+        ],
     )
     def test_invalid_email_format(self, db_session, customer, invalid_email):
         """Test validation of email formats."""

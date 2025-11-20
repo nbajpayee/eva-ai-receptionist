@@ -54,7 +54,11 @@ class MessagingService:
     _calendar_credentials_logged = False
 
     def __init__(
-        self, *, db_session_factory, calendar_service=None, analytics_service=None,
+        self,
+        *,
+        db_session_factory,
+        calendar_service=None,
+        analytics_service=None,
     ):
         self._db_session_factory = db_session_factory
         self.calendar_service = calendar_service or get_calendar_service()
@@ -130,7 +134,10 @@ class MessagingService:
 
     @staticmethod
     def find_active_conversation(
-        *, db: Session, customer_id: int, channel: str,
+        *,
+        db: Session,
+        customer_id: int,
+        channel: str,
     ) -> Optional[Conversation]:
         return (
             db.query(Conversation)
@@ -153,7 +160,10 @@ class MessagingService:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Conversation:
         conversation = AnalyticsService.create_conversation(
-            db=db, customer_id=customer_id, channel=channel, metadata=metadata or {},
+            db=db,
+            customer_id=customer_id,
+            channel=channel,
+            metadata=metadata or {},
         )
         if subject:
             conversation.subject = subject
@@ -337,7 +347,8 @@ class MessagingService:
             id=tool_call_id,
             type="function",
             function=SimpleNamespace(
-                name="book_appointment", arguments=json.dumps(arguments),
+                name="book_appointment",
+                arguments=json.dumps(arguments),
             ),
         )
 
@@ -393,7 +404,8 @@ class MessagingService:
             SlotSelectionManager.clear_offers(db, conversation)
 
             confirmation = MessagingService.build_booking_confirmation_message(
-                channel=channel, tool_output=output,
+                channel=channel,
+                tool_output=output,
             )
             if not confirmation:
                 confirmation = "✓ Booked! Your appointment is confirmed."
@@ -499,7 +511,9 @@ class MessagingService:
 
     @staticmethod
     def _should_force_availability(
-        db: Session, conversation: Conversation, ai_message: Any,
+        db: Session,
+        conversation: Conversation,
+        ai_message: Any,
     ) -> bool:
         tool_calls = getattr(ai_message, "tool_calls", None) or []
         if tool_calls:
@@ -1017,7 +1031,9 @@ class MessagingService:
                         arguments,
                         selection_adjustments,
                     ) = SlotSelectionManager.enforce_booking(
-                        db, conversation, arguments,
+                        db,
+                        conversation,
+                        arguments,
                     )
                 except SlotSelectionError as exc:
                     output = {
@@ -1072,7 +1088,8 @@ class MessagingService:
                 )
             elif name == "get_appointment_details":
                 output = handle_get_appointment_details(
-                    calendar_service, appointment_id=arguments.get("appointment_id"),
+                    calendar_service,
+                    appointment_id=arguments.get("appointment_id"),
                 )
             elif name == "get_service_info":
                 output = handle_get_service_info(
@@ -1083,7 +1100,9 @@ class MessagingService:
                     provider_name=arguments.get("provider_name"),
                 )
             elif name == "search_customer":
-                output = handle_search_customer(phone=arguments.get("phone", ""),)
+                output = handle_search_customer(
+                    phone=arguments.get("phone", ""),
+                )
             elif name == "get_current_date":
                 output = MessagingService._current_datetime_context()
             else:
@@ -1381,7 +1400,9 @@ class MessagingService:
 
     @staticmethod
     def generate_ai_response(
-        db: Session, conversation_id: UUID, channel: str,
+        db: Session,
+        conversation_id: UUID,
+        channel: str,
     ) -> tuple[str, Any | None]:
         conversation = (
             db.query(Conversation)
@@ -1426,7 +1447,9 @@ class MessagingService:
 
             try:
                 output = handle_check_availability(
-                    calendar_service, date=date, service_type=service_type,
+                    calendar_service,
+                    date=date,
+                    service_type=service_type,
                 )
 
                 if output.get("success"):
@@ -1634,7 +1657,8 @@ class MessagingService:
             # If booking succeeded, force a confirmation message
             if booking_success:
                 confirmation = MessagingService.build_booking_confirmation_message(
-                    channel=channel, tool_output=booking_success,
+                    channel=channel,
+                    tool_output=booking_success,
                 )
                 if confirmation:
                     # Return confirmation directly, don't let AI generate ambiguous text

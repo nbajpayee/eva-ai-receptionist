@@ -54,7 +54,8 @@ class TestSatisfactionScoring:
 
         # Score conversation
         result = AnalyticsService.score_conversation_satisfaction(
-            db=db_session, conversation_id=voice_conversation.id,
+            db=db_session,
+            conversation_id=voice_conversation.id,
         )
 
         assert result.get("satisfaction_score") >= 8
@@ -90,7 +91,8 @@ class TestSatisfactionScoring:
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
-            db=db_session, conversation_id=voice_conversation.id,
+            db=db_session,
+            conversation_id=voice_conversation.id,
         )
 
         assert result.get("satisfaction_score") <= 5
@@ -132,7 +134,8 @@ class TestSatisfactionScoring:
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
-            db=db_session, conversation_id=sms_conversation.id,
+            db=db_session,
+            conversation_id=sms_conversation.id,
         )
 
         assert 5 <= result.get("satisfaction_score", 0) <= 7
@@ -166,7 +169,8 @@ class TestSatisfactionScoring:
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
-            db=db_session, conversation_id=voice_conversation.id,
+            db=db_session,
+            conversation_id=voice_conversation.id,
         )
 
         sentiment = result.get("sentiment", "").lower()
@@ -198,7 +202,8 @@ class TestSatisfactionScoring:
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
-            db=db_session, conversation_id=sms_conversation.id,
+            db=db_session,
+            conversation_id=sms_conversation.id,
         )
 
         assert result.get("satisfaction_score") >= 9
@@ -222,12 +227,17 @@ class TestSatisfactionScoring:
         mock_response = Mock()
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = json.dumps(
-            {"satisfaction_score": 7, "sentiment": "mixed", "outcome": "resolved",}
+            {
+                "satisfaction_score": 7,
+                "sentiment": "mixed",
+                "outcome": "resolved",
+            }
         )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
-            db=db_session, conversation_id=voice_conversation.id,
+            db=db_session,
+            conversation_id=voice_conversation.id,
         )
 
         assert result.get("sentiment") == "mixed"
@@ -250,12 +260,17 @@ class TestSatisfactionScoring:
         mock_response = Mock()
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = json.dumps(
-            {"satisfaction_score": 9, "sentiment": "positive", "outcome": "booked",}
+            {
+                "satisfaction_score": 9,
+                "sentiment": "positive",
+                "outcome": "booked",
+            }
         )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
-            db=db_session, conversation_id=voice_conversation.id,
+            db=db_session,
+            conversation_id=voice_conversation.id,
         )
 
         assert result.get("outcome") == "booked"
@@ -278,12 +293,17 @@ class TestSatisfactionScoring:
         mock_response = Mock()
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = json.dumps(
-            {"satisfaction_score": 7, "sentiment": "neutral", "outcome": "info_only",}
+            {
+                "satisfaction_score": 7,
+                "sentiment": "neutral",
+                "outcome": "info_only",
+            }
         )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
-            db=db_session, conversation_id=sms_conversation.id,
+            db=db_session,
+            conversation_id=sms_conversation.id,
         )
 
         assert result.get("outcome") == "info_only"
@@ -306,12 +326,17 @@ class TestSatisfactionScoring:
         mock_response = Mock()
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = json.dumps(
-            {"satisfaction_score": 4, "sentiment": "negative", "outcome": "escalated",}
+            {
+                "satisfaction_score": 4,
+                "sentiment": "negative",
+                "outcome": "escalated",
+            }
         )
         mock_openai.return_value = mock_response
 
         result = AnalyticsService.score_conversation_satisfaction(
-            db=db_session, conversation_id=voice_conversation.id,
+            db=db_session,
+            conversation_id=voice_conversation.id,
         )
 
         assert result.get("outcome") == "escalated"
@@ -326,12 +351,17 @@ class TestSatisfactionScoring:
         mock_response = Mock()
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = json.dumps(
-            {"satisfaction_score": 8, "sentiment": "positive", "outcome": "booked",}
+            {
+                "satisfaction_score": 8,
+                "sentiment": "positive",
+                "outcome": "booked",
+            }
         )
         mock_openai.return_value = mock_response
 
         AnalyticsService.score_conversation_satisfaction(
-            db=db_session, conversation_id=voice_conversation.id,
+            db=db_session,
+            conversation_id=voice_conversation.id,
         )
 
         # Should call GPT-4 exactly once

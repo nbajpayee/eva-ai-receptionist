@@ -40,7 +40,9 @@ class SlotSelectionCore:
 
     @staticmethod
     def persist_conversation_metadata(
-        db: Session, conversation: Conversation, metadata: Dict[str, Any],
+        db: Session,
+        conversation: Conversation,
+        metadata: Dict[str, Any],
     ) -> None:
         conversation.custom_metadata = metadata
         flag_modified(conversation, "custom_metadata")
@@ -166,7 +168,10 @@ class SlotSelectionCore:
 
     @staticmethod
     def get_pending_slot_offers(
-        db: Session, conversation: Conversation, *, enforce_expiry: bool = True,
+        db: Session,
+        conversation: Conversation,
+        *,
+        enforce_expiry: bool = True,
     ) -> Optional[Dict[str, Any]]:
         metadata = SlotSelectionCore.conversation_metadata(conversation)
         pending = metadata.get("pending_slot_offers")
@@ -213,7 +218,9 @@ class SlotSelectionCore:
 
     @staticmethod
     def capture_selection(
-        db: Session, conversation: Conversation, message: CommunicationMessage,
+        db: Session,
+        conversation: Conversation,
+        message: CommunicationMessage,
     ) -> bool:
         pending = SlotSelectionCore.get_pending_slot_offers(db, conversation)
         if not pending:
@@ -315,7 +322,9 @@ class SlotSelectionCore:
 
     @staticmethod
     def enforce_booking(
-        db: Session, conversation: Conversation, arguments: Dict[str, Any],
+        db: Session,
+        conversation: Conversation,
+        arguments: Dict[str, Any],
     ) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Optional[str]]]]:
         pending = SlotSelectionCore.get_pending_slot_offers(db, conversation)
 

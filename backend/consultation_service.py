@@ -57,7 +57,10 @@ class ConsultationService:
         return consultation
 
     def upload_audio(
-        self, consultation_id: str, audio_file: BinaryIO, filename: str,
+        self,
+        consultation_id: str,
+        audio_file: BinaryIO,
+        filename: str,
     ) -> str:
         """
         Upload audio file to storage.

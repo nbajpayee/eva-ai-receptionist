@@ -313,13 +313,17 @@ Notes: {notes or 'None'}
                 "Google Calendar insert returned without an event ID; attempting fallback lookup."
             )
             return self._find_existing_event(
-                start_time=start_time, end_time=end_time, summary=summary,
+                start_time=start_time,
+                end_time=end_time,
+                summary=summary,
             )
 
         except HttpError as error:
             logger.exception("Google Calendar API booking error: %s", error)
             fallback_id = self._find_existing_event(
-                start_time=start_time, end_time=end_time, summary=summary,
+                start_time=start_time,
+                end_time=end_time,
+                summary=summary,
             )
             if fallback_id:
                 logger.warning(
@@ -329,7 +333,11 @@ Notes: {notes or 'None'}
             return None
 
     def _find_existing_event(
-        self, *, start_time: datetime, end_time: datetime, summary: str,
+        self,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+        summary: str,
     ) -> Optional[str]:
         """Best-effort search for an event matching the requested booking details."""
         window_start = (start_time - timedelta(minutes=1)).astimezone(EASTERN_TZ)

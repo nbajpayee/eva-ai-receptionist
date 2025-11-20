@@ -71,7 +71,10 @@ async def get_metrics_overview(
     # Query metrics
     total_conversations = (
         db.query(Conversation)
-        .filter(Conversation.initiated_at >= start, Conversation.initiated_at <= end,)
+        .filter(
+            Conversation.initiated_at >= start,
+            Conversation.initiated_at <= end,
+        )
         .count()
     )
 
@@ -100,7 +103,10 @@ async def get_metrics_overview(
     # Channel breakdown
     channel_stats = (
         db.query(Conversation.channel, func.count(Conversation.id).label("count"))
-        .filter(Conversation.initiated_at >= start, Conversation.initiated_at <= end,)
+        .filter(
+            Conversation.initiated_at >= start,
+            Conversation.initiated_at <= end,
+        )
         .group_by(Conversation.channel)
         .all()
     )
@@ -236,7 +242,8 @@ async def get_calls(
 
 @router.get("/calls/{call_id}")
 async def get_call_detail(
-    call_id: int, db: Session = Depends(get_db),
+    call_id: int,
+    db: Session = Depends(get_db),
 ):
     """Get detailed information about a specific call/conversation."""
     conversation = db.query(Conversation).filter(Conversation.id == call_id).first()
@@ -314,12 +321,18 @@ async def get_communications(
     Get all communications across channels.
     Similar to /calls but includes all channels.
     """
-    return await get_calls(page=page, page_size=page_size, channel=channel, db=db,)
+    return await get_calls(
+        page=page,
+        page_size=page_size,
+        channel=channel,
+        db=db,
+    )
 
 
 @router.get("/communications/{comm_id}")
 async def get_communication_detail(
-    comm_id: int, db: Session = Depends(get_db),
+    comm_id: int,
+    db: Session = Depends(get_db),
 ):
     """Get detailed information about a specific communication."""
     return await get_call_detail(call_id=comm_id, db=db)
@@ -405,7 +418,8 @@ async def get_appointments(
 
 @router.get("/appointments/{appointment_id}")
 async def get_appointment_detail(
-    appointment_id: int, db: Session = Depends(get_db),
+    appointment_id: int,
+    db: Session = Depends(get_db),
 ):
     """Get detailed information about a specific appointment."""
     appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
@@ -513,7 +527,8 @@ async def get_customers(
 
 @router.get("/customers/{customer_id}")
 async def get_customer_detail(
-    customer_id: int, db: Session = Depends(get_db),
+    customer_id: int,
+    db: Session = Depends(get_db),
 ):
     """Get detailed customer information including history."""
     customer = db.query(Customer).filter(Customer.id == customer_id).first()

@@ -29,7 +29,9 @@ class TestAPIBenchmarks:
                 "available_slots": [],
             }
             return handle_check_availability(
-                db_session, date="2025-11-20", service_type="botox",
+                db_session,
+                date="2025-11-20",
+                service_type="botox",
             )
 
         result = benchmark(run_check)
