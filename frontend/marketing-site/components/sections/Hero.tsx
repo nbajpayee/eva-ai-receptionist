@@ -65,7 +65,7 @@ export default function Hero() {
             transition={{ duration: 0.5, delay: 0.3 }}
           >
             <Link
-              href="/contact"
+              href="/#book-demo"
               className="btn-primary text-lg px-8 py-4 group shadow-lg shadow-primary-500/20"
             >
               Book a Demo

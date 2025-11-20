@@ -62,10 +62,7 @@ export default function Header() {
 
           {/* CTA Button (Desktop) */}
           <div className="hidden md:flex items-center space-x-4">
-            <Link
-              href="/contact"
-              className="btn-primary"
-            >
+            <Link href="/#book-demo" className="btn-primary">
               Book a Demo
             </Link>
           </div>
@@ -105,7 +102,7 @@ export default function Header() {
               ))}
               <div className="px-4 pt-4 border-t border-gray-200">
                 <Link
-                  href="/contact"
+                  href="/#book-demo"
                   className="btn-primary w-full"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >

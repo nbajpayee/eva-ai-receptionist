@@ -80,11 +80,12 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // ⚠️ See security notes above
-              "style-src 'self' 'unsafe-inline'", // ⚠️ Required for Tailwind/CSS-in-JS
-              "img-src 'self' data: https:", // ⚠️ Overly permissive - restrict in production
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://assets.calendly.com", // ⚠️ See security notes above
+              "style-src 'self' 'unsafe-inline' https://assets.calendly.com", // ⚠️ Required for Tailwind/CSS-in-JS
+              "img-src 'self' data: https://calendly.com https://*.calendly.com https://assets.calendly.com", // ⚠️ Overly permissive - restrict in production
               "font-src 'self' data:",
-              "connect-src 'self'",
+              "connect-src 'self' https://calendly.com https://*.calendly.com https://assets.calendly.com",
+              "frame-src 'self' https://calendly.com https://*.calendly.com",
               "frame-ancestors 'self'",
             ].join('; '),
           },

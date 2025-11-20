@@ -77,7 +77,7 @@ export default function PricingTeaser() {
         <FadeInUp delay={0.4}>
           <div className="text-center mt-12">
             <Link
-              href="/contact"
+              href="/#book-demo"
               className="btn-primary text-lg px-8 py-4 group shadow-lg shadow-primary-500/20 inline-flex items-center"
             >
               Book a Demo

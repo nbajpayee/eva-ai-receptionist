@@ -13,7 +13,7 @@ export default function Footer() {
       { title: "Integrations", href: "/integrations" },
     ],
     company: [
-      { title: "Contact", href: "/contact" },
+      { title: "Book a Demo", href: "/#book-demo" },
     ],
     legal: [
       { title: "Privacy Policy", href: "/privacy" },
