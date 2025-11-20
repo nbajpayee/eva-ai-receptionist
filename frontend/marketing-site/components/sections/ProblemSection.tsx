@@ -6,7 +6,7 @@ export default function ProblemSection() {
     {
       icon: PhoneOff,
       title: "Calls going to voicemail",
-      description: "During rush hours, potential patients hang up when they can&apos;t reach a live person",
+      description: "During rush hours, potential patients hang up when they can't reach a live person",
     },
     {
       icon: UserX,
@@ -16,7 +16,7 @@ export default function ProblemSection() {
     {
       icon: Clock,
       title: "24/7 expectations",
-      description: "Patients want to book at 9 PM on Sunday, but you&apos;re only available 9-5 weekdays",
+      description: "Patients want to book at 9 PM on Sunday, but you're only available 9-5 weekdays",
     },
   ];
 

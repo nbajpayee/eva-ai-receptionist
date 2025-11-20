@@ -117,7 +117,7 @@ export default function CalendlyEmbed() {
       {loadError && (
         <div className="flex flex-col items-center justify-center gap-3 text-center py-10">
           <p className="text-sm text-gray-500">
-            We couldn&apos;t load the scheduler right now. Please try again in a few seconds or open Calendly in a new tab.
+            We couldn't load the scheduler right now. Please try again in a few seconds or open Calendly in a new tab.
           </p>
           <a
             href={CALENDLY_URL}
