@@ -72,9 +72,12 @@ export default function ConsultationPage() {
 
   const fetchProviders = async () => {
     try {
-      const res = await fetch("/api/providers");
+      const res = await fetch("/api/admin/providers");
+      if (!res.ok) {
+        throw new Error(`Failed to load providers: ${res.status}`);
+      }
       const data = await res.json();
-      setProviders(data.providers || []);
+      setProviders(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Failed to fetch providers:", error);
     }

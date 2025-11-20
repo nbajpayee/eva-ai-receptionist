@@ -8,7 +8,13 @@
       "Bash(python3:*)",
       "Bash(cat:*)",
       "Bash(git add:*)",
-      "Bash(git rebase:*)"
+      "Bash(git rebase:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npm run dev:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(black:*)"
     ],
     "deny": [],
     "ask": []

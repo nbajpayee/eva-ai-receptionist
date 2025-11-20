@@ -1,13 +1,14 @@
 // Site configuration
 export const SITE_CONFIG = {
   name: "Eva AI",
-  tagline: "Your AI Receptionist for Medical Spas",
+  tagline: "The AI Receptionist That Handles Voice, SMS, & Email",
   description:
-    "Eva AI is an intelligent AI receptionist platform that handles calls, books appointments, and provides 24/7 customer service for medical spas and aesthetic practices.",
+    "Eva is the first HIPAA-compliant AI receptionist that manages your entire front desk. She books appointments, answers questions, and follows up via text and email—24/7, without missing a beat.",
   url: "https://eva-ai.com",
   contact: {
     email: "hello@eva-ai.com",
     phone: "(555) 123-4567",
+    phoneDisplay: "(555) 123-4567",
   },
   links: {
     twitter: "https://twitter.com/eva-ai",
@@ -29,39 +30,39 @@ export const NAV_ITEMS = [
 // Features
 export const FEATURES = [
   {
-    title: "24/7 Availability",
+    title: "True Omnichannel",
     description:
-      "Never miss a call again. Eva answers every call, day or night, ensuring your customers always reach someone.",
-    icon: "Phone",
+      "Eva doesn't just talk. She follows up with SMS confirmations and email summaries, keeping your patients connected across every channel.",
+    icon: "Zap",
+  },
+  {
+    title: "Zero-Fail Booking",
+    description:
+      "Powered by our Deterministic Booking Engine™, Eva checks availability in real-time and secures appointments without hesitation or double-booking.",
+    icon: "Calendar",
+  },
+  {
+    title: "HIPAA Compliant",
+    description:
+      "Built for healthcare from day one. Enterprise-grade encryption, BAA availability, and secure data handling keep your practice protected.",
+    icon: "Shield",
   },
   {
     title: "Natural Conversations",
     description:
-      "Advanced AI technology enables Eva to have natural, human-like conversations with your customers.",
+      "Advanced voice AI understands medical terminology, handles interruptions gracefully, and sounds so human your patients won't know the difference.",
     icon: "MessageSquare",
   },
   {
-    title: "Smart Booking",
+    title: "Smart Qualification",
     description:
-      "Eva handles appointment scheduling, rescheduling, and cancellations with full calendar integration.",
-    icon: "Calendar",
+      "Eva asks the right medical screening questions before booking, ensuring every appointment is qualified and ready for treatment.",
+    icon: "CheckCircle",
   },
   {
-    title: "Customer Insights",
+    title: "Seamless Integration",
     description:
-      "Get detailed analytics on customer interactions, satisfaction scores, and booking patterns.",
-    icon: "BarChart3",
-  },
-  {
-    title: "Multi-Channel Support",
-    description:
-      "Eva works across voice, SMS, and email to provide seamless omnichannel customer service.",
-    icon: "Zap",
-  },
-  {
-    title: "Easy Integration",
-    description:
-      "Connect Eva with your existing tools: Google Calendar, Boulevard, Zenoti, and more.",
+      "Works perfectly with your existing stack: Google Calendar, Boulevard, Zenoti, Twilio, and SendGrid.",
     icon: "Activity",
   },
 ];
@@ -72,13 +73,13 @@ export const PRICING_TIERS = [
     name: "Starter",
     price: 299,
     period: "month",
-    description: "Perfect for small practices getting started with AI",
+    description: "Perfect for solo practitioners or small boutique spas.",
     features: [
       "Up to 100 calls/month",
-      "Basic appointment booking",
-      "Email support",
+      "Voice-only Booking",
       "Google Calendar integration",
-      "Call transcripts & analytics",
+      "Basic Call Transcripts",
+      "Email Support",
     ],
     cta: "Start Free Trial",
     highlighted: false,
@@ -87,15 +88,14 @@ export const PRICING_TIERS = [
     name: "Professional",
     price: 599,
     period: "month",
-    description: "For growing practices that need more capacity",
+    description: "For growing practices that need comprehensive coverage.",
     features: [
       "Up to 500 calls/month",
-      "Advanced booking features",
-      "Priority phone support",
-      "All integrations included",
-      "AI satisfaction scoring",
-      "Custom voice persona",
-      "SMS & email support",
+      "Voice + SMS + Email Support",
+      "Deterministic Booking Engine",
+      "HIPAA Compliance BAA",
+      "Advanced Analytics & Sentiment",
+      "Priority Phone Support",
     ],
     cta: "Start Free Trial",
     highlighted: true,
@@ -104,15 +104,14 @@ export const PRICING_TIERS = [
     name: "Enterprise",
     price: null,
     period: "custom",
-    description: "For multi-location practices with custom needs",
+    description: "For multi-location networks requiring custom solutions.",
     features: [
-      "Unlimited calls",
-      "White-label solution",
-      "Dedicated account manager",
-      "Custom integrations",
-      "Advanced analytics & reporting",
-      "Multi-location support",
-      "SLA guarantees",
+      "Unlimited calls & messages",
+      "Custom Voice Persona Training",
+      "Multi-location Routing",
+      "Dedicated Success Manager",
+      "Custom EMR Integrations",
+      "White-label Options",
     ],
     cta: "Contact Sales",
     highlighted: false,
@@ -122,30 +121,30 @@ export const PRICING_TIERS = [
 // Testimonials
 export const TESTIMONIALS = [
   {
-    author: "Sarah Chen",
-    role: "Owner",
+    author: "Dr. Sarah Chen",
+    role: "Medical Director",
     company: "Radiance Med Spa",
     avatar: "/images/testimonials/sarah.jpg",
     quote:
-      "Eva has been a game-changer for our practice. We've seen a 40% increase in bookings and our customers love the 24/7 availability.",
+      "The SMS follow-up is a game changer. Eva books the appointment and immediately texts the prep instructions. Our no-show rate dropped by 40%.",
     rating: 5,
   },
   {
-    author: "Dr. Michael Rodriguez",
-    role: "Medical Director",
+    author: "Michael Rodriguez",
+    role: "Practice Manager",
     company: "Aesthetic Institute",
     avatar: "/images/testimonials/michael.jpg",
     quote:
-      "The AI is incredibly natural. Our patients often don't realize they're talking to an AI assistant. It's saved us thousands in staffing costs.",
+      "I was skeptical about AI handling medical questions, but Eva's qualification flow is perfect. She screens patients exactly how we trained her.",
     rating: 5,
   },
   {
     author: "Jennifer Park",
-    role: "Practice Manager",
+    role: "Owner",
     company: "Glow Aesthetics",
     avatar: "/images/testimonials/jennifer.jpg",
     quote:
-      "Integration was seamless. Eva syncs perfectly with our existing calendar and the analytics dashboard gives us insights we never had before.",
+      "It's not just an answering service. It's a full front desk team that never sleeps. The deterministic booking means zero errors in our calendar.",
     rating: 5,
   },
 ];
@@ -199,65 +198,70 @@ export const INTEGRATIONS = [
 // FAQ items
 export const FAQ_ITEMS = [
   {
-    question: "How does Eva handle complex customer questions?",
+    question: "Is Eva HIPAA compliant?",
     answer:
-      "Eva is trained on your specific services, pricing, and policies. For questions she can't answer, she gracefully escalates to a human team member while capturing the customer's information.",
+      "Yes. Eva is built with HIPAA compliance at its core. We sign BAAs (Business Associate Agreements) with our Professional and Enterprise clients, ensuring your patient data is encrypted and handled according to federal standards.",
   },
   {
-    question: "Can I customize Eva's voice and personality?",
+    question: "How does 'Deterministic Booking' work?",
     answer:
-      "Absolutely! Professional and Enterprise plans include full customization of Eva's voice, tone, and personality to match your brand. You can make her formal, friendly, or anywhere in between.",
+      "Unlike generic AI that 'hallucinates' availability, Eva connects directly to your calendar's API. She checks real-time slots and locks them in instantly, guaranteeing that every booked appointment is valid and confirmed.",
   },
   {
-    question: "What happens if Eva makes a booking mistake?",
+    question: "Can Eva handle SMS and Email too?",
     answer:
-      "Eva has a 99.8% booking accuracy rate. In the rare case of an error, our system sends instant notifications to your team, and we have protocols to quickly resolve any issues. Plus, all calls are recorded for quality assurance.",
+      "Absolutely. Eva is an omnichannel assistant. After a call, she can send SMS confirmations, email pre-treatment instructions, or even handle text-based scheduling questions directly.",
   },
   {
-    question: "How long does it take to set up?",
+    question: "What if a patient asks a medical question?",
     answer:
-      "Most practices are up and running within 24-48 hours. Setup involves connecting your calendar, configuring your services, and a brief training call with our team. We handle all the technical details.",
+      "Eva is trained to provide general information about your services but knows her limits. For complex medical advice, she gracefully escalates the call to your clinical staff while capturing the patient's concern.",
   },
   {
-    question: "Is there a contract or can I cancel anytime?",
+    question: "Does it integrate with my current software?",
     answer:
-      "We offer month-to-month billing with no long-term contracts. You can cancel anytime with 30 days notice. We're confident you'll love Eva, so we don't lock you in.",
+      "We integrate natively with Google Calendar, Boulevard, and other major med spa platforms. Setup takes less than an hour, and we handle the technical configuration for you.",
   },
   {
-    question: "How does Eva compare to a human receptionist?",
+    question: "How much does it cost compared to a receptionist?",
     answer:
-      "Eva works 24/7 without breaks, never calls in sick, and costs a fraction of a full-time employee. She handles multiple calls simultaneously and provides consistent service quality. That said, she works best alongside your team, not as a replacement.",
+      "Eva costs a fraction of a full-time employee—typically saving practices $30k-$40k annually while providing 24/7 coverage that no single human can match.",
   },
 ];
 
 // Stats
 export const STATS = [
   { label: "Calls Handled", value: "50,000+", suffix: "" },
-  { label: "Customer Satisfaction", value: "98", suffix: "%" },
-  { label: "Booking Success Rate", value: "94", suffix: "%" },
+  { label: "Booking Accuracy", value: "100", suffix: "%" },
+  { label: "ROI Average", value: "12", suffix: "x" },
   { label: "Practices Served", value: "200", suffix: "+" },
+  { label: "Uptime", value: "99.9", suffix: "%" },
 ];
 
-// Problem points (for homepage)
+// Pain points
 export const PAIN_POINTS = [
   {
-    title: "Missed Calls = Lost Revenue",
+    title: "The 'Phone Tag' Loop",
     description:
-      "Every unanswered call is a potential customer going to your competitor. Studies show 80% of callers won't leave a voicemail.",
+      "65% of patients hang up if they hit voicemail. You call back, they don't answer. It's a vicious cycle that loses revenue.",
+    icon: "PhoneMissed",
   },
   {
-    title: "After-Hours Bookings",
+    title: "Staff Burnout",
     description:
-      "Your customers want to book at 8pm on a Sunday. By Monday morning, they've already booked elsewhere.",
+      "Your front desk is overwhelmed juggling check-ins, payments, and ringing phones. Service quality drops when staff is stressed.",
+    icon: "UserX",
   },
   {
-    title: "Expensive Staffing",
+    title: "After-Hours Leaks",
     description:
-      "A full-time receptionist costs $35K-$45K/year plus benefits. And they can only handle one call at a time.",
+      "Most booking decisions happen in the evening. If you aren't answering at 8 PM, your competitors are getting those patients.",
+    icon: "Moon",
   },
   {
-    title: "Inconsistent Service",
+    title: "Inconsistent Info",
     description:
-      "Staff turnover, sick days, and training gaps lead to inconsistent customer experiences and booking errors.",
+      "Temp staff or new hires might give wrong pricing or forget prep instructions. Eva gives the perfect answer, every single time.",
+    icon: "AlertCircle",
   },
 ];
