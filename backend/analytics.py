@@ -730,8 +730,9 @@ Consider these factors:
             message_id: Optional message UUID this event relates to
             details: Optional event details as JSON
         """
-        from database import CommunicationEvent
         from datetime import datetime, timezone
+
+        from database import CommunicationEvent
 
         event = CommunicationEvent(
             conversation_id=conversation_id,
