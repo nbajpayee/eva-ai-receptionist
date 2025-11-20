@@ -18,11 +18,7 @@ export const SITE_CONFIG = {
 };
 
 // Navigation items
-export const NAV_ITEMS = [
-  { title: "Features", href: "/features" },
-  { title: "Pricing", href: "/pricing" },
-  { title: "Voice Demo", href: "/voice-demo" },
-];
+export const NAV_ITEMS: { title: string; href: string }[] = [];
 
 // Features
 export const FEATURES = [
