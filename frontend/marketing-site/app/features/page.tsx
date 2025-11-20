@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 import FadeInUp from "@/components/animations/FadeInUp";
 import CTASection from "@/components/sections/CTASection";
-import { Phone, Calendar, MessageSquare, BarChart3, Gauge, Shield } from "lucide-react";
+import OmnichannelTimeline from "@/components/ui/OmnichannelTimeline";
+import DeterministicBookingViz from "@/components/ui/DeterministicBookingViz";
+import AnalyticsViz from "@/components/ui/AnalyticsViz";
+import SecurityViz from "@/components/ui/SecurityViz";
+import VoiceAIViz from "@/components/ui/VoiceAIViz";
+import { Phone, Calendar, MessageSquare, BarChart3, Shield, Check } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Features",
@@ -16,11 +21,11 @@ export default function FeaturesPage() {
       description: "Eva speaks with a warm, professional voice that puts patients at ease from the first hello.",
       details: [
         "Powered by OpenAI Realtime API for natural, human-like conversations",
-        "Handles interruptions gracefully with dual-speed voice activity detection (120ms/300ms)",
+        "Handles interruptions gracefully with dual-speed voice activity detection",
         "Persona enforcement ensures Eva always represents your brand consistently",
         "Supports common medical spa FAQs, pricing inquiries, and provider information",
       ],
-      image: "/mockups/voice-interface.png",
+      Visualization: VoiceAIViz,
     },
     {
       icon: Calendar,
@@ -32,7 +37,7 @@ export default function FeaturesPage() {
         "No AI hesitation or retry loops—instant confirmation every time",
         "Seamless integration with Google Calendar and Boulevard scheduling",
       ],
-      image: "/mockups/booking-flow.png",
+      Visualization: DeterministicBookingViz,
     },
     {
       icon: MessageSquare,
@@ -44,7 +49,7 @@ export default function FeaturesPage() {
         "Cross-channel AI satisfaction scoring for complete patient insights",
         "Automatic context preservation when patients switch channels",
       ],
-      image: "/mockups/omnichannel.png",
+      Visualization: OmnichannelTimeline,
     },
     {
       icon: BarChart3,
@@ -56,19 +61,7 @@ export default function FeaturesPage() {
         "Daily, weekly, and monthly metrics aggregation",
         "Identify trends and optimize your patient experience",
       ],
-      image: "/mockups/analytics.png",
-    },
-    {
-      icon: Gauge,
-      title: "Admin Dashboard",
-      description: "Monitor conversations, track KPIs, and optimize performance in real-time.",
-      details: [
-        "Live conversation monitoring with full transcript access",
-        "Filterable call history by date, provider, service, or outcome",
-        "Provider performance metrics and comparison",
-        "Exportable reports for stakeholders and team meetings",
-      ],
-      image: "/mockups/dashboard.png",
+      Visualization: AnalyticsViz,
     },
     {
       icon: Shield,
@@ -80,21 +73,28 @@ export default function FeaturesPage() {
         "Detailed audit logs for all patient interactions",
         "99.8% uptime SLA with redundant infrastructure",
       ],
-      image: "/mockups/security.png",
+      Visualization: SecurityViz,
     },
   ];
 
   return (
     <>
       {/* Hero */}
-      <section className="section-spacing bg-gradient-to-b from-gray-50 to-white pt-32">
+      <section className="section-spacing bg-gradient-to-b from-blue-50/50 via-white to-white pt-32">
         <div className="container-wide">
-          <FadeInUp className="text-center max-w-3xl mx-auto">
+          <FadeInUp className="text-center max-w-4xl mx-auto">
+            <div className="inline-flex items-center space-x-2 bg-white border border-primary-100 text-primary-700 px-4 py-2 rounded-full text-sm font-medium shadow-sm mb-8">
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
+              </span>
+              <span>Feature-Rich & HIPAA Compliant</span>
+            </div>
             <h1 className="heading-xl text-gray-900 mb-6">
-              Every Feature Your Front Desk Needs
+              The Most Complete AI Receptionist for Med Spas
             </h1>
             <p className="text-xl md:text-2xl text-gray-600">
-              From voice AI to analytics, Eva handles the complexity so you can focus on patients.
+              From natural voice conversations to instant SMS follow-ups, Eva handles the complexity so you can focus on patient care.
             </p>
           </FadeInUp>
         </div>
@@ -103,50 +103,45 @@ export default function FeaturesPage() {
       {/* Features Deep Dive */}
       <section className="section-spacing">
         <div className="container-wide">
-          {features.map((feature, index) => (
-            <div
-              key={index}
-              className={`flex flex-col ${
-                index % 2 === 0 ? "lg:flex-row" : "lg:flex-row-reverse"
-              } gap-12 items-center mb-24 last:mb-0`}
-            >
-              <FadeInUp className="flex-1">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 text-primary-600 rounded-2xl mb-6">
-                  <feature.icon className="w-8 h-8" />
-                </div>
-                <h2 className="heading-md text-gray-900 mb-4">
-                  {feature.title}
-                </h2>
-                <p className="text-lg text-gray-600 mb-6">
-                  {feature.description}
-                </p>
-                <ul className="space-y-3">
-                  {feature.details.map((detail, i) => (
-                    <li key={i} className="flex items-start">
-                      <svg
-                        className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-1"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      <span className="text-gray-700">{detail}</span>
-                    </li>
-                  ))}
-                </ul>
-              </FadeInUp>
+          {features.map((feature, index) => {
+            const VizComponent = feature.Visualization;
+            return (
+              <div
+                key={index}
+                className={`flex flex-col ${
+                  index % 2 === 0 ? "lg:flex-row" : "lg:flex-row-reverse"
+                } gap-12 lg:gap-20 items-center mb-32 last:mb-0`}
+              >
+                <FadeInUp className="flex-1 w-full">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 text-primary-600 rounded-2xl mb-6 shadow-sm">
+                    <feature.icon className="w-8 h-8" />
+                  </div>
+                  <h2 className="heading-md text-gray-900 mb-4">
+                    {feature.title}
+                  </h2>
+                  <p className="text-lg text-gray-600 mb-8 leading-relaxed">
+                    {feature.description}
+                  </p>
+                  <ul className="space-y-4">
+                    {feature.details.map((detail, i) => (
+                      <li key={i} className="flex items-start">
+                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-green-100 flex items-center justify-center mt-0.5 mr-4">
+                          <Check className="w-3.5 h-3.5 text-green-600" />
+                        </div>
+                        <span className="text-gray-700 text-lg">{detail}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </FadeInUp>
 
-              <FadeInUp delay={0.2} className="flex-1">
-                <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl aspect-video flex items-center justify-center shadow-lg">
-                  <p className="text-gray-500 text-sm">Feature Demo Placeholder</p>
-                </div>
-              </FadeInUp>
-            </div>
-          ))}
+                <FadeInUp delay={0.2} className="flex-1 w-full">
+                  <div className="aspect-square lg:aspect-auto lg:min-h-[400px] flex items-center justify-center relative">
+                    <VizComponent />
+                  </div>
+                </FadeInUp>
+              </div>
+            );
+          })}
         </div>
       </section>
 

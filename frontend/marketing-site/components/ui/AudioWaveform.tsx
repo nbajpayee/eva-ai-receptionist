@@ -3,7 +3,11 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
-export default function AudioWaveform() {
+interface AudioWaveformProps {
+  color?: string;
+}
+
+export default function AudioWaveform({ color = "bg-primary-500" }: AudioWaveformProps) {
   const [isAnimating, setIsAnimating] = useState(false);
 
   useEffect(() => {
@@ -18,7 +22,7 @@ export default function AudioWaveform() {
       {Array.from({ length: bars }).map((_, i) => (
         <motion.div
           key={i}
-          className="w-1.5 bg-primary-500 rounded-full"
+          className={`w-1.5 rounded-full ${color}`}
           animate={{
             height: [
               "20%",
@@ -42,4 +46,3 @@ export default function AudioWaveform() {
     </div>
   );
 }
-

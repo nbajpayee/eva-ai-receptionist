@@ -13,16 +13,7 @@ export default function Footer() {
       { title: "Integrations", href: "/integrations" },
     ],
     company: [
-      { title: "About", href: "/about" },
       { title: "Contact", href: "/contact" },
-      { title: "Blog", href: "/blog" },
-      { title: "Careers", href: "/careers" },
-    ],
-    resources: [
-      { title: "Documentation", href: "/docs" },
-      { title: "API Reference", href: "/api" },
-      { title: "Help Center", href: "/help" },
-      { title: "Status", href: "/status" },
     ],
     legal: [
       { title: "Privacy Policy", href: "/privacy" },
@@ -50,26 +41,7 @@ export default function Footer() {
               <p className="text-sm text-gray-400 mb-6 max-w-xs">
                 The AI receptionist that never misses a call. Transform your medical spa&apos;s front desk with intelligent automation.
               </p>
-              <div className="flex space-x-4">
-                <a
-                  href={SITE_CONFIG.links.linkedin}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-800 text-gray-400 hover:bg-primary hover:text-white transition-colors"
-                  aria-label="LinkedIn"
-                >
-                  <Linkedin className="w-5 h-5" />
-                </a>
-                <a
-                  href={SITE_CONFIG.links.twitter}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-800 text-gray-400 hover:bg-primary hover:text-white transition-colors"
-                  aria-label="Twitter"
-                >
-                  <Twitter className="w-5 h-5" />
-                </a>
-              </div>
+              <div className="flex space-x-4" aria-hidden />
             </div>
 
             {/* Product Links */}
@@ -94,23 +66,6 @@ export default function Footer() {
               <h3 className="text-sm font-semibold text-white mb-4">Company</h3>
               <ul className="space-y-3">
                 {footerLinks.company.map((link) => (
-                  <li key={link.href}>
-                    <Link
-                      href={link.href}
-                      className="text-sm hover:text-white transition-colors"
-                    >
-                      {link.title}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Resources Links */}
-            <div>
-              <h3 className="text-sm font-semibold text-white mb-4">Resources</h3>
-              <ul className="space-y-3">
-                {footerLinks.resources.map((link) => (
                   <li key={link.href}>
                     <Link
                       href={link.href}
@@ -158,15 +113,7 @@ export default function Footer() {
                   {SITE_CONFIG.contact.email}
                 </a>
               </div>
-              <div className="flex items-center space-x-2">
-                <Phone className="w-4 h-4" />
-                <a
-                  href={`tel:${SITE_CONFIG.contact.phone}`}
-                  className="hover:text-white transition-colors"
-                >
-                  {SITE_CONFIG.contact.phoneDisplay}
-                </a>
-              </div>
+              <div className="flex items-center space-x-2" aria-hidden />
             </div>
           </div>
         </div>

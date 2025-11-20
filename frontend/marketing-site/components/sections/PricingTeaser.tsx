@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import FadeInUp from "@/components/animations/FadeInUp";
 import { PRICING_TIERS } from "@/lib/constants";
@@ -13,7 +15,7 @@ export default function PricingTeaser() {
             Plans for Practices of Every Size
           </h2>
           <p className="text-xl text-gray-600">
-            Transparent pricing with no hidden fees. Start your free 14-day trial today.
+            Transparent pricing with no hidden fees.
           </p>
         </FadeInUp>
 
@@ -59,7 +61,7 @@ export default function PricingTeaser() {
                   )}
                 </div>
 
-                <ul className="space-y-3 mb-8 flex-1">
+                <ul className="space-y-3 mb-0 flex-1">
                   {tier.features.slice(0, 6).map((feature, i) => (
                     <li key={i} className="flex items-start">
                       <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
@@ -67,17 +69,6 @@ export default function PricingTeaser() {
                     </li>
                   ))}
                 </ul>
-
-                <Link
-                  href={tier.price ? "/contact" : "/contact"}
-                  className={`w-full text-center py-3 px-6 rounded-lg font-semibold transition-all ${
-                    tier.popular
-                      ? "bg-primary-500 text-white hover:bg-primary-600 shadow-md hover:shadow-lg"
-                      : "bg-gray-100 text-gray-900 hover:bg-gray-200"
-                  }`}
-                >
-                  {tier.cta}
-                </Link>
               </div>
             </FadeInUp>
           ))}
@@ -86,10 +77,10 @@ export default function PricingTeaser() {
         <FadeInUp delay={0.4}>
           <div className="text-center mt-12">
             <Link
-              href="/pricing"
-              className="inline-flex items-center text-primary-600 hover:text-primary-700 font-semibold group"
+              href="/contact"
+              className="btn-primary text-lg px-8 py-4 group shadow-lg shadow-primary-500/20 inline-flex items-center"
             >
-              View Full Pricing Details
+              Book a Demo
               <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>

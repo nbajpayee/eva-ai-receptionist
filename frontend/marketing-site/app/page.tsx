@@ -1,7 +1,8 @@
 import Hero from "@/components/sections/Hero";
 import ProblemSection from "@/components/sections/ProblemSection";
 import HowItWorks from "@/components/sections/HowItWorks";
-import FeaturesSection from "@/components/sections/FeaturesSection";
+import FeatureGrid from "@/components/sections/FeatureGrid";
+import IntegrationsShowcase from "@/components/sections/IntegrationsShowcase";
 import ComparisonTable from "@/components/sections/ComparisonTable";
 import TestimonialsSection from "@/components/sections/TestimonialsSection";
 import PricingTeaser from "@/components/sections/PricingTeaser";
@@ -13,7 +14,8 @@ export default function Home() {
       <Hero />
       <ProblemSection />
       <HowItWorks />
-      <FeaturesSection />
+      <FeatureGrid />
+      <IntegrationsShowcase />
       <ComparisonTable />
       <TestimonialsSection />
       <PricingTeaser />

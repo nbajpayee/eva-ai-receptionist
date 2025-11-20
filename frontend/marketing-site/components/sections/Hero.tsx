@@ -4,9 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Play, Phone, MessageSquare, Mail, ShieldCheck, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import Balancer from "react-wrap-balancer";
-import AnimatedStat from "@/components/ui/AnimatedStat";
 import AudioWaveform from "@/components/ui/AudioWaveform";
-import { STATS } from "@/lib/constants";
 
 export default function Hero() {
   return (
@@ -30,7 +28,7 @@ export default function Hero() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
               </span>
-              <span>Trusted by 200+ medical spas nationwide</span>
+              <span>Trusted by medical spas nationwide</span>
             </div>
           </motion.div>
 
@@ -95,7 +93,7 @@ export default function Hero() {
                   <Star key={i} className="w-4 h-4 text-amber-400 fill-amber-400" />
                 ))}
               </div>
-              <span className="text-gray-700">4.9/5 on G2</span>
+              <span className="text-gray-700">4.9/5</span>
             </div>
             <div className="flex items-center space-x-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">
               <ShieldCheck className="w-5 h-5 text-primary-600" />
@@ -210,22 +208,6 @@ export default function Hero() {
             </div>
           </motion.div>
 
-          {/* Stats */}
-          <motion.div
-            className="grid grid-cols-2 md:grid-cols-5 gap-8 md:gap-8 w-full max-w-5xl pt-16 border-t border-gray-100 mt-16"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.7 }}
-          >
-            {STATS.map((stat, index) => (
-              <AnimatedStat
-                key={index}
-                value={stat.value}
-                label={stat.label}
-                suffix={stat.suffix}
-              />
-            ))}
-          </motion.div>
         </div>
       </div>
     </section>

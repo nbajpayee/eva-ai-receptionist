@@ -22,9 +22,6 @@ export const NAV_ITEMS = [
   { title: "Features", href: "/features" },
   { title: "Pricing", href: "/pricing" },
   { title: "Voice Demo", href: "/voice-demo" },
-  { title: "Integrations", href: "/integrations" },
-  { title: "About", href: "/about" },
-  { title: "Contact", href: "/contact" },
 ];
 
 // Features
@@ -81,7 +78,7 @@ export const PRICING_TIERS = [
       "Basic Call Transcripts",
       "Email Support",
     ],
-    cta: "Start Free Trial",
+    cta: "Book a Demo",
     highlighted: false,
   },
   {
@@ -97,7 +94,7 @@ export const PRICING_TIERS = [
       "Advanced Analytics & Sentiment",
       "Priority Phone Support",
     ],
-    cta: "Start Free Trial",
+    cta: "Book a Demo",
     highlighted: true,
   },
   {
@@ -113,7 +110,7 @@ export const PRICING_TIERS = [
       "Custom EMR Integrations",
       "White-label Options",
     ],
-    cta: "Contact Sales",
+    cta: "Book a Demo",
     highlighted: false,
   },
 ];
@@ -121,77 +118,19 @@ export const PRICING_TIERS = [
 // Testimonials
 export const TESTIMONIALS = [
   {
-    author: "Dr. Sarah Chen",
-    role: "Medical Director",
-    company: "Radiance Med Spa",
-    avatar: "/images/testimonials/sarah.jpg",
+    role: "Medical Director, multi-location med spa",
     quote:
-      "The SMS follow-up is a game changer. Eva books the appointment and immediately texts the prep instructions. Our no-show rate dropped by 40%.",
-    rating: 5,
+      "Eva's phone voice is unbelievably natural—patients assume they're speaking with our lead concierge, and we're booking more consults without anyone realizing it's AI.",
   },
   {
-    author: "Michael Rodriguez",
-    role: "Practice Manager",
-    company: "Aesthetic Institute",
-    avatar: "/images/testimonials/michael.jpg",
+    role: "Practice Manager, aesthetics collective",
     quote:
       "I was skeptical about AI handling medical questions, but Eva's qualification flow is perfect. She screens patients exactly how we trained her.",
-    rating: 5,
   },
   {
-    author: "Jennifer Park",
-    role: "Owner",
-    company: "Glow Aesthetics",
-    avatar: "/images/testimonials/jennifer.jpg",
+    role: "Owner, boutique aesthetics studio",
     quote:
       "It's not just an answering service. It's a full front desk team that never sleeps. The deterministic booking means zero errors in our calendar.",
-    rating: 5,
-  },
-];
-
-// Integration partners
-export const INTEGRATIONS = [
-  {
-    name: "Google Calendar",
-    description: "Seamless two-way calendar sync",
-    logo: "/images/integrations/google-calendar.svg",
-    category: "Scheduling",
-    status: "live",
-  },
-  {
-    name: "Boulevard",
-    description: "Full appointment management integration",
-    logo: "/images/integrations/boulevard.svg",
-    category: "Scheduling",
-    status: "live",
-  },
-  {
-    name: "Zenoti",
-    description: "Complete spa management sync",
-    logo: "/images/integrations/zenoti.svg",
-    category: "Scheduling",
-    status: "coming-soon",
-  },
-  {
-    name: "Twilio",
-    description: "Enterprise-grade voice & SMS",
-    logo: "/images/integrations/twilio.svg",
-    category: "Communication",
-    status: "live",
-  },
-  {
-    name: "SendGrid",
-    description: "Reliable email delivery",
-    logo: "/images/integrations/sendgrid.svg",
-    category: "Communication",
-    status: "live",
-  },
-  {
-    name: "Stripe",
-    description: "Secure payment processing",
-    logo: "/images/integrations/stripe.svg",
-    category: "Payments",
-    status: "coming-soon",
   },
 ];
 

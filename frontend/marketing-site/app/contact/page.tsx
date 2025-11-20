@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import FadeInUp from "@/components/animations/FadeInUp";
 import ContactForm from "@/components/sections/ContactForm";
-import { Mail, Phone, Clock } from "lucide-react";
+import { Mail, Clock } from "lucide-react";
 import { SITE_CONFIG } from "@/lib/constants";
 
 export const metadata: Metadata = {
@@ -26,22 +26,6 @@ export default function ContactPage() {
                 </p>
 
                 <div className="space-y-6">
-                  <div className="flex items-start space-x-4">
-                    <div className="flex-shrink-0 w-12 h-12 bg-primary-100 text-primary-600 rounded-xl flex items-center justify-center">
-                      <Phone className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900 mb-1">Phone</h3>
-                      <a
-                        href={`tel:${SITE_CONFIG.contact.phone}`}
-                        className="text-primary-600 hover:text-primary-700"
-                      >
-                        {SITE_CONFIG.contact.phoneDisplay}
-                      </a>
-                      <p className="text-sm text-gray-600 mt-1">Mon-Fri, 9am-6pm EST</p>
-                    </div>
-                  </div>
-
                   <div className="flex items-start space-x-4">
                     <div className="flex-shrink-0 w-12 h-12 bg-primary-100 text-primary-600 rounded-xl flex items-center justify-center">
                       <Mail className="w-6 h-6" />
