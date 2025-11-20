@@ -20,36 +20,35 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from starlette.websockets import WebSocketState
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
-
+from ai_insights_service import AIInsightsService
 from analytics import AnalyticsService
 from api_messaging import messaging_router
 from calendar_service import check_calendar_credentials
 from config import get_settings
+from consultation_service import ConsultationService
 from database import (
+    AIInsight,
     Appointment,
     BusinessHours,
     CallSession,
     Conversation,
     Customer,
+    InPersonConsultation,
     Location,
     MedSpaSettings,
     Provider,
     Service,
-    AIInsight,
-    InPersonConsultation,
     get_db,
     init_db,
 )
 from provider_analytics_service import ProviderAnalyticsService
-from ai_insights_service import AIInsightsService
-from consultation_service import ConsultationService
-from settings_service import SettingsService
 from realtime_client import RealtimeClient
+from settings_service import SettingsService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)

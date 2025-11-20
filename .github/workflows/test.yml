@@ -25,7 +25,7 @@ jobs:
 
       - name: Install linting tools
         run: |
-          pip install flake8 black isort mypy bandit safety
+          pip install flake8 black==25.11.0 isort==7.0.0 mypy bandit safety
 
       - name: Lint with flake8
         run: |
