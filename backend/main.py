@@ -177,6 +177,7 @@ class BusinessHourEntry(BaseModel):
 
 class ProviderSummary(BaseModel):
     provider_id: str
+    id: Optional[str] = None
     name: str
     email: Optional[str] = None
     avatar_url: Optional[str] = None

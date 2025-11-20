@@ -5,8 +5,9 @@ OpenAI Realtime API client for voice-to-voice conversation handling.
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pytz
 import websockets
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionError, SlotSelectionManager
-from booking.time_utils import format_for_display, parse_iso_datetime
+from booking.time_utils import format_for_display, parse_iso_datetime, to_eastern
 from booking_handlers import handle_book_appointment, handle_check_availability
 from calendar_service import get_calendar_service
 from config import OPENING_SCRIPT, PROVIDERS, get_settings
@@ -933,8 +934,161 @@ class RealtimeClient:
             metadata={"source": "voice_transcript"},
         )
 
-        SlotSelectionManager.capture_selection(self.db, self.conversation, message)
-        self._refresh_conversation()
+        selection_made = SlotSelectionManager.capture_selection(
+            self.db, self.conversation, message
+        )
+
+        if selection_made:
+            self._refresh_conversation()
+            return
+
+        if self._infer_slot_selection_from_text(message, sanitized):
+            self._refresh_conversation()
+
+    def _infer_slot_selection_from_text(
+        self, message: Any, text: str
+    ) -> bool:
+        """Attempt to infer slot selection from natural-language time references."""
+        pending = SlotSelectionManager.get_pending_slot_offers(
+            self.db, self.conversation, enforce_expiry=False
+        )
+        if not pending:
+            return False
+
+        slots = pending.get("slots") or []
+        if not slots:
+            return False
+
+        text_lower = text.lower()
+        text_compact = re.sub(r"[^a-z0-9]", "", text_lower)
+        time_preferences = self._extract_time_preferences(text_lower)
+
+        matched_index: Optional[int] = None
+        matched_slot: Optional[Dict[str, Any]] = None
+
+        if time_preferences:
+            matched_index, matched_slot = self._match_slot_by_time(slots, time_preferences)
+
+        if matched_slot is None:
+            matched_index, matched_slot = self._match_slot_by_label(
+                slots, text_lower, text_compact
+            )
+
+        if matched_slot is None or matched_index is None:
+            return False
+
+        metadata = SlotSelectionManager.conversation_metadata(self.conversation)
+        pending_metadata = metadata.get("pending_slot_offers") or {}
+        pending_metadata["selected_option_index"] = matched_index
+        pending_metadata["selected_slot"] = matched_slot
+        pending_metadata["selected_by_message_id"] = str(getattr(message, "id", ""))
+        pending_metadata["selected_content_preview"] = text[:120]
+        pending_metadata["selected_at"] = datetime.utcnow().replace(
+            tzinfo=pytz.utc
+        ).isoformat()
+
+        metadata["pending_slot_offers"] = pending_metadata
+        SlotSelectionManager.persist_conversation_metadata(
+            self.db, self.conversation, metadata
+        )
+
+        slot_label = matched_slot.get("start_time") or matched_slot.get("start")
+        logger.info(
+            "Voice slot inferred from natural language: conversation_id=%s, slot=%s, text=%s",
+            self.conversation.id,
+            slot_label,
+            text,
+        )
+        return True
+
+    def _extract_time_preferences(self, text: str) -> List[int]:
+        """Return candidate minutes-from-midnight for times mentioned in text."""
+        preferences: List[int] = []
+
+        time_pattern = re.compile(
+            r"\b(?P<hour>(?:[0-1]?\d|2[0-3]))(?:[:.](?P<minute>[0-5]\d))?\s*(?P<ampm>a\.?m\.?|p\.?m\.?|am|pm)\b",
+            re.IGNORECASE,
+        )
+        daypart_pattern = re.compile(
+            r"\b(?P<hour>[0-1]?\d)\s*(?:in\s+the\s+)?(?P<daypart>morning|afternoon|evening|night)\b",
+            re.IGNORECASE,
+        )
+
+        for match in time_pattern.finditer(text):
+            hour = int(match.group("hour"))
+            minute = int(match.group("minute") or 0)
+            ampm = match.group("ampm").lower()
+            if ampm.startswith("p") and hour != 12:
+                hour += 12
+            if ampm.startswith("a") and hour == 12:
+                hour = 0
+            preferences.append(hour * 60 + minute)
+
+        for match in daypart_pattern.finditer(text):
+            hour = int(match.group("hour"))
+            daypart = match.group("daypart").lower()
+            if daypart == "morning" and hour == 12:
+                hour = 0
+            elif daypart in {"afternoon", "evening", "night"} and hour < 12:
+                hour += 12
+            preferences.append(hour * 60)
+
+        if "noon" in text:
+            preferences.append(12 * 60)
+        if "midnight" in text:
+            preferences.append(0)
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique_preferences = []
+        for pref in preferences:
+            if pref not in seen:
+                seen.add(pref)
+                unique_preferences.append(pref)
+        return unique_preferences
+
+    def _match_slot_by_time(
+        self, slots: List[Dict[str, Any]], time_preferences: List[int]
+    ) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
+        for idx, slot in enumerate(slots, start=1):
+            start_iso = slot.get("start")
+            if not start_iso:
+                continue
+            try:
+                start_dt = to_eastern(parse_iso_datetime(str(start_iso)))
+            except ValueError:
+                continue
+
+            slot_minutes = start_dt.hour * 60 + start_dt.minute
+            for pref in time_preferences:
+                if abs(slot_minutes - pref) <= 15:
+                    return idx, slot
+        return None, None
+
+    def _match_slot_by_label(
+        self, slots: List[Dict[str, Any]], text_lower: str, text_compact: str
+    ) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
+        for idx, slot in enumerate(slots, start=1):
+            label = (slot.get("start_time") or "").lower()
+            if not label:
+                continue
+
+            variants = {
+                label,
+                label.replace(" ", ""),
+                label.replace(":", ""),
+                re.sub(r"[^a-z0-9]", "", label),
+            }
+            if label.endswith(":00 am") or label.endswith(":00 pm"):
+                variants.add(label.replace(":00", ""))
+                variants.add(label.replace(":00", "").replace(" ", ""))
+
+            for variant in variants:
+                if not variant:
+                    continue
+                if variant in text_lower or variant in text_compact:
+                    return idx, slot
+        return None, None
 
     def _process_conversation_item_created(self, payload: Dict[str, Any]) -> None:
         item = payload.get("item") or {}
