@@ -177,11 +177,11 @@ export default function Hero() {
                     <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-sm text-gray-600 space-y-3 font-medium">
                       <p className="flex gap-3">
                         <span className="text-gray-400 min-w-[60px]">Eva:</span>
-                        <span>"I have an opening for Botox with Dr. Smith next Tuesday at 2 PM. Shall I book that for you?"</span>
+                        <span>&ldquo;I have an opening for Botox with Dr. Smith next Tuesday at 2 PM. Shall I book that for you?&rdquo;</span>
                       </p>
                       <p className="flex gap-3 text-primary-700">
                         <span className="text-primary-300 min-w-[60px]">Sarah:</span>
-                        <span>"Yes, that works perfectly."</span>
+                        <span>&ldquo;Yes, that works perfectly.&rdquo;</span>
                       </p>
                     </div>
                   </div>

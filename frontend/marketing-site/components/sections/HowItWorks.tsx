@@ -48,7 +48,7 @@ export default function HowItWorks() {
             How Eva Handles the Perfect Booking
           </h2>
           <p className="text-xl text-gray-600">
-            From the first "Hello" to the final confirmation, the entire process is automated, seamless, and reliable.
+            From the first &ldquo;Hello&rdquo; to the final confirmation, the entire process is automated, seamless, and reliable.
           </p>
         </FadeInUp>
 
