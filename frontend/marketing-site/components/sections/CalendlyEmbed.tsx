@@ -13,7 +13,6 @@ export default function CalendlyEmbed() {
 
   useEffect(() => {
     let isMounted = true;
-    let retryInterval: ReturnType<typeof setInterval> | null = null;
 
     const ensureStylesheet = () => {
       if (!document.querySelector(`link[href='${CALENDLY_STYLE_HREF}']`)) {
@@ -24,55 +23,42 @@ export default function CalendlyEmbed() {
       }
     };
 
-    const tryInitialize = () => {
+    const initWidget = () => {
       const calendly = (window as typeof window & { Calendly?: any }).Calendly;
       if (calendly && widgetRef.current) {
-        calendly.initInlineWidget({
-          url: CALENDLY_URL,
-          parentElement: widgetRef.current,
-        });
-        if (isMounted) {
-          setIsLoading(false);
-        }
-        return true;
-      }
-      return false;
-    };
+        try {
+          // Clear any existing content first
+          widgetRef.current.innerHTML = '';
 
-    const startRetryLoop = () => {
-      if (retryInterval) return;
-      let attempts = 0;
-      retryInterval = setInterval(() => {
-        attempts += 1;
-        if (tryInitialize()) {
-          if (retryInterval) {
-            clearInterval(retryInterval);
-            retryInterval = null;
+          calendly.initInlineWidget({
+            url: CALENDLY_URL,
+            parentElement: widgetRef.current,
+          });
+
+          if (isMounted) {
+            setIsLoading(false);
           }
-        } else if (attempts >= 40) {
-          if (retryInterval) {
-            clearInterval(retryInterval);
-            retryInterval = null;
-          }
+        } catch (error) {
+          console.error('Calendly initialization error:', error);
           if (isMounted) {
             setIsLoading(false);
             setLoadError(true);
           }
         }
-      }, 150);
+      }
     };
 
     ensureStylesheet();
 
-    if (tryInitialize()) {
+    // Check if Calendly is already loaded
+    if ((window as any).Calendly) {
+      initWidget();
       return () => {
         isMounted = false;
-        if (retryInterval) clearInterval(retryInterval);
       };
     }
 
-    startRetryLoop();
-
+    // Otherwise, load the script
     let scriptElement = document.querySelector<HTMLScriptElement>(`script[src='${CALENDLY_SCRIPT_SRC}']`);
     if (!scriptElement) {
       scriptElement = document.createElement("script");
@@ -82,8 +68,7 @@ export default function CalendlyEmbed() {
     }
 
     const handleLoad = () => {
-      scriptElement?.setAttribute("data-loaded", "true");
-      tryInitialize();
+      initWidget();
     };
 
     const handleError = () => {
@@ -98,7 +83,6 @@ export default function CalendlyEmbed() {
 
     return () => {
       isMounted = false;
-      if (retryInterval) clearInterval(retryInterval);
       scriptElement?.removeEventListener("load", handleLoad);
       scriptElement?.removeEventListener("error", handleError);
     };
@@ -131,8 +115,6 @@ export default function CalendlyEmbed() {
       )}
       <div
         ref={widgetRef}
-        className="calendly-inline-widget"
-        data-url={CALENDLY_URL}
         style={{ minWidth: "320px", height: "700px" }}
       />
     </div>
