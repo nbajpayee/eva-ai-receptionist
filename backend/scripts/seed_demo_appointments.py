@@ -33,12 +33,7 @@ def _ensure_customer(session, *, name: str, phone: str, email: str) -> Customer:
         customer.is_new_client = False
         return customer
 
-    customer = Customer(
-        name=name,
-        phone=phone,
-        email=email,
-        is_new_client=False,
-    )
+    customer = Customer(name=name, phone=phone, email=email, is_new_client=False,)
     session.add(customer)
     session.flush()
     return customer

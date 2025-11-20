@@ -153,9 +153,7 @@ def test_enforce_booking_raises_when_no_pending_offers(db_session):
 
     with pytest.raises(SlotSelectionError):
         SlotSelectionCore.enforce_booking(
-            db_session,
-            conversation,
-            {"start_time": "2025-11-16T15:30:00-05:00"},
+            db_session, conversation, {"start_time": "2025-11-16T15:30:00-05:00"},
         )
 
 
@@ -187,16 +185,12 @@ def test_enforce_booking_raises_for_mismatch(db_session):
         conversation,
         tool_call_id="tool4",
         arguments={},
-        output={
-            "available_slots": [_sample_slot(1, datetime(2025, 11, 16, 15, 30))],
-        },
+        output={"available_slots": [_sample_slot(1, datetime(2025, 11, 16, 15, 30))],},
     )
 
     with pytest.raises(SlotSelectionError):
         SlotSelectionCore.enforce_booking(
-            db_session,
-            conversation,
-            {"start_time": "2025-11-16T20:30:00-05:00"},
+            db_session, conversation, {"start_time": "2025-11-16T20:30:00-05:00"},
         )
 
 
@@ -206,12 +200,7 @@ def test_get_pending_slot_offers_expiry(db_session):
     ).isoformat()
     conversation = _make_conversation(
         db_session,
-        metadata={
-            "pending_slot_offers": {
-                "slots": [],
-                "expires_at": past_ts,
-            }
-        },
+        metadata={"pending_slot_offers": {"slots": [], "expires_at": past_ts,}},
     )
 
     pending = SlotSelectionCore.get_pending_slot_offers(db_session, conversation)

@@ -48,10 +48,7 @@ def get_booking_tools(db: Session) -> List[Dict[str, Any]]:
             "function": {
                 "name": "get_current_date",
                 "description": "Retrieve the current Eastern time date context. Call this before referencing relative dates like 'today' or 'tomorrow'.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                },
+                "parameters": {"type": "object", "properties": {},},
             },
         },
         {

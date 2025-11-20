@@ -76,9 +76,7 @@ class TestCalendarFailures:
         # Should handle gracefully
         try:
             result = handle_check_availability(
-                db_session,
-                date="2025-11-20",
-                service_type="botox",
+                db_session, date="2025-11-20", service_type="botox",
             )
             assert result["success"] is False
         except HttpError:
@@ -161,9 +159,7 @@ class TestCalendarFailures:
         }
 
         result = handle_check_availability(
-            db_session,
-            date="2025-11-20",
-            service_type="botox",
+            db_session, date="2025-11-20", service_type="botox",
         )
 
         # Should handle timezone conversion

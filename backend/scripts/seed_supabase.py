@@ -111,10 +111,7 @@ def seed_data() -> None:
             phone = f"+1310555{idx:04d}"
             email = name.lower().replace(" ", ".") + "@example.com"
             customer = Customer(
-                name=name,
-                phone=phone,
-                email=email,
-                is_new_client=is_new,
+                name=name, phone=phone, email=email, is_new_client=is_new,
             )
             session.add(customer)
             session.flush()
@@ -499,9 +496,7 @@ def main() -> None:
         description="Seed Supabase database with sample data"
     )
     parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Clear existing data before seeding",
+        "--force", action="store_true", help="Clear existing data before seeding",
     )
     args = parser.parse_args()
 

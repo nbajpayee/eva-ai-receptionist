@@ -137,12 +137,7 @@ class TestInputValidation:
         assert isinstance(voice_conversation.custom_metadata, dict)
 
     @pytest.mark.parametrize(
-        "phone",
-        [
-            "+15551234567",
-            "555-123-4567",
-            "(555) 123-4567",
-        ],
+        "phone", ["+15551234567", "555-123-4567", "(555) 123-4567",],
     )
     def test_phone_number_validation_pass(self, db_session, phone):
         """Test valid phone numbers are accepted."""
@@ -160,11 +155,7 @@ class TestInputValidation:
 
     @pytest.mark.parametrize(
         "email",
-        [
-            "user@example.com",
-            "user+tag@example.com",
-            "user.name@sub.example.com",
-        ],
+        ["user@example.com", "user+tag@example.com", "user.name@sub.example.com",],
     )
     def test_email_validation_pass(self, db_session, email):
         """Test valid emails are accepted."""

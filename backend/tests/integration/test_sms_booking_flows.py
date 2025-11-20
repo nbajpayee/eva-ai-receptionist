@@ -63,9 +63,7 @@ class TestSMSBookingFlow:
         )
 
         content1, ai_msg1 = MessagingService.generate_ai_response(
-            db_session,
-            sms_conversation.id,
-            "sms",
+            db_session, sms_conversation.id, "sms",
         )
 
         # Message 2: User requests specific time
@@ -82,9 +80,7 @@ class TestSMSBookingFlow:
         )
 
         content2, ai_msg2 = MessagingService.generate_ai_response(
-            db_session,
-            sms_conversation.id,
-            "sms",
+            db_session, sms_conversation.id, "sms",
         )
 
         # Message 3: User provides email
@@ -105,9 +101,7 @@ class TestSMSBookingFlow:
         )
 
         content3, ai_msg3 = MessagingService.generate_ai_response(
-            db_session,
-            sms_conversation.id,
-            "sms",
+            db_session, sms_conversation.id, "sms",
         )
 
         # Verify multi-message conversation
@@ -124,12 +118,7 @@ class TestSMSBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_sms_multi_message_booking(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        sms_conversation,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, sms_conversation, customer,
     ):
         """Test SMS booking with back-and-forth conversation."""
         # Simulate multi-turn conversation
@@ -156,9 +145,7 @@ class TestSMSBookingFlow:
             # AI response
             mock_openai.return_value = mock_ai_response_with_text(ai_text)
             content, ai_msg = MessagingService.generate_ai_response(
-                db_session,
-                sms_conversation.id,
-                "sms",
+                db_session, sms_conversation.id, "sms",
             )
 
             assert content == ai_text or len(content) > 0
@@ -170,12 +157,7 @@ class TestSMSBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_sms_booking_with_confirmation_link(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        sms_conversation,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, sms_conversation, customer,
     ):
         """Test SMS booking includes confirmation link."""
         user_message = AnalyticsService.add_message(
@@ -196,9 +178,7 @@ class TestSMSBookingFlow:
         )
 
         content, ai_msg = MessagingService.generate_ai_response(
-            db_session,
-            sms_conversation.id,
-            "sms",
+            db_session, sms_conversation.id, "sms",
         )
 
         # Verify link in response
@@ -207,12 +187,7 @@ class TestSMSBookingFlow:
     @patch("messaging_service.handle_book_appointment")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_sms_booking_cancellation(
-        self,
-        mock_openai,
-        mock_book,
-        db_session,
-        sms_conversation,
-        customer,
+        self, mock_openai, mock_book, db_session, sms_conversation, customer,
     ):
         """Test canceling appointment via SMS."""
         # Create existing appointment
@@ -240,9 +215,7 @@ class TestSMSBookingFlow:
         )
 
         content, ai_msg = MessagingService.generate_ai_response(
-            db_session,
-            sms_conversation.id,
-            "sms",
+            db_session, sms_conversation.id, "sms",
         )
 
         # User confirms cancellation
@@ -259,9 +232,7 @@ class TestSMSBookingFlow:
         )
 
         content2, ai_msg2 = MessagingService.generate_ai_response(
-            db_session,
-            sms_conversation.id,
-            "sms",
+            db_session, sms_conversation.id, "sms",
         )
 
         assert "cancel" in content2.lower()
@@ -309,9 +280,7 @@ class TestSMSBookingFlow:
         )
 
         content, ai_msg = MessagingService.generate_ai_response(
-            db_session,
-            sms_conversation.id,
-            "sms",
+            db_session, sms_conversation.id, "sms",
         )
 
         assert "week" in content.lower()
@@ -319,12 +288,7 @@ class TestSMSBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_sms_slot_selection_by_number(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        sms_conversation,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, sms_conversation, customer,
     ):
         """Test selecting slot by option number via SMS."""
         # AI offers numbered options
@@ -361,12 +325,7 @@ class TestSMSBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_sms_slot_selection_by_time(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        sms_conversation,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, sms_conversation, customer,
     ):
         """Test selecting slot by time phrase via SMS."""
         availability = build_availability_response("2025-11-24", num_slots=6)
@@ -405,11 +364,7 @@ class TestSMSBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_sms_threading_multiple_conversations(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, customer,
     ):
         """Test handling multiple concurrent SMS conversations for same customer."""
         # Create two separate conversations

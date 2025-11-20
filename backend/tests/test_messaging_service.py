@@ -44,16 +44,11 @@ def test_update_customer_preserves_existing_owner_phone(db_session):
         is_new_client=False,
     )
     conversation_customer = create_customer(
-        name="Messaging Guest",
-        phone="+19990001234",
-        email=None,
-        is_new_client=True,
+        name="Messaging Guest", phone="+19990001234", email=None, is_new_client=True,
     )
 
     MessagingService._update_customer_from_arguments(
-        session,
-        conversation_customer,
-        {"customer_phone": other_customer.phone},
+        session, conversation_customer, {"customer_phone": other_customer.phone},
     )
 
     session.refresh(conversation_customer)
@@ -64,16 +59,11 @@ def test_update_customer_updates_when_phone_unique(db_session):
     session, create_customer = db_session
 
     conversation_customer = create_customer(
-        name="Messaging Guest",
-        phone="+19990002222",
-        email=None,
-        is_new_client=True,
+        name="Messaging Guest", phone="+19990002222", email=None, is_new_client=True,
     )
 
     MessagingService._update_customer_from_arguments(
-        session,
-        conversation_customer,
-        {"customer_phone": " +19990003333 "},
+        session, conversation_customer, {"customer_phone": " +19990003333 "},
     )
 
     session.refresh(conversation_customer)

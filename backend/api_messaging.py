@@ -135,9 +135,7 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
 
     if conversation is None:
         conversation = MessagingService.find_active_conversation(
-            db=db,
-            customer_id=customer.id,
-            channel=channel,
+            db=db, customer_id=customer.id, channel=channel,
         )
 
     if conversation is None:
@@ -181,9 +179,7 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
     if channel == "sms":
         sms_meta = MessagingService.sms_metadata_for_customer(customer.phone)
         AnalyticsService.add_sms_details(
-            db=db,
-            message_id=inbound_message.id,
-            **sms_meta,
+            db=db, message_id=inbound_message.id, **sms_meta,
         )
     else:
         email_meta = MessagingService.email_metadata_for_customer(
@@ -234,10 +230,11 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
                 except json.JSONDecodeError:
                     parsed_arguments = {}
 
-                normalized_arguments, adjustments = (
-                    MessagingService._normalize_tool_arguments(
-                        tool_name, parsed_arguments
-                    )
+                (
+                    normalized_arguments,
+                    adjustments,
+                ) = MessagingService._normalize_tool_arguments(
+                    tool_name, parsed_arguments
                 )
 
                 if (
@@ -282,11 +279,8 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
                         result.get("name") == "book_appointment"
                         and not booking_confirmation_message
                     ):
-                        booking_confirmation_message = (
-                            MessagingService.build_booking_confirmation_message(
-                                channel=channel,
-                                tool_output=result.get("output") or {},
-                            )
+                        booking_confirmation_message = MessagingService.build_booking_confirmation_message(
+                            channel=channel, tool_output=result.get("output") or {},
                         )
 
             tool_results[-1]["normalized_arguments"] = normalized_arguments
@@ -302,14 +296,15 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
             response_content = booking_confirmation_message
             assistant_message = None
         else:
-            followup_content, followup_message = (
-                MessagingService.generate_followup_response(
-                    db=db,
-                    conversation_id=conversation.id,
-                    channel=channel,
-                    assistant_message=assistant_message,
-                    tool_results=tool_results,
-                )
+            (
+                followup_content,
+                followup_message,
+            ) = MessagingService.generate_followup_response(
+                db=db,
+                conversation_id=conversation.id,
+                channel=channel,
+                assistant_message=assistant_message,
+                tool_results=tool_results,
             )
             response_content = followup_content
             assistant_message = followup_message or assistant_message
@@ -362,9 +357,7 @@ def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
     if channel == "sms":
         sms_meta_outgoing = MessagingService.sms_metadata_for_assistant(customer.phone)
         AnalyticsService.add_sms_details(
-            db=db,
-            message_id=outbound_message.id,
-            **sms_meta_outgoing,
+            db=db, message_id=outbound_message.id, **sms_meta_outgoing,
         )
     else:
         email_meta_outgoing = MessagingService.email_metadata_for_assistant(

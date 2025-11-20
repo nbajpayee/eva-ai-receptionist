@@ -36,11 +36,7 @@ class TestCrossChannelBooking:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_voice_to_sms_continuation(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, customer,
     ):
         """Test booking started on voice, completed via SMS."""
         # Create voice conversation
@@ -98,9 +94,7 @@ class TestCrossChannelBooking:
         )
 
         content, ai_msg = MessagingService.generate_ai_response(
-            db_session,
-            sms_conv.id,
-            "sms",
+            db_session, sms_conv.id, "sms",
         )
 
         # Verify customer history accessible across channels
@@ -116,11 +110,7 @@ class TestCrossChannelBooking:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_sms_to_voice_escalation(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, customer,
     ):
         """Test escalation from SMS to voice call."""
         # Create SMS conversation
@@ -146,9 +136,7 @@ class TestCrossChannelBooking:
         )
 
         content, ai_msg = MessagingService.generate_ai_response(
-            db_session,
-            sms_conv.id,
-            "sms",
+            db_session, sms_conv.id, "sms",
         )
 
         # Mark SMS for escalation
@@ -175,11 +163,7 @@ class TestCrossChannelBooking:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_email_to_sms_reminder(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, customer,
     ):
         """Test sending SMS reminder after email booking."""
         # Create email conversation with booking
@@ -227,11 +211,7 @@ class TestCrossChannelBooking:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_booking_history_unified_timeline(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, customer,
     ):
         """Test unified customer timeline across all channels."""
         # Create conversations across multiple channels
@@ -274,11 +254,7 @@ class TestCrossChannelBooking:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_customer_preference_persistence(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, customer,
     ):
         """Test customer preferences persist across channels."""
         # Set preferences in voice conversation
@@ -324,11 +300,7 @@ class TestCrossChannelBooking:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_slot_selection_across_channels(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, customer,
     ):
         """Test slot offers made in one channel, selected in another."""
         # Voice: Offer slots
@@ -388,11 +360,7 @@ class TestCrossChannelBooking:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_conversation_metadata_sync(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, customer,
     ):
         """Test metadata synchronization across conversations."""
         # Create conversations
@@ -437,11 +405,7 @@ class TestCrossChannelBooking:
     @patch("messaging_service.handle_book_appointment")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_duplicate_booking_prevention(
-        self,
-        mock_openai,
-        mock_book,
-        db_session,
-        customer,
+        self, mock_openai, mock_book, db_session, customer,
     ):
         """Test preventing duplicate bookings across channels."""
         # Create appointment via voice
@@ -482,11 +446,7 @@ class TestCrossChannelBooking:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_channel_specific_formatting(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, customer,
     ):
         """Test responses formatted appropriately for each channel."""
         availability = build_availability_response("2025-12-05", num_slots=5)

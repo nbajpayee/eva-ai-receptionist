@@ -81,9 +81,7 @@ class TestEmailBookingFlow:
         )
 
         content, ai_msg = MessagingService.generate_ai_response(
-            db_session,
-            email_conversation.id,
-            "email",
+            db_session, email_conversation.id, "email",
         )
 
         # Verify professional email format
@@ -93,12 +91,7 @@ class TestEmailBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_email_booking_with_attachments(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        email_conversation,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, email_conversation, customer,
     ):
         """Test email booking with attachments (e.g., medical forms)."""
         user_message = AnalyticsService.add_message(
@@ -119,9 +112,7 @@ class TestEmailBookingFlow:
         )
 
         content, ai_msg = MessagingService.generate_ai_response(
-            db_session,
-            email_conversation.id,
-            "email",
+            db_session, email_conversation.id, "email",
         )
 
         # Verify attachment acknowledged
@@ -130,12 +121,7 @@ class TestEmailBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_email_multi_recipient_handling(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        email_conversation,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, email_conversation, customer,
     ):
         """Test handling emails with multiple recipients."""
         user_message = AnalyticsService.add_message(
@@ -160,9 +146,7 @@ class TestEmailBookingFlow:
         )
 
         content, ai_msg = MessagingService.generate_ai_response(
-            db_session,
-            email_conversation.id,
-            "email",
+            db_session, email_conversation.id, "email",
         )
 
         # Verify group booking handled
@@ -171,12 +155,7 @@ class TestEmailBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_email_html_body_parsing(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        email_conversation,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, email_conversation, customer,
     ):
         """Test parsing HTML email bodies."""
         html_content = """
@@ -212,9 +191,7 @@ class TestEmailBookingFlow:
         )
 
         content, ai_msg = MessagingService.generate_ai_response(
-            db_session,
-            email_conversation.id,
-            "email",
+            db_session, email_conversation.id, "email",
         )
 
         # Verify service detected from HTML
@@ -223,12 +200,7 @@ class TestEmailBookingFlow:
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
     def test_email_reply_threading(
-        self,
-        mock_openai,
-        mock_check_avail,
-        db_session,
-        email_conversation,
-        customer,
+        self, mock_openai, mock_check_avail, db_session, email_conversation, customer,
     ):
         """Test email reply threading (In-Reply-To header)."""
         # Initial email
@@ -253,9 +225,7 @@ class TestEmailBookingFlow:
         )
 
         content1, ai_msg1 = MessagingService.generate_ai_response(
-            db_session,
-            email_conversation.id,
-            "email",
+            db_session, email_conversation.id, "email",
         )
 
         # Reply email (should reference original)
@@ -279,9 +249,7 @@ class TestEmailBookingFlow:
         )
 
         content2, ai_msg2 = MessagingService.generate_ai_response(
-            db_session,
-            email_conversation.id,
-            "email",
+            db_session, email_conversation.id, "email",
         )
 
         # Verify threading maintained

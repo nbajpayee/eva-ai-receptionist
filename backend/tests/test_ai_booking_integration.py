@@ -186,8 +186,7 @@ class TestPreemptiveAvailability:
             history = kwargs.get("messages") or []
 
             tool_call_entry = next(
-                (entry for entry in history if entry.get("tool_calls")),
-                None,
+                (entry for entry in history if entry.get("tool_calls")), None,
             )
             assert tool_call_entry is not None
             assert (
@@ -213,9 +212,7 @@ class TestPreemptiveAvailability:
         mock_openai.side_effect = _mock_ai_request
 
         content, message = MessagingService.generate_ai_response(
-            db_session,
-            conversation.id,
-            "sms",
+            db_session, conversation.id, "sms",
         )
 
         assert mock_check_avail.call_count == 1  # only the preemptive call
@@ -254,9 +251,7 @@ class TestPreemptiveAvailability:
         )
 
         content, message = MessagingService.generate_ai_response(
-            db_session,
-            conversation.id,
-            "sms",
+            db_session, conversation.id, "sms",
         )
 
         # Preemptive call + AI-requested call
@@ -312,13 +307,7 @@ class TestDeterministicBooking:
 
     @patch("messaging_service.MessagingService._get_calendar_service")
     def test_auto_books_when_slot_selected_and_details_complete(
-        self,
-        mock_calendar,
-        mock_openai,
-        mock_book,
-        db_session,
-        customer,
-        conversation,
+        self, mock_calendar, mock_openai, mock_book, db_session, customer, conversation,
     ):
         slots = _build_availability_output()["available_slots"]
 
@@ -357,9 +346,7 @@ class TestDeterministicBooking:
         }
 
         response_text, message = MessagingService.generate_ai_response(
-            db_session,
-            conversation.id,
-            "sms",
+            db_session, conversation.id, "sms",
         )
 
         mock_openai.assert_not_called()

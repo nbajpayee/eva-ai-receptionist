@@ -269,9 +269,7 @@ Consider these factors:
         """
         started_at = _ensure_utc(call_session.started_at) or _utcnow()
         normalized_date = datetime.combine(
-            started_at.date(),
-            datetime.min.time(),
-            tzinfo=timezone.utc,
+            started_at.date(), datetime.min.time(), tzinfo=timezone.utc,
         )
 
         while True:

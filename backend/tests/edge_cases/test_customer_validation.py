@@ -238,9 +238,7 @@ class TestCustomerValidation:
         """Test detection of duplicate customers with slight variations."""
         # Create customer with one phone format
         customer1 = Customer(
-            name="John Smith",
-            phone="+1-555-123-4567",
-            email="john@example.com",
+            name="John Smith", phone="+1-555-123-4567", email="john@example.com",
         )
         db_session.add(customer1)
         db_session.commit()

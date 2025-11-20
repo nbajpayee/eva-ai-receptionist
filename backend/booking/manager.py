@@ -43,9 +43,7 @@ class SlotSelectionManager:
 
     @staticmethod
     def capture_selection(
-        db: Session,
-        conversation: Conversation,
-        message: CommunicationMessage,
+        db: Session, conversation: Conversation, message: CommunicationMessage,
     ) -> bool:
         return SlotSelectionCore.capture_selection(db, conversation, message)
 
@@ -57,10 +55,7 @@ class SlotSelectionManager:
 
     @staticmethod
     def get_pending_slot_offers(
-        db: Session,
-        conversation: Conversation,
-        *,
-        enforce_expiry: bool = True,
+        db: Session, conversation: Conversation, *, enforce_expiry: bool = True,
     ) -> Optional[Dict[str, Any]]:
         return SlotSelectionCore.get_pending_slot_offers(
             db, conversation, enforce_expiry=enforce_expiry
@@ -86,9 +81,7 @@ class SlotSelectionManager:
 
     @staticmethod
     def enforce_booking(
-        db: Session,
-        conversation: Conversation,
-        arguments: Dict[str, Any],
+        db: Session, conversation: Conversation, arguments: Dict[str, Any],
     ) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Optional[str]]]]:
         return SlotSelectionCore.enforce_booking(db, conversation, arguments)
 
