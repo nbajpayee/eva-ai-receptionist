@@ -3,20 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
+from unittest.mock import patch
 
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionManager
 from booking.time_utils import to_eastern
 from database import CommunicationMessage, Conversation, SessionLocal
-
-
-@pytest.fixture
-def db_session():
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
+from realtime_client import RealtimeClient
 
 
 def _create_voice_conversation(session, session_id: str) -> Conversation:
@@ -93,6 +86,73 @@ def test_record_offers_persists_pending_metadata(db_session):
         assert pending["service_type"] == "hydrafacial"
         assert len(pending["slots"]) == 2
         assert pending["slots"][0]["index"] == 1
+    finally:
+        _cleanup_entities(db_session, conversation, messages)
+
+
+@patch("realtime_client.get_calendar_service")
+def test_backfill_slot_selection_from_prior_message(mock_calendar_service, db_session):
+    conversation = _create_voice_conversation(db_session, "session-backfill")
+    messages: list[CommunicationMessage] = []
+
+    try:
+        # Mock calendar service so RealtimeClient initialization has no external dependencies.
+        mock_calendar_service.return_value = object()
+
+        # Record slot offers for a specific date/time.
+        slots = _sample_slots(datetime(2025, 11, 16, 10, 0))
+        SlotSelectionManager.record_offers(
+            db_session,
+            conversation,
+            tool_call_id="backfill-call",
+            arguments={"date": "2025-11-16", "service_type": "botox"},
+            output={
+                "success": True,
+                "available_slots": slots,
+                "all_slots": slots,
+                "date": "2025-11-16",
+                "service_type": "botox",
+            },
+        )
+
+        # Earlier user message contains the explicit time.
+        earlier = AnalyticsService.add_message(
+            db=db_session,
+            conversation_id=conversation.id,
+            direction="inbound",
+            content="Can you book me tomorrow at 10am?",
+            metadata={"source": "voice_transcript"},
+        )
+        messages.append(earlier)
+
+        # Current confirmation message is vague and should trigger backfill.
+        anchor = AnalyticsService.add_message(
+            db=db_session,
+            conversation_id=conversation.id,
+            direction="inbound",
+            content="Yes, that time works. Please book it.",
+            metadata={"source": "voice_transcript"},
+        )
+        messages.append(anchor)
+
+        client = RealtimeClient(
+            session_id="session-backfill",
+            db=db_session,
+            conversation=conversation,
+        )
+
+        # Directly exercise the backfill helper using the vague confirmation as the anchor.
+        backfilled = client._backfill_slot_selection_from_history(anchor)
+        assert backfilled is True
+
+        db_session.refresh(conversation)
+        pending = conversation.custom_metadata.get("pending_slot_offers") or {}
+        selected_slot = pending.get("selected_slot")
+        selected_index = pending.get("selected_option_index")
+
+        assert selected_slot is not None
+        assert selected_index == 1
+        assert selected_slot["start"] == slots[0]["start"]
     finally:
         _cleanup_entities(db_session, conversation, messages)
 

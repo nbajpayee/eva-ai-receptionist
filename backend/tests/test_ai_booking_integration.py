@@ -19,15 +19,6 @@ from messaging_service import MessagingService
 
 
 @pytest.fixture
-def db_session():
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
-
-
-@pytest.fixture
 def customer(db_session):
     """Create a test customer."""
     # Use unique phone for each test to avoid conflicts
@@ -372,6 +363,72 @@ class TestDeterministicBooking:
         last_appt = metadata.get("last_appointment") or {}
         assert last_appt.get("status") == "scheduled"
         assert last_appt.get("start_time") == slots[0]["start"]
+
+    @patch("messaging_service.MessagingService._get_calendar_service")
+    def test_auto_books_even_when_selection_not_last_message(
+        self,
+        mock_calendar,
+        mock_openai,
+        mock_book,
+        db_session,
+        customer,
+        conversation,
+    ):
+        """Auto-booking should not depend on the selection message being the very last inbound message."""
+        slots = _build_availability_output()["available_slots"]
+
+        SlotSelectionManager.record_offers(
+            db_session,
+            conversation,
+            tool_call_id="auto-test-nonlast",
+            arguments={"date": "2025-11-20", "service_type": "botox"},
+            output={
+                "success": True,
+                "available_slots": slots,
+                "all_slots": slots,
+                "date": "2025-11-20",
+                "service_type": "botox",
+            },
+        )
+
+        selection_message = _add_user_message(
+            db_session, conversation, "Option 1 works great"
+        )
+        assert (
+            SlotSelectionManager.capture_selection(
+                db_session, conversation, selection_message
+            )
+            is True
+        )
+
+        # User sends an additional message after selecting the slot (e.g., providing extra details).
+        _add_user_message(
+            db_session,
+            conversation,
+            "My email is integration-updated@test.com",
+        )
+
+        mock_calendar.return_value = Mock()
+        mock_book.return_value = {
+            "success": True,
+            "event_id": "evt-456",
+            "start_time": slots[0]["start"],
+            "original_start_time": slots[0]["start"],
+            "service_type": "botox",
+            "service": "Botox",
+        }
+
+        response_text, message = MessagingService.generate_ai_response(
+            db_session,
+            conversation.id,
+            "sms",
+        )
+
+        # Deterministic path should still trigger without calling the model again.
+        mock_openai.assert_not_called()
+        mock_book.assert_called_once()
+        assert "Booked" in response_text
+        assert message is None
 
 
 class TestNonBookingRequests:

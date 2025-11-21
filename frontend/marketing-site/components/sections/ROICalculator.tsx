@@ -13,25 +13,24 @@ export default function ROICalculator() {
   const callsPerYear = callsPerDay * 365;
   const missedCallsPerYear = (callsPerYear * missedCallRate) / 100;
   const lostRevenuePerYear = missedCallsPerYear * avgAppointmentValue * 0.6; // 60% conversion rate
-  const evaMonthlyCost = 599; // Professional plan
-  const evaAnnualCost = evaMonthlyCost * 12;
   const capturedCalls = missedCallsPerYear * 0.95; // Eva captures 95%
-  const additionalRevenue = capturedCalls * avgAppointmentValue * 0.6;
-  const netBenefit = additionalRevenue - evaAnnualCost;
-  const roi = ((netBenefit / evaAnnualCost) * 100).toFixed(0);
+  const potentialRecovery = capturedCalls * avgAppointmentValue * 0.6;
 
   return (
     <FadeInUp>
-      <div className="bg-gradient-to-br from-primary-50 to-white rounded-2xl p-8 border border-primary-100">
-        <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-          Calculate Your ROI
+      <div className="bg-gradient-to-br from-primary-50 to-white rounded-2xl p-8 border border-primary-100 shadow-lg">
+        <h3 className="text-2xl font-bold text-gray-900 mb-2 text-center">
+          Calculate Your Cost of Missed Calls
         </h3>
+        <p className="text-gray-600 text-center mb-6">
+          See how much revenue you're leaving on the table
+        </p>
 
         <div className="space-y-6">
           {/* Inputs */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Calls per day: <span className="font-bold">{callsPerDay}</span>
+              Calls per day: <span className="font-bold text-primary-600">{callsPerDay}</span>
             </label>
             <input
               type="range"
@@ -45,7 +44,7 @@ export default function ROICalculator() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Average appointment value: <span className="font-bold">{formatCurrency(avgAppointmentValue)}</span>
+              Average appointment value: <span className="font-bold text-primary-600">{formatCurrency(avgAppointmentValue)}</span>
             </label>
             <input
               type="range"
@@ -60,7 +59,7 @@ export default function ROICalculator() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Current missed call rate: <span className="font-bold">{missedCallRate}%</span>
+              Current missed call rate: <span className="font-bold text-primary-600">{missedCallRate}%</span>
             </label>
             <input
               type="range"
@@ -74,48 +73,30 @@ export default function ROICalculator() {
 
           {/* Results */}
           <div className="pt-6 border-t-2 border-primary-200 space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-700">Lost revenue per year:</span>
-              <span className="text-xl font-bold text-red-600">
+            <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+              <p className="text-red-900 text-sm font-medium mb-2">Revenue Lost Annually</p>
+              <p className="text-4xl font-bold text-red-600">
                 {formatCurrency(lostRevenuePerYear)}
-              </span>
+              </p>
+              <p className="text-red-700 text-sm mt-2">
+                From {Math.round(missedCallsPerYear).toLocaleString()} missed calls per year
+              </p>
             </div>
 
-            <div className="flex justify-between items-center">
-              <span className="text-gray-700">Eva annual cost:</span>
-              <span className="text-xl font-bold text-gray-900">
-                {formatCurrency(evaAnnualCost)}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-gray-700">Additional revenue captured:</span>
-              <span className="text-xl font-bold text-green-600">
-                +{formatCurrency(additionalRevenue)}
-              </span>
-            </div>
-
-            <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl p-6 mt-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-primary-100 text-sm mb-1">Net Annual Benefit</p>
-                  <p className="text-3xl font-bold text-white">
-                    {formatCurrency(netBenefit)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-primary-100 text-sm mb-1">ROI</p>
-                  <p className="text-3xl font-bold text-white">
-                    {roi}%
-                  </p>
-                </div>
-              </div>
+            <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6">
+              <p className="text-green-100 text-sm font-medium mb-2">Potential Annual Recovery</p>
+              <p className="text-4xl font-bold text-white">
+                {formatCurrency(potentialRecovery)}
+              </p>
+              <p className="text-green-100 text-sm mt-2">
+                By capturing 95% of missed opportunities
+              </p>
             </div>
           </div>
         </div>
 
         <p className="text-sm text-gray-600 mt-6 text-center">
-          *Estimates based on 60% booking conversion rate and 95% call capture with Eva
+          *Estimates based on 60% booking conversion rate. Industry average missed call rate is 20-30%.
         </p>
       </div>
     </FadeInUp>

@@ -2,15 +2,39 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import FadeInUp from "@/components/animations/FadeInUp";
 import CTASection from "@/components/sections/CTASection";
-import ROICalculator from "@/components/sections/ROICalculator";
-import { PRICING_TIERS, FAQ_ITEMS } from "@/lib/constants";
-import { Check, ChevronDown } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { ChevronDown } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Pricing",
-  description: "Transparent pricing for every practice size. Book a demo to see how Eva AI can transform your front desk.",
+  description: "Flexible pricing tailored to your practice. Book a demo to discuss how Eva AI can transform your front desk.",
 };
+
+const FAQ_ITEMS = [
+  {
+    question: "How is Eva AI priced?",
+    answer: "We offer flexible pricing based on your practice size, call volume, and specific needs. Schedule a demo to discuss a custom plan that fits your budget and requirements."
+  },
+  {
+    question: "Is there a setup fee?",
+    answer: "No setup fees. We handle all the configuration and training to get Eva integrated with your existing systems."
+  },
+  {
+    question: "Can I cancel anytime?",
+    answer: "Yes, we offer month-to-month agreements with no long-term contracts. You can adjust or cancel your service at any time."
+  },
+  {
+    question: "What's included in the service?",
+    answer: "All plans include: 24/7 AI receptionist, appointment scheduling, Google Calendar integration, SMS confirmations, call analytics, and ongoing support. Advanced features like multi-location support and custom training are available based on your needs."
+  },
+  {
+    question: "How long does implementation take?",
+    answer: "Most practices are up and running within 48 hours. We handle the entire setup process including calendar integration, persona training, and testing."
+  },
+  {
+    question: "Do you offer a free trial?",
+    answer: "We offer a personalized demo where you can test Eva with your actual business information. Schedule a call to experience it firsthand."
+  },
+];
 
 export default function PricingPage() {
   return (
@@ -20,77 +44,95 @@ export default function PricingPage() {
         <div className="container-wide">
           <FadeInUp className="text-center max-w-3xl mx-auto mb-16">
             <h1 className="heading-xl text-gray-900 mb-6">
-              Transparent Pricing for Every Practice
+              Flexible Pricing for Every Practice
             </h1>
-            <p className="text-xl md:text-2xl text-gray-600">
-              No setup fees. No long-term contracts. Just simple, scalable pricing that grows with you.
+            <p className="text-xl md:text-2xl text-gray-600 mb-8">
+              Every practice is unique. We tailor our pricing to fit your specific needs, call volume, and growth goals.
+            </p>
+            <Link
+              href="/contact"
+              className="btn-primary inline-flex items-center text-lg px-8 py-4"
+            >
+              Talk to Sales
+            </Link>
+          </FadeInUp>
+
+          {/* Value Props */}
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            <FadeInUp delay={0.1}>
+              <div className="text-center p-8 bg-white rounded-2xl border border-gray-200">
+                <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No Setup Fees</h3>
+                <p className="text-gray-600">Get started with zero upfront costs. We handle all configuration and training.</p>
+              </div>
+            </FadeInUp>
+
+            <FadeInUp delay={0.2}>
+              <div className="text-center p-8 bg-white rounded-2xl border border-gray-200">
+                <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Flexible Terms</h3>
+                <p className="text-gray-600">Month-to-month agreements with no long-term contracts. Cancel or adjust anytime.</p>
+              </div>
+            </FadeInUp>
+
+            <FadeInUp delay={0.3}>
+              <div className="text-center p-8 bg-white rounded-2xl border border-gray-200">
+                <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Scalable Solutions</h3>
+                <p className="text-gray-600">Start small and grow. Our pricing scales with your practice as you expand.</p>
+              </div>
+            </FadeInUp>
+          </div>
+        </div>
+      </section>
+
+      {/* What You Get */}
+      <section className="section-spacing bg-white">
+        <div className="container-wide">
+          <FadeInUp className="text-center mb-12">
+            <h2 className="heading-lg text-gray-900 mb-4">
+              What's Included
+            </h2>
+            <p className="text-xl text-gray-600">
+              Enterprise-grade features, tailored to your needs
             </p>
           </FadeInUp>
 
-          {/* Pricing Cards */}
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-24">
-            {PRICING_TIERS.map((tier, index) => (
-              <FadeInUp key={index} delay={index * 0.1}>
-                <div
-                  className={`relative rounded-3xl p-8 h-full flex flex-col transition-all duration-300 ${
-                    tier.popular
-                      ? "bg-white ring-2 ring-primary-500 shadow-2xl scale-105 z-10"
-                      : "bg-gray-50/50 border border-gray-200 hover:bg-white hover:shadow-xl hover:-translate-y-1"
-                  }`}
-                >
-                  {tier.popular && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                      <span className="bg-gradient-to-r from-primary-500 to-primary-600 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow-lg tracking-wide">
-                        MOST POPULAR
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="mb-8">
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">
-                      {tier.name}
-                    </h3>
-                    <p className="text-gray-500 text-sm leading-relaxed min-h-[40px]">
-                      {tier.description}
-                    </p>
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            {[
+              "24/7 AI voice receptionist",
+              "Appointment scheduling & rescheduling",
+              "Google Calendar integration",
+              "SMS confirmations & reminders",
+              "Multi-channel support (Voice, SMS, Email)",
+              "Real-time analytics dashboard",
+              "AI-powered satisfaction scoring",
+              "Customer management & history",
+              "Missed call recovery",
+              "HIPAA compliance options",
+              "Ongoing support & updates",
+              "Custom persona training"
+            ].map((feature, i) => (
+              <FadeInUp key={i} delay={i * 0.05}>
+                <div className="flex items-start p-4 bg-gray-50 rounded-xl">
+                  <div className="w-6 h-6 rounded-full bg-primary-100 flex items-center justify-center shrink-0 mr-3 mt-0.5">
+                    <svg className="w-4 h-4 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
                   </div>
-
-                  <div className="mb-8 pb-8 border-b border-gray-100">
-                    {tier.price ? (
-                      <div className="flex items-baseline">
-                        <span className="text-5xl font-bold text-gray-900 tracking-tight">
-                          {formatCurrency(tier.price)}
-                        </span>
-                        <span className="text-gray-500 ml-2 font-medium">/{tier.period}</span>
-                      </div>
-                    ) : (
-                      <div className="text-5xl font-bold text-gray-900 tracking-tight">
-                        Custom
-                      </div>
-                    )}
-                  </div>
-
-                  <ul className="space-y-4 mb-8 flex-1">
-                    {tier.features.map((feature, i) => (
-                      <li key={i} className="flex items-start group">
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 mr-3 ${tier.popular ? 'bg-primary-100 text-primary-600' : 'bg-gray-200 text-gray-500 group-hover:bg-primary-50 group-hover:text-primary-500 transition-colors'}`}>
-                          <Check className="w-3 h-3" />
-                        </div>
-                        <span className="text-gray-700 text-sm font-medium">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <Link
-                    href="/contact"
-                    className={`w-full text-center py-4 px-6 rounded-xl font-bold text-sm tracking-wide transition-all ${
-                      tier.popular
-                        ? "btn-primary shadow-primary-500/25 hover:shadow-primary-500/40"
-                        : "bg-white border border-gray-200 text-gray-900 hover:bg-gray-50 hover:border-gray-300 shadow-sm"
-                    }`}
-                  >
-                    {tier.cta}
-                  </Link>
+                  <span className="text-gray-800 font-medium">{feature}</span>
                 </div>
               </FadeInUp>
             ))}
@@ -98,102 +140,8 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* Comparison Table */}
-      <section className="section-spacing bg-white pt-0">
-        <div className="container-wide">
-          <FadeInUp className="text-center mb-12">
-            <h2 className="heading-lg text-gray-900 mb-4">
-              Compare Plans
-            </h2>
-            <p className="text-xl text-gray-600">
-              A detailed look at what&apos;s included
-            </p>
-          </FadeInUp>
-
-          <FadeInUp delay={0.2}>
-            <div className="overflow-x-auto pb-4">
-              <table className="w-full border-collapse min-w-[800px]">
-                <thead>
-                  <tr>
-                    <th className="text-left p-6 border-b border-gray-200 bg-gray-50/50 rounded-tl-2xl w-1/3">
-                      <span className="text-gray-900 font-bold text-lg">Feature</span>
-                    </th>
-                    <th className="text-center p-6 border-b border-gray-200 w-1/5">
-                      <span className="text-gray-900 font-bold block">Starter</span>
-                    </th>
-                    <th className="text-center p-6 border-b border-primary-100 bg-primary-50/30 w-1/5 relative">
-                      <span className="text-primary-700 font-bold block">Professional</span>
-                    </th>
-                    <th className="text-center p-6 border-b border-gray-200 rounded-tr-2xl w-1/5">
-                      <span className="text-gray-900 font-bold block">Enterprise</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {[
-                    { feature: "Monthly calls", starter: "100", pro: "500", enterprise: "Unlimited" },
-                    { feature: "Voice AI receptionist", starter: true, pro: true, enterprise: true },
-                    { feature: "SMS support", starter: false, pro: true, enterprise: true },
-                    { feature: "Email support", starter: true, pro: true, enterprise: true },
-                    { feature: "Priority phone support", starter: false, pro: true, enterprise: true },
-                    { feature: "Dedicated success manager", starter: false, pro: false, enterprise: true },
-                    { feature: "Locations", starter: "1", pro: "3", enterprise: "Unlimited" },
-                    { feature: "Advanced Analytics", starter: false, pro: true, enterprise: true },
-                    { feature: "AI satisfaction scoring", starter: false, pro: true, enterprise: true },
-                    { feature: "Custom persona training", starter: false, pro: "Basic", enterprise: "Advanced" },
-                    { feature: "White-label options", starter: false, pro: false, enterprise: true },
-                    { feature: "HIPAA BAA", starter: false, pro: true, enterprise: true },
-                  ].map((row, index) => (
-                    <tr key={index} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-6 text-gray-700 font-medium">{row.feature}</td>
-                      <td className="p-6 text-center">
-                        {typeof row.starter === "boolean" ? (
-                          row.starter ? <Check className="w-5 h-5 text-green-500 mx-auto" /> : <div className="w-4 h-px bg-gray-300 mx-auto" />
-                        ) : (
-                          <span className="text-gray-900 font-semibold">{row.starter}</span>
-                        )}
-                      </td>
-                      <td className="p-6 text-center bg-primary-50/10">
-                        {typeof row.pro === "boolean" ? (
-                          row.pro ? <Check className="w-5 h-5 text-green-500 mx-auto" /> : <div className="w-4 h-px bg-gray-300 mx-auto" />
-                        ) : (
-                          <span className="text-primary-700 font-bold">{row.pro}</span>
-                        )}
-                      </td>
-                      <td className="p-6 text-center">
-                        {typeof row.enterprise === "boolean" ? (
-                          row.enterprise ? <Check className="w-5 h-5 text-green-500 mx-auto" /> : <div className="w-4 h-px bg-gray-300 mx-auto" />
-                        ) : (
-                          <span className="text-gray-900 font-semibold">{row.enterprise}</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </FadeInUp>
-        </div>
-      </section>
-
-      {/* ROI Calculator */}
-      <section className="section-spacing bg-gray-50">
-        <div className="container-narrow">
-          <FadeInUp className="text-center mb-12">
-            <h2 className="heading-lg text-gray-900 mb-4">
-              See Your Potential Savings
-            </h2>
-            <p className="text-xl text-gray-600">
-              Calculate how much revenue you&apos;re leaving on the table with missed calls
-            </p>
-          </FadeInUp>
-
-          <ROICalculator />
-        </div>
-      </section>
-
       {/* FAQ */}
-      <section className="section-spacing bg-white">
+      <section className="section-spacing bg-gray-50">
         <div className="container-narrow">
           <FadeInUp className="text-center mb-12">
             <h2 className="heading-lg text-gray-900 mb-4">

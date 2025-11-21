@@ -29,8 +29,8 @@ safety>=2.3.0
 
 # Code quality
 flake8>=6.1.0
-black==25.11.0
-isort==7.0.0
+black==24.8.0
+isort==5.13.2
 mypy>=1.7.0
 
 # Coverage reporting
