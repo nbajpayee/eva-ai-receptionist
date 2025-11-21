@@ -207,6 +207,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   }, [data]);
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchData = async () => {
       try {
         // Fetch both history and stats in parallel
@@ -226,17 +228,29 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         const historyData = await historyResponse.json();
         const statsData = await statsResponse.json();
 
-        setData(historyData);
-        setStats(statsData);
-        setEditForm(historyData.customer);
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setData(historyData);
+          setStats(statsData);
+          setEditForm(historyData.customer);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unknown error");
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : "Unknown error");
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchData();
+
+    // Cleanup function to prevent state updates on unmounted component
+    return () => {
+      isMounted = false;
+    };
   }, [resolvedParams.id]);
 
   const handleSave = async () => {
@@ -705,8 +719,15 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 );
               } else if (isCallItem(item)) {
                 const badgeProps = getStatusBadgeProps(item.data.outcome);
+                const callDate = item.data.started_at
+                  ? formatDistanceToNow(new Date(item.data.started_at), { addSuffix: true })
+                  : "unknown time";
                 return (
-                  <Link href={`/calls/${item.data.session_id}`} key={`call-${item.data.id}-${index}`}>
+                  <Link
+                    href={`/calls/${item.data.session_id}`}
+                    key={`call-${item.data.id}-${index}`}
+                    aria-label={`View voice call details from ${callDate}`}
+                  >
                     <Card className="hover:shadow-md transition-shadow cursor-pointer">
                       <CardHeader>
                       <div className="flex items-start justify-between">
