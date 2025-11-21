@@ -41,7 +41,7 @@ export function ConversionRateChart({ data }: ConversionRateChartProps) {
             <YAxis
               className="text-xs"
               tick={{ fill: '#71717a' }}
-              tickFormatter={(value) => `${value}%`}
+              tickFormatter={(value: number) => `${value}%`}
             />
             <Tooltip
               contentStyle={{

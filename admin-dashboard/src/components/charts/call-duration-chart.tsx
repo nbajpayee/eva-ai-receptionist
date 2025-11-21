@@ -41,7 +41,7 @@ export function CallDurationChart({ data }: CallDurationChartProps) {
             <YAxis
               className="text-xs"
               tick={{ fill: '#71717a' }}
-              tickFormatter={(value) => `${value}m`}
+              tickFormatter={(value: number) => `${value}m`}
             />
             <Tooltip
               contentStyle={{

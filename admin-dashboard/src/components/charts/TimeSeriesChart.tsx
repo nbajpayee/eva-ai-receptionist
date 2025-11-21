@@ -78,8 +78,8 @@ export function TimeSeriesChart({
         />
         <Tooltip
           formatter={tooltipFormatter || defaultTooltipFormatter}
-          labelFormatter={(label) =>
-            (xAxisFormatter || defaultXAxisFormatter)(label as string)
+          labelFormatter={(label: string) =>
+            (xAxisFormatter || defaultXAxisFormatter)(label)
           }
           contentStyle={{
             backgroundColor: "white",
