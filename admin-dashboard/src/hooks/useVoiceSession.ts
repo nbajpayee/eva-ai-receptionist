@@ -349,8 +349,9 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
     }
   }, [sendPing, status]);
 
-  // Speech detection callbacks for Silero/Enhanced VAD
-  const handleVADSpeechStart = useCallback(() => {
+  // Speech detection callbacks for Silero/Hybrid VAD
+  // These callbacks are triggered by the ML VAD model when speech is detected
+  const handleMLVADSpeechStart = useCallback(() => {
     if (!isUserSpeakingRef.current) {
       console.log('🎤 User started speaking (ML VAD)');
       isUserSpeakingRef.current = true;
@@ -363,7 +364,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
     }
   }, [interruptPlayback]);
 
-  const handleVADSpeechEnd = useCallback(() => {
+  const handleMLVADSpeechEnd = useCallback(() => {
     if (isUserSpeakingRef.current) {
       console.log('🎤 User stopped speaking (ML VAD)');
       isUserSpeakingRef.current = false;
@@ -371,26 +372,29 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
     }
   }, [scheduleCommit]);
 
-  // Initialize Silero VAD (for 'silero' mode)
-  const sileroVAD = useSileroVAD({
+  // Initialize Silero VAD for 'silero' mode
+  // This creates a secondary audio stream for ML-based speech detection
+  // while the ScriptProcessor continues to handle audio transmission
+  useSileroVAD({
     enabled: vadMode === "silero" && vadEnabled && isActive,
-    onSpeechStart: handleVADSpeechStart,
-    onSpeechEnd: handleVADSpeechEnd,
+    onSpeechStart: handleMLVADSpeechStart,
+    onSpeechEnd: handleMLVADSpeechEnd,
     minSpeechMs: 250,
     positiveSpeechThreshold: 0.8,
     negativeSpeechThreshold: 0.65,
   });
 
-  // Initialize Enhanced VAD (for 'hybrid' mode)
+  // Initialize Enhanced VAD for 'hybrid' mode
+  // Uses RMS pre-filter + Silero confirmation for balanced accuracy
   const enhancedVAD = useEnhancedVAD({
     enabled: vadMode === "hybrid" && vadEnabled && isActive,
-    onSpeechStart: handleVADSpeechStart,
-    onSpeechEnd: handleVADSpeechEnd,
+    onSpeechStart: handleMLVADSpeechStart,
+    onSpeechEnd: handleMLVADSpeechEnd,
     positiveSpeechThreshold: 0.8,
     negativeSpeechThreshold: 0.65,
   });
 
-  // Initialize Enhanced VAD when session starts
+  // Manage Enhanced VAD lifecycle
   useEffect(() => {
     if (vadMode === "hybrid" && isActive && vadEnabled) {
       enhancedVAD.initialize();
@@ -398,7 +402,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
         enhancedVAD.destroy();
       };
     }
-  }, [vadMode, isActive, vadEnabled, enhancedVAD]);
+  }, [vadMode, isActive, vadEnabled]);
 
   const handleServerMessage = useCallback(
     (event: MessageEvent<string>) => {
