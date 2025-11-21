@@ -23,7 +23,7 @@ export default function ROICalculator() {
           Calculate Your Cost of Missed Calls
         </h3>
         <p className="text-gray-600 text-center mb-6">
-          See how much revenue you're leaving on the table
+          See how much revenue you&apos;re leaving on the table
         </p>
 
         <div className="space-y-6">

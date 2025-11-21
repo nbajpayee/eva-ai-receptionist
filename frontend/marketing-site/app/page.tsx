@@ -20,10 +20,10 @@ export default function Home() {
         <div className="container-narrow">
           <FadeInUp className="text-center mb-12">
             <h2 className="heading-lg text-gray-900 mb-4">
-              What's Missed Calls Costing You?
+              What&apos;s Missed Calls Costing You?
             </h2>
             <p className="text-xl text-gray-600">
-              Calculate the revenue you're losing every year
+              Calculate the revenue you&apos;re losing every year
             </p>
           </FadeInUp>
           <ROICalculator />

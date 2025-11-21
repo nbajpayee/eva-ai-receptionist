@@ -103,7 +103,7 @@ export default function PricingPage() {
         <div className="container-wide">
           <FadeInUp className="text-center mb-12">
             <h2 className="heading-lg text-gray-900 mb-4">
-              What's Included
+              What&apos;s Included
             </h2>
             <p className="text-xl text-gray-600">
               Enterprise-grade features, tailored to your needs
