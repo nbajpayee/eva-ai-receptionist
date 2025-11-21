@@ -8,6 +8,9 @@ import {
   httpUrlToWebSocket,
   type VoiceConnectionStatus,
 } from "@/lib/voice-utils";
+import { useSileroVAD } from "./useSileroVAD";
+import { useEnhancedVAD } from "./useEnhancedVAD";
+import type { VADMode } from "@/components/voice/vad-settings";
 
 export type TranscriptEntry = {
   id: string;
@@ -96,7 +99,13 @@ function calculateRMS(buffer: Float32Array): number {
   return Math.sqrt(sum / buffer.length);
 }
 
-export function useVoiceSession() {
+interface UseVoiceSessionOptions {
+  vadMode?: VADMode;
+}
+
+export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
+  const { vadMode = "rms" } = options;
+
   const [status, setStatus] = useState<VoiceConnectionStatus>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
@@ -120,6 +129,8 @@ export function useVoiceSession() {
   const playbackSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const isUserSpeakingRef = useRef<boolean>(false);
   const isAssistantSpeakingRef = useRef<boolean>(false);
+
+  const isActive = status !== "idle" && status !== "error";
 
   const resetState = useCallback(() => {
     setStatus("idle");
@@ -338,6 +349,57 @@ export function useVoiceSession() {
     }
   }, [sendPing, status]);
 
+  // Speech detection callbacks for Silero/Enhanced VAD
+  const handleVADSpeechStart = useCallback(() => {
+    if (!isUserSpeakingRef.current) {
+      console.log('🎤 User started speaking (ML VAD)');
+      isUserSpeakingRef.current = true;
+
+      // If assistant is currently speaking, interrupt them
+      if (isAssistantSpeakingRef.current) {
+        console.log('✋ Interrupting assistant (ML VAD)');
+        interruptPlayback();
+      }
+    }
+  }, [interruptPlayback]);
+
+  const handleVADSpeechEnd = useCallback(() => {
+    if (isUserSpeakingRef.current) {
+      console.log('🎤 User stopped speaking (ML VAD)');
+      isUserSpeakingRef.current = false;
+      scheduleCommit(COMMIT_DELAY_FAST_MS);
+    }
+  }, [scheduleCommit]);
+
+  // Initialize Silero VAD (for 'silero' mode)
+  const sileroVAD = useSileroVAD({
+    enabled: vadMode === "silero" && vadEnabled && isActive,
+    onSpeechStart: handleVADSpeechStart,
+    onSpeechEnd: handleVADSpeechEnd,
+    minSpeechMs: 250,
+    positiveSpeechThreshold: 0.8,
+    negativeSpeechThreshold: 0.65,
+  });
+
+  // Initialize Enhanced VAD (for 'hybrid' mode)
+  const enhancedVAD = useEnhancedVAD({
+    enabled: vadMode === "hybrid" && vadEnabled && isActive,
+    onSpeechStart: handleVADSpeechStart,
+    onSpeechEnd: handleVADSpeechEnd,
+    positiveSpeechThreshold: 0.8,
+    negativeSpeechThreshold: 0.65,
+  });
+
+  // Initialize Enhanced VAD when session starts
+  useEffect(() => {
+    if (vadMode === "hybrid" && isActive && vadEnabled) {
+      enhancedVAD.initialize();
+      return () => {
+        enhancedVAD.destroy();
+      };
+    }
+  }, [vadMode, isActive, vadEnabled, enhancedVAD]);
+
   const handleServerMessage = useCallback(
     (event: MessageEvent<string>) => {
       const message = parseVoiceServerMessage(event.data);
@@ -416,28 +478,34 @@ export function useVoiceSession() {
       }
 
       const inputData = event.inputBuffer.getChannelData(0);
-      const rms = calculateRMS(inputData);
-      const shouldTransmit = !vadEnabled || rms >= vadThreshold;
 
-      if (!shouldTransmit) {
-        if (isUserSpeakingRef.current) {
-          isUserSpeakingRef.current = false;
-          scheduleCommit(COMMIT_DELAY_FAST_MS);
+      // For Silero and Hybrid modes, always transmit audio (VAD handled by ML model)
+      // For RMS mode, use traditional RMS-based VAD
+      if (vadMode === "rms") {
+        const rms = calculateRMS(inputData);
+        const shouldTransmit = !vadEnabled || rms >= vadThreshold;
+
+        if (!shouldTransmit) {
+          if (isUserSpeakingRef.current) {
+            isUserSpeakingRef.current = false;
+            scheduleCommit(COMMIT_DELAY_FAST_MS);
+          }
+          return;
         }
-        return;
+
+        if (!isUserSpeakingRef.current) {
+          console.log('🎤 User started speaking (RMS VAD)');
+          isUserSpeakingRef.current = true;
+
+          // If assistant is currently speaking, interrupt them
+          if (isAssistantSpeakingRef.current) {
+            console.log('✋ Interrupting assistant (RMS VAD)');
+            interruptPlayback();
+          }
+        }
       }
 
-      if (!isUserSpeakingRef.current) {
-        console.log('🎤 User started speaking (VAD)');
-        isUserSpeakingRef.current = true;
-
-        // If assistant is currently speaking, interrupt them
-        if (isAssistantSpeakingRef.current) {
-          console.log('✋ Interrupting assistant');
-          interruptPlayback();
-        }
-      }
-
+      // Transmit audio to backend
       const payload = float32ToBase64PCM(inputData);
       websocket.send(
         JSON.stringify({
@@ -462,7 +530,7 @@ export function useVoiceSession() {
     isRecordingRef.current = true;
     setStatus("listening");
     addTranscriptEntry("System", "Call started. You can speak now!");
-  }, [addTranscriptEntry, interruptPlayback, scheduleCommit, vadEnabled, vadThreshold]);
+  }, [addTranscriptEntry, interruptPlayback, scheduleCommit, vadEnabled, vadThreshold, vadMode]);
 
   const startSession = useCallback(async () => {
     if (status === "connecting" || status === "connected" || status === "listening") {

@@ -1,10 +1,11 @@
 "use client";
 
 import { Play, Square, Waves } from "lucide-react";
-import { useCallback, useMemo, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useVoiceSession } from "@/hooks/useVoiceSession";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { VADSettings, type VADMode } from "@/components/voice/vad-settings";
 import type { TranscriptEntry } from "@/hooks/useVoiceSession";
 import type { VoiceConnectionStatus } from "@/lib/voice-utils";
 
@@ -104,6 +105,23 @@ function TranscriptList({ entries }: { entries: TranscriptEntry[] }) {
 }
 
 export default function VoiceConsolePage() {
+  // VAD mode state with localStorage persistence
+  const [vadMode, setVadMode] = useState<VADMode>("hybrid");
+
+  // Load VAD mode from localStorage on mount
+  useEffect(() => {
+    const savedMode = localStorage.getItem("vadMode");
+    if (savedMode && (savedMode === "rms" || savedMode === "silero" || savedMode === "hybrid")) {
+      setVadMode(savedMode as VADMode);
+    }
+  }, []);
+
+  // Save VAD mode to localStorage when it changes
+  const handleVadModeChange = useCallback((mode: VADMode) => {
+    setVadMode(mode);
+    localStorage.setItem("vadMode", mode);
+  }, []);
+
   const {
     status,
     sessionId,
@@ -119,7 +137,7 @@ export default function VoiceConsolePage() {
     startSession,
     endSession,
     isActive,
-  } = useVoiceSession();
+  } = useVoiceSession({ vadMode });
 
   const helperText = useMemo(() => statusCopy[status] ?? statusCopy.idle, [status]);
   const formattedDuration = useMemo(() => {
@@ -154,17 +172,7 @@ export default function VoiceConsolePage() {
     () => diagnostics.interruptions.toString(),
     [diagnostics.interruptions]
   );
-  const vadThresholdDisplay = useMemo(() => vadThreshold.toFixed(3), [vadThreshold]);
   const canRefreshDiagnostics = status === "connected" || status === "listening";
-  const handleVadToggle = useCallback(() => {
-    setVadEnabled((prev) => !prev);
-  }, [setVadEnabled]);
-  const handleVadThresholdChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      setVadThreshold(Number(event.target.value));
-    },
-    [setVadThreshold]
-  );
 
   return (
     <div className="space-y-8">
@@ -241,40 +249,14 @@ export default function VoiceConsolePage() {
                 </li>
               </ul>
             </div>
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-zinc-700">Audio controls</p>
-                <label className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-600">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border border-zinc-300"
-                    checked={vadEnabled}
-                    onChange={handleVadToggle}
-                  />
-                  VAD enabled
-                </label>
-              </div>
-              <div className="mt-3 space-y-2 text-xs text-zinc-500">
-                <div className="flex items-center justify-between">
-                  <span>VAD threshold</span>
-                  <span className="font-mono text-[11px] text-zinc-600">{vadThresholdDisplay}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.005"
-                  max="0.05"
-                  step="0.005"
-                  value={vadThreshold}
-                  onChange={handleVadThresholdChange}
-                  disabled={!vadEnabled}
-                  className="w-full accent-zinc-900"
-                />
-                <p className="text-[11px] text-zinc-500">
-                  Lower values make Ava more sensitive to quiet speech; raise the threshold to reduce
-                  background noise when capturing audio.
-                </p>
-              </div>
-            </div>
+            <VADSettings
+              vadEnabled={vadEnabled}
+              vadThreshold={vadThreshold}
+              vadMode={vadMode}
+              onVadEnabledChange={setVadEnabled}
+              onVadThresholdChange={setVadThreshold}
+              onVadModeChange={handleVadModeChange}
+            />
             <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
               <div className="flex items-center justify-between">
                 <p className="font-semibold text-zinc-700">Diagnostics</p>
