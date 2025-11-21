@@ -90,6 +90,19 @@ function getStatusBadgeProps(status?: string | null) {
   }
 }
 
+// Type guard functions for timeline items
+function isAppointmentItem(item: TimelineItem): item is TimelineItem & { type: 'appointment'; data: Appointment } {
+  return item.type === 'appointment';
+}
+
+function isCallItem(item: TimelineItem): item is TimelineItem & { type: 'call'; data: Call } {
+  return item.type === 'call';
+}
+
+function isConversationItem(item: TimelineItem): item is TimelineItem & { type: 'conversation'; data: Conversation } {
+  return item.type === 'conversation';
+}
+
 interface CustomerHistory {
   customer: Customer;
   appointments: Appointment[];
@@ -137,34 +150,55 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
     const items: TimelineItem[] = [];
 
-    // Add appointments
+    // Add appointments (with date validation)
     data.appointments.forEach(apt => {
-      items.push({
-        type: 'appointment',
-        date: new Date(apt.appointment_datetime),
-        data: apt
-      });
-    });
-
-    // Add calls
-    data.calls.forEach(call => {
-      if (call.started_at) {
-        items.push({
-          type: 'call',
-          date: new Date(call.started_at),
-          data: call
-        });
+      try {
+        const date = new Date(apt.appointment_datetime);
+        if (!isNaN(date.getTime())) {
+          items.push({
+            type: 'appointment',
+            date,
+            data: apt
+          });
+        }
+      } catch (e) {
+        console.error('Invalid appointment date:', apt.appointment_datetime);
       }
     });
 
-    // Add conversations
+    // Add calls (with date validation)
+    data.calls.forEach(call => {
+      if (call.started_at) {
+        try {
+          const date = new Date(call.started_at);
+          if (!isNaN(date.getTime())) {
+            items.push({
+              type: 'call',
+              date,
+              data: call
+            });
+          }
+        } catch (e) {
+          console.error('Invalid call date:', call.started_at);
+        }
+      }
+    });
+
+    // Add conversations (with date validation)
     data.conversations.forEach(conv => {
       if (conv.initiated_at) {
-        items.push({
-          type: 'conversation',
-          date: new Date(conv.initiated_at),
-          data: conv
-        });
+        try {
+          const date = new Date(conv.initiated_at);
+          if (!isNaN(date.getTime())) {
+            items.push({
+              type: 'conversation',
+              date,
+              data: conv
+            });
+          }
+        } catch (e) {
+          console.error('Invalid conversation date:', conv.initiated_at);
+        }
       }
     });
 
@@ -335,21 +369,21 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           <CardTitle>Quick Actions</CardTitle>
           <CardDescription>Common tasks for this customer</CardDescription>
         </CardHeader>
-        <CardContent className="flex items-center gap-2">
+        <CardContent className="flex flex-wrap items-center gap-2">
           <Link href={`/messaging?customer_id=${customer.id}`}>
-            <Button variant="default">
+            <Button variant="default" aria-label="Send message to customer">
               <Send className="mr-2 h-4 w-4" />
               Send Message
             </Button>
           </Link>
           <Link href={`/appointments?customer_id=${customer.id}&action=new`}>
-            <Button variant="outline">
+            <Button variant="outline" aria-label="Book new appointment for customer">
               <CalendarPlus className="mr-2 h-4 w-4" />
               Book Appointment
             </Button>
           </Link>
           {customer.phone && (
-            <a href={`tel:${customer.phone}`}>
+            <a href={`tel:${customer.phone}`} aria-label={`Call customer at ${customer.phone}`}>
               <Button variant="outline">
                 <Phone className="mr-2 h-4 w-4" />
                 Call
@@ -357,7 +391,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             </a>
           )}
           {customer.email && (
-            <a href={`mailto:${customer.email}`}>
+            <a href={`mailto:${customer.email}`} aria-label={`Email customer at ${customer.email}`}>
               <Button variant="outline">
                 <Mail className="mr-2 h-4 w-4" />
                 Email
@@ -638,11 +672,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             </Card>
           ) : (
             timeline.map((item, index) => {
-              if (item.type === 'appointment') {
-                const apt = item.data as Appointment;
-                const badgeProps = getStatusBadgeProps(apt.status);
+              if (isAppointmentItem(item)) {
+                const badgeProps = getStatusBadgeProps(item.data.status);
                 return (
-                  <Card key={`apt-${apt.id}-${index}`} className="hover:shadow-md transition-shadow">
+                  <Card key={`apt-${item.data.id}-${index}`} className="hover:shadow-md transition-shadow">
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
@@ -650,31 +683,30 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                             <Calendar className="h-4 w-4 text-blue-600" />
                           </div>
                           <div>
-                            <CardTitle className="text-lg">Appointment: {apt.service_type}</CardTitle>
+                            <CardTitle className="text-lg">Appointment: {item.data.service_type}</CardTitle>
                             <CardDescription>
-                              {format(new Date(apt.appointment_datetime), "PPP 'at' p")}
+                              {format(new Date(item.data.appointment_datetime), "PPP 'at' p")}
                               {" • "}
-                              {formatDistanceToNow(new Date(apt.appointment_datetime), { addSuffix: true })}
+                              {formatDistanceToNow(new Date(item.data.appointment_datetime), { addSuffix: true })}
                             </CardDescription>
                           </div>
                         </div>
                         <Badge variant={badgeProps.variant} className={badgeProps.className}>
-                          {apt.status}
+                          {item.data.status}
                         </Badge>
                       </div>
                     </CardHeader>
                     <CardContent className="text-sm pl-[60px]">
-                      {apt.provider && <p className="text-zinc-500">Provider: {apt.provider}</p>}
-                      {apt.special_requests && <p className="mt-2 text-zinc-700">{apt.special_requests}</p>}
-                      <p className="text-xs text-zinc-400 mt-2">Booked by {apt.booked_by}</p>
+                      {item.data.provider && <p className="text-zinc-500">Provider: {item.data.provider}</p>}
+                      {item.data.special_requests && <p className="mt-2 text-zinc-700">{item.data.special_requests}</p>}
+                      <p className="text-xs text-zinc-400 mt-2">Booked by {item.data.booked_by}</p>
                     </CardContent>
                   </Card>
                 );
-              } else if (item.type === 'call') {
-                const call = item.data as Call;
-                const badgeProps = getStatusBadgeProps(call.outcome);
+              } else if (isCallItem(item)) {
+                const badgeProps = getStatusBadgeProps(item.data.outcome);
                 return (
-                  <Link href={`/calls/${call.session_id}`} key={`call-${call.id}-${index}`}>
+                  <Link href={`/calls/${item.data.session_id}`} key={`call-${item.data.id}-${index}`}>
                     <Card className="hover:shadow-md transition-shadow cursor-pointer">
                       <CardHeader>
                       <div className="flex items-start justify-between">
@@ -685,23 +717,23 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                           <div>
                             <CardTitle className="text-lg">Voice Call</CardTitle>
                             <CardDescription>
-                              {call.started_at ? (
+                              {item.data.started_at ? (
                                 <>
-                                  {format(new Date(call.started_at), "PPP 'at' p")}
+                                  {format(new Date(item.data.started_at), "PPP 'at' p")}
                                   {" • "}
-                                  {formatDistanceToNow(new Date(call.started_at), { addSuffix: true })}
+                                  {formatDistanceToNow(new Date(item.data.started_at), { addSuffix: true })}
                                 </>
                               ) : "Unknown"}
                             </CardDescription>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {call.outcome && (
+                          {item.data.outcome && (
                             <Badge variant={badgeProps.variant} className={badgeProps.className}>
-                              {call.outcome}
+                              {item.data.outcome}
                             </Badge>
                           )}
-                          {call.escalated && (
+                          {item.data.escalated && (
                             <Badge variant="outline" className="border-red-200 bg-red-100 text-red-700">
                               Escalated
                             </Badge>
@@ -710,25 +742,24 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                       </div>
                     </CardHeader>
                     <CardContent className="text-sm space-y-1 pl-[60px]">
-                      {call.duration_seconds && (
-                        <p className="text-zinc-500">Duration: {Math.floor(call.duration_seconds / 60)}m {call.duration_seconds % 60}s</p>
+                      {item.data.duration_seconds && (
+                        <p className="text-zinc-500">Duration: {Math.floor(item.data.duration_seconds / 60)}m {item.data.duration_seconds % 60}s</p>
                       )}
-                      {call.satisfaction_score !== undefined && call.satisfaction_score !== null && (
-                        <p className="text-zinc-500">Satisfaction: {call.satisfaction_score}/10</p>
+                      {item.data.satisfaction_score !== undefined && item.data.satisfaction_score !== null && (
+                        <p className="text-zinc-500">Satisfaction: {item.data.satisfaction_score}/10</p>
                       )}
-                      {call.sentiment && (
-                        <p className="text-zinc-500">Sentiment: {call.sentiment}</p>
+                      {item.data.sentiment && (
+                        <p className="text-zinc-500">Sentiment: {item.data.sentiment}</p>
                       )}
                     </CardContent>
                     </Card>
                   </Link>
                 );
-              } else if (item.type === 'conversation') {
-                const conv = item.data as Conversation;
-                const statusBadgeProps = getStatusBadgeProps(conv.status);
-                const outcomeBadgeProps = getStatusBadgeProps(conv.outcome);
+              } else if (isConversationItem(item)) {
+                const statusBadgeProps = getStatusBadgeProps(item.data.status);
+                const outcomeBadgeProps = getStatusBadgeProps(item.data.outcome);
                 return (
-                  <Card key={`conv-${conv.id}-${index}`} className="hover:shadow-md transition-shadow">
+                  <Card key={`conv-${item.data.id}-${index}`} className="hover:shadow-md transition-shadow">
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
@@ -736,35 +767,35 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                             <MessageSquare className="h-4 w-4 text-purple-600" />
                           </div>
                           <div>
-                            <CardTitle className="text-lg capitalize">{conv.channel} Conversation</CardTitle>
+                            <CardTitle className="text-lg capitalize">{item.data.channel} Conversation</CardTitle>
                             <CardDescription>
-                              {conv.initiated_at ? (
+                              {item.data.initiated_at ? (
                                 <>
-                                  {format(new Date(conv.initiated_at), "PPP 'at' p")}
+                                  {format(new Date(item.data.initiated_at), "PPP 'at' p")}
                                   {" • "}
-                                  {formatDistanceToNow(new Date(conv.initiated_at), { addSuffix: true })}
+                                  {formatDistanceToNow(new Date(item.data.initiated_at), { addSuffix: true })}
                                 </>
                               ) : "Unknown"}
                             </CardDescription>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {conv.status && (
+                          {item.data.status && (
                             <Badge variant={statusBadgeProps.variant} className={statusBadgeProps.className}>
-                              {conv.status}
+                              {item.data.status}
                             </Badge>
                           )}
-                          {conv.outcome && (
+                          {item.data.outcome && (
                             <Badge variant={outcomeBadgeProps.variant} className={outcomeBadgeProps.className}>
-                              {conv.outcome}
+                              {item.data.outcome}
                             </Badge>
                           )}
                         </div>
                       </div>
                     </CardHeader>
-                    {conv.satisfaction_score !== undefined && conv.satisfaction_score !== null && (
+                    {item.data.satisfaction_score !== undefined && item.data.satisfaction_score !== null && (
                       <CardContent className="text-sm pl-[60px]">
-                        <p className="text-zinc-500">Satisfaction: {conv.satisfaction_score}/10</p>
+                        <p className="text-zinc-500">Satisfaction: {item.data.satisfaction_score}/10</p>
                       </CardContent>
                     )}
                   </Card>
