@@ -570,6 +570,74 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 
 ## 📅 UP NEXT
 
+### Phase 4 - Critical Production Features (Nov 22-29, 2025)
+
+**Priority 1: Authentication & Security** 🔒
+- [ ] Implement Supabase Auth for admin dashboard
+- [ ] Add login/logout UI components
+- [ ] Protect all `/api/admin/*` routes with auth middleware
+- [ ] Add Row Level Security (RLS) policies in Supabase
+- [ ] Implement role-based access control (Owner vs Staff vs Provider)
+- **Estimated:** 1-2 days
+- **Risk:** Dashboard currently has no authentication - anyone can access sensitive data
+
+**Priority 2: Silero VAD Integration** 🎤
+- [ ] Add VAD mode state management to voice interface
+  - [ ] Add `vadMode` state ('rms' | 'silero' | 'hybrid')
+  - [ ] Persist mode in localStorage
+  - [ ] Load on voice interface mount
+- [ ] Wire up Silero hooks to voice interface
+  - [ ] Initialize `useSileroVAD` when mode is 'silero'
+  - [ ] Initialize `useEnhancedVAD` when mode is 'hybrid'
+  - [ ] Keep existing RMS code when mode is 'rms'
+- [ ] Add VADSettings component to voice page UI
+  - [ ] Allow users to switch modes during call
+  - [ ] Show current mode indicator
+  - [ ] Display accuracy benchmarks
+- [ ] Test all three VAD modes end-to-end
+  - [ ] Test RMS mode (baseline - 70-80% accuracy)
+  - [ ] Test Silero mode (ML-powered - 95%+ accuracy)
+  - [ ] Test Hybrid mode (RMS pre-filter + Silero confirmation - 90% accuracy)
+- [ ] Deploy to production voice interface
+  - [ ] Set default mode to 'hybrid' for best balance
+  - [ ] Update documentation for users
+- **Estimated:** 4-5 hours
+- **Impact:** Improves voice detection accuracy from 70-80% to 95%+
+- **Status:** Infrastructure 100% complete (hooks, UI components, docs ready)
+- **What's left:** Just integration into existing voice interface
+
+**Priority 3: Production Messaging Integration** 📱
+- [ ] Add Twilio credentials to Railway environment variables
+- [ ] Uncomment Twilio SMS code in `backend/research/outbound_service.py`
+- [ ] Test SMS sending end-to-end
+- [ ] Add SendGrid API key to environment
+- [ ] Uncomment SendGrid email code in `backend/research/outbound_service.py`
+- [ ] Test email sending end-to-end
+- [ ] Test Research Campaign execution with real SMS/Email
+- **Estimated:** 2-4 hours
+- **Impact:** Unlocks Research Campaigns and SMS appointment confirmations
+- **Status:** Code is 90% ready, just needs API keys
+
+**Priority 4: Monitoring & Error Tracking** 📊
+- [ ] Integrate Sentry for error tracking
+- [ ] Add health check monitoring (UptimeRobot or similar)
+- [ ] Set up log aggregation (Railway logs or Papertrail)
+- [ ] Create alerting for critical errors
+- [ ] Add performance monitoring (response times, WebSocket health)
+- **Estimated:** 1 day
+- **Impact:** Visibility into production issues
+
+**Priority 5: Customer Detail Page Enhancements** 👥
+- [ ] Build full customer profile view
+- [ ] Add inline editing for customer details
+- [ ] Show interaction timeline (all conversations, appointments)
+- [ ] Add quick actions (send message, book appointment)
+- [ ] Show customer lifetime value and statistics
+- **Estimated:** 6-8 hours
+- **Impact:** Better admin workflow for customer management
+
+---
+
 ### Messaging Function-Calling Alignment (In Progress)
 - [x] **Phase 0 – Preconditions & Instrumentation**
   - [x] Confirm Google Calendar credentials and token are valid in all environments; update onboarding docs if gaps are found.
