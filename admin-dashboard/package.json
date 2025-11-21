@@ -21,6 +21,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toggle-group": "^1.1.2",
     "@ricky0123/vad-web": "^0.0.29",
+    "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.80.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
