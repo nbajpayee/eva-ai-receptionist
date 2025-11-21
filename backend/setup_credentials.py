@@ -2,6 +2,7 @@
 Setup script to decode Google Calendar credentials from environment variables.
 This runs before the main app starts in Railway deployment.
 """
+
 import base64
 import os
 from pathlib import Path
@@ -24,7 +25,9 @@ def setup_google_credentials():
         Path("token.json").write_text(token_json)
         print("✓ Google token.json created from environment variable")
     else:
-        print("⚠ GOOGLE_TOKEN_BASE64 not set - Google Calendar may require re-authentication")
+        print(
+            "⚠ GOOGLE_TOKEN_BASE64 not set - Google Calendar may require re-authentication"
+        )
 
 
 if __name__ == "__main__":
