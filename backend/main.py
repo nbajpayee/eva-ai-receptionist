@@ -895,12 +895,28 @@ def get_provider_consultations(
 
 
 # CORS middleware
+# SECURITY: Configure allowed origins for production
+# Development: Allow localhost
+# Production: Replace with actual domains (dashboard.getevaai.com, etc.)
+allowed_origins = [
+    "http://localhost:3000",  # Next.js dev server
+    "http://localhost:3001",  # Alternative port
+    "https://dashboard.getevaai.com",  # Production dashboard
+    "https://getevaai.com",  # Marketing site
+]
+
+# Allow all origins in development ONLY if DEBUG is True
+if settings.DEBUG:
+    allowed_origins.append("http://localhost:5173")  # Vite dev server
+    allowed_origins.append("http://127.0.0.1:3000")  # Alternative localhost
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=allowed_origins,  # Specific origins only
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
+    max_age=600,  # Cache preflight requests for 10 minutes
 )
 
 # Active WebSocket connections

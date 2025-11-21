@@ -12,6 +12,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session, joinedload
 
 from analytics import AnalyticsService
+from auth import User, get_current_user
 from booking.manager import SlotSelectionManager
 from database import Conversation, Customer, get_db
 from messaging_service import MessagingService
@@ -108,7 +109,11 @@ def _ensure_customer(
 
 
 @messaging_router.post("/send")
-def send_message(request: SendMessageRequest, db: Session = Depends(get_db)):
+def send_message(
+    request: SendMessageRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     channel = request.channel
 
     conversation: Optional[Conversation] = None
@@ -417,6 +422,7 @@ def list_conversations(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     query = (
         db.query(Conversation)
@@ -447,7 +453,11 @@ def list_conversations(
 
 
 @messaging_router.get("/conversations/{conversation_id}")
-def get_conversation(conversation_id: UUID, db: Session = Depends(get_db)):
+def get_conversation(
+    conversation_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     conversation = (
         db.query(Conversation)
         .options(joinedload(Conversation.customer), joinedload(Conversation.messages))
