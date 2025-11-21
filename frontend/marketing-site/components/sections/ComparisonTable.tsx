@@ -6,7 +6,7 @@ import { Check, X, Minus, HelpCircle } from "lucide-react";
 const COMPARISON_DATA = [
   {
     feature: "Annual Cost",
-    eva: "$3,600 - $7,200",
+    eva: "Customized Pricing",
     human: "$35,000 - $45,000",
     center: "$12,000+",
     highlight: true,
