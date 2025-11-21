@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import FadeInUp from "@/components/animations/FadeInUp";
-import { PhoneOff, Clock, UserX, ArrowRight, Calculator } from "lucide-react";
+import { PhoneOff, Clock, UserX, Calculator } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 export default function ProblemSection() {
@@ -33,8 +33,6 @@ export default function ProblemSection() {
   const callsPerYear = callsPerDay * 365;
   const missedCallsPerYear = (callsPerYear * missedCallRate) / 100;
   const lostRevenuePerYear = missedCallsPerYear * avgAppointmentValue * 0.6;
-  const capturedCalls = missedCallsPerYear * 0.95;
-  const potentialRecovery = capturedCalls * avgAppointmentValue * 0.6;
 
   return (
     <section className="section-spacing bg-white overflow-hidden">
@@ -48,7 +46,7 @@ export default function ProblemSection() {
                   Every Missed Call is <span className="text-red-600">Lost Revenue</span>
                 </h2>
                 <p className="text-xl text-gray-600 leading-relaxed">
-                  The average medical spa loses <span className="font-bold text-gray-900">$50,000/year</span> to missed calls and inefficient scheduling. Don&apos;t let revenue walk out the door.
+                  The average medical spa loses <span className="font-bold text-gray-900">&gt;$300K/year</span> to missed calls and inefficient scheduling. Don&apos;t let revenue walk out the door.
                 </p>
               </div>
             </FadeInUp>
@@ -60,7 +58,7 @@ export default function ProblemSection() {
               {problems.map((problem, index) => (
                 <FadeInUp key={index} delay={index * 0.1 + 0.2}>
                   <div className="flex gap-6 relative">
-                    <div className="flex-shrink-0 w-12 h-12 bg-white border-2 border-red-100 text-red-600 rounded-full flex items-center justify-center z-10 shadow-sm">
+                    <div className="flex-shrink-0 w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center z-10 shadow-sm">
                       <problem.icon className="w-5 h-5" />
                     </div>
                     <div className="pt-1">
@@ -164,40 +162,20 @@ export default function ProblemSection() {
                     </div>
                   </div>
 
-                  {/* Results Grid */}
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="bg-red-50 rounded-2xl p-6 border border-red-100 text-center transition-transform hover:scale-[1.02]">
-                      <p className="text-red-600 text-sm font-semibold mb-2 uppercase tracking-wide">Revenue Lost Annually</p>
-                      <p className="text-3xl lg:text-4xl font-bold text-red-600 mb-2">
-                        {formatCurrency(lostRevenuePerYear)}
-                      </p>
-                      <p className="text-red-400 text-xs">
-                        From {Math.round(missedCallsPerYear).toLocaleString()} missed calls
-                      </p>
-                    </div>
-
-                    <div className="bg-green-50 rounded-2xl p-6 border border-green-100 text-center relative overflow-hidden transition-transform hover:scale-[1.02]">
-                      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-green-600/5" />
-                      <p className="text-green-700 text-sm font-semibold mb-2 uppercase tracking-wide relative z-10">Potential Recovery</p>
-                      <p className="text-3xl lg:text-4xl font-bold text-green-700 mb-2 relative z-10">
-                        {formatCurrency(potentialRecovery)}
-                      </p>
-                      <p className="text-green-600/80 text-xs relative z-10">
-                        By capturing 95% of opportunities
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* CTA */}
-                  <div className="pt-4">
-                    <button className="w-full bg-gray-900 hover:bg-gray-800 text-white text-lg font-semibold py-4 px-8 rounded-xl shadow-lg shadow-gray-900/20 transition-all flex items-center justify-center gap-2 group">
-                      Recover This Revenue
-                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                    </button>
-                    <p className="text-xs text-center text-gray-400 mt-4">
-                      *Estimates based on 60% booking conversion rate. Industry average missed call rate is 20-30%.
+                  {/* Results - Full width Revenue Lost */}
+                  <div className="bg-red-50 rounded-2xl p-6 border border-red-200 text-center transition-transform hover:scale-[1.02]">
+                    <p className="text-red-900 text-sm font-medium mb-2">Revenue Lost Annually</p>
+                    <p className="text-4xl lg:text-5xl font-bold text-red-600 mb-2">
+                      {formatCurrency(lostRevenuePerYear)}
+                    </p>
+                    <p className="text-red-700 text-sm mt-2">
+                      From {Math.round(missedCallsPerYear).toLocaleString()} missed calls per year
                     </p>
                   </div>
+
+                  <p className="text-xs text-center text-gray-400 mt-2">
+                    *Estimates based on 60% booking conversion rate. Industry average missed call rate is 20-30%.
+                  </p>
                 </div>
               </div>
             </FadeInUp>
