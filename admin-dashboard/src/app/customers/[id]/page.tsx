@@ -1,13 +1,13 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, AlertTriangle, Baby, Calendar, MessageSquare, Headphones, TrendingUp, DollarSign, Star, Activity, Send, CalendarPlus, Clock, UserX } from "lucide-react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 
 interface Customer {
@@ -117,6 +117,9 @@ type TimelineItem = {
   data: Appointment | Call | Conversation;
 };
 
+// Constants for calculations
+const AVG_APPOINTMENT_VALUE = 350; // Average revenue per completed appointment
+
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const router = useRouter();
@@ -128,15 +131,15 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [editForm, setEditForm] = useState<Partial<Customer>>({});
   const [isSaving, setIsSaving] = useState(false);
 
-  // Create unified timeline from all interactions
-  const createTimeline = (): TimelineItem[] => {
+  // Create unified timeline from all interactions (memoized for performance)
+  const timeline = useMemo((): TimelineItem[] => {
     if (!data) return [];
 
-    const timeline: TimelineItem[] = [];
+    const items: TimelineItem[] = [];
 
     // Add appointments
     data.appointments.forEach(apt => {
-      timeline.push({
+      items.push({
         type: 'appointment',
         date: new Date(apt.appointment_datetime),
         data: apt
@@ -146,7 +149,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     // Add calls
     data.calls.forEach(call => {
       if (call.started_at) {
-        timeline.push({
+        items.push({
           type: 'call',
           date: new Date(call.started_at),
           data: call
@@ -157,7 +160,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     // Add conversations
     data.conversations.forEach(conv => {
       if (conv.initiated_at) {
-        timeline.push({
+        items.push({
           type: 'conversation',
           date: new Date(conv.initiated_at),
           data: conv
@@ -166,10 +169,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     });
 
     // Sort by date (most recent first)
-    return timeline.sort((a, b) => b.date.getTime() - a.date.getTime());
-  };
-
-  const timeline = createTimeline();
+    return items.sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [data]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -368,8 +369,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
       {/* Customer Statistics */}
       {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          {[...Array(5)].map((_, i) => (
             <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <div className="h-4 w-24 bg-zinc-200 rounded animate-pulse" />
@@ -392,10 +393,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${(stats.completed_appointments * 350).toLocaleString()}
+                ${(stats.completed_appointments * AVG_APPOINTMENT_VALUE).toLocaleString()}
               </div>
               <p className="text-xs text-zinc-500 mt-1">
-                Estimated from {stats.completed_appointments} completed appointments
+                Est. from {stats.completed_appointments} completed appointments @ ${AVG_APPOINTMENT_VALUE} avg
               </p>
             </CardContent>
           </Card>
@@ -456,10 +457,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {stats.no_show_rate.toFixed(1)}%
+                {stats.total_appointments > 0 ? `${stats.no_show_rate.toFixed(1)}%` : "N/A"}
               </div>
               <p className="text-xs text-zinc-500 mt-1">
-                {stats.cancelled_appointments} of {stats.total_appointments} appointments
+                {stats.total_appointments > 0
+                  ? `${stats.cancelled_appointments} of ${stats.total_appointments} appointments`
+                  : "No appointments yet"}
               </p>
             </CardContent>
           </Card>
@@ -639,7 +642,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 const apt = item.data as Appointment;
                 const badgeProps = getStatusBadgeProps(apt.status);
                 return (
-                  <Card key={`apt-${apt.id}-${index}`}>
+                  <Card key={`apt-${apt.id}-${index}`} className="hover:shadow-md transition-shadow">
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
@@ -650,6 +653,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                             <CardTitle className="text-lg">Appointment: {apt.service_type}</CardTitle>
                             <CardDescription>
                               {format(new Date(apt.appointment_datetime), "PPP 'at' p")}
+                              {" • "}
+                              {formatDistanceToNow(new Date(apt.appointment_datetime), { addSuffix: true })}
                             </CardDescription>
                           </div>
                         </div>
@@ -669,8 +674,9 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 const call = item.data as Call;
                 const badgeProps = getStatusBadgeProps(call.outcome);
                 return (
-                  <Card key={`call-${call.id}-${index}`}>
-                    <CardHeader>
+                  <Link href={`/calls/${call.session_id}`} key={`call-${call.id}-${index}`}>
+                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                      <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
                           <div className="mt-1 p-2 bg-green-100 rounded-full">
@@ -679,7 +685,13 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                           <div>
                             <CardTitle className="text-lg">Voice Call</CardTitle>
                             <CardDescription>
-                              {call.started_at ? format(new Date(call.started_at), "PPP 'at' p") : "Unknown"}
+                              {call.started_at ? (
+                                <>
+                                  {format(new Date(call.started_at), "PPP 'at' p")}
+                                  {" • "}
+                                  {formatDistanceToNow(new Date(call.started_at), { addSuffix: true })}
+                                </>
+                              ) : "Unknown"}
                             </CardDescription>
                           </div>
                         </div>
@@ -708,14 +720,15 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                         <p className="text-zinc-500">Sentiment: {call.sentiment}</p>
                       )}
                     </CardContent>
-                  </Card>
+                    </Card>
+                  </Link>
                 );
               } else if (item.type === 'conversation') {
                 const conv = item.data as Conversation;
                 const statusBadgeProps = getStatusBadgeProps(conv.status);
                 const outcomeBadgeProps = getStatusBadgeProps(conv.outcome);
                 return (
-                  <Card key={`conv-${conv.id}-${index}`}>
+                  <Card key={`conv-${conv.id}-${index}`} className="hover:shadow-md transition-shadow">
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
@@ -725,7 +738,13 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                           <div>
                             <CardTitle className="text-lg capitalize">{conv.channel} Conversation</CardTitle>
                             <CardDescription>
-                              {conv.initiated_at ? format(new Date(conv.initiated_at), "PPP 'at' p") : "Unknown"}
+                              {conv.initiated_at ? (
+                                <>
+                                  {format(new Date(conv.initiated_at), "PPP 'at' p")}
+                                  {" • "}
+                                  {formatDistanceToNow(new Date(conv.initiated_at), { addSuffix: true })}
+                                </>
+                              ) : "Unknown"}
                             </CardDescription>
                           </div>
                         </div>
