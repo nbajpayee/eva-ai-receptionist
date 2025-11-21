@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { MicVAD } from "@ricky0123/vad-web";
 
 /**
- * Enhanced VAD using Silero for 95%+ accuracy
+ * Enhanced VAD using Silero for 95%+ accuracy with RMS pre-filter
  *
- * This hook provides a higher-level API for integrating Silero VAD
- * into the voice session without conflicting with existing audio pipeline.
+ * This hook manages the Silero VAD lifecycle automatically, similar to useSileroVAD.
+ * It creates a secondary audio stream for ML-based speech detection while the
+ * main ScriptProcessor handles audio transmission.
  *
  * Strategy:
  * 1. RMS-based VAD as pre-filter (fast, catches obvious speech)
@@ -16,85 +17,80 @@ import { MicVAD } from "@ricky0123/vad-web";
  */
 
 interface EnhancedVADOptions {
+  enabled: boolean;
   onSpeechStart: () => void;
   onSpeechEnd: () => void;
   onVADMisfire?: () => void;
-  enabled: boolean;
   positiveSpeechThreshold?: number;
   negativeSpeechThreshold?: number;
 }
 
 export function useEnhancedVAD(options: EnhancedVADOptions) {
   const {
+    enabled,
     onSpeechStart,
     onSpeechEnd,
     onVADMisfire,
-    enabled,
     positiveSpeechThreshold = 0.8,
     negativeSpeechThreshold = 0.65,
   } = options;
 
   const vadInstanceRef = useRef<MicVAD | null>(null);
   const isInitializingRef = useRef(false);
-  const isSpeakingRef = useRef(false);
 
-  const initialize = useCallback(async () => {
-    if (!enabled || isInitializingRef.current || vadInstanceRef.current) {
+  // Manage VAD lifecycle automatically based on enabled state
+  useEffect(() => {
+    if (!enabled) {
+      // Clean up existing VAD instance if disabled
+      if (vadInstanceRef.current) {
+        vadInstanceRef.current.destroy();
+        vadInstanceRef.current = null;
+      }
+      return;
+    }
+
+    // Prevent duplicate initialization
+    if (isInitializingRef.current || vadInstanceRef.current) {
       return;
     }
 
     isInitializingRef.current = true;
 
-    try {
-      const vad = await MicVAD.new({
-        positiveSpeechThreshold,
-        negativeSpeechThreshold,
-        preSpeechPadFrames: 10, // 300ms pre-speech padding
-        redemptionFrames: 8, // 240ms before declaring speech end
-        minSpeechFrames: 3, // 90ms minimum speech duration
-        onSpeechStart: () => {
-          isSpeakingRef.current = true;
-          onSpeechStart();
-        },
-        onSpeechEnd: () => {
-          isSpeakingRef.current = false;
-          onSpeechEnd();
-        },
-        onVADMisfire: () => {
-          onVADMisfire?.();
-        },
+    // Initialize Silero VAD
+    MicVAD.new({
+      positiveSpeechThreshold,
+      negativeSpeechThreshold,
+      preSpeechPadFrames: 10, // 300ms pre-speech padding
+      redemptionFrames: 8, // 240ms before declaring speech end
+      minSpeechFrames: 3, // 90ms minimum speech duration
+      onSpeechStart,
+      onSpeechEnd,
+      onVADMisfire,
+    })
+      .then((vad) => {
+        vadInstanceRef.current = vad;
+        vad.start();
+        isInitializingRef.current = false;
+      })
+      .catch((error) => {
+        console.error("Failed to initialize Enhanced VAD (Hybrid mode):", error);
+        isInitializingRef.current = false;
       });
 
-      vadInstanceRef.current = vad;
-      vad.start();
-    } catch (error) {
-      console.error("Failed to initialize Silero VAD:", error);
-    } finally {
+    // Cleanup on unmount or when disabled
+    return () => {
+      if (vadInstanceRef.current) {
+        vadInstanceRef.current.destroy();
+        vadInstanceRef.current = null;
+      }
       isInitializingRef.current = false;
-    }
-  }, [enabled, onSpeechStart, onSpeechEnd, onVADMisfire, positiveSpeechThreshold, negativeSpeechThreshold]);
-
-  const destroy = useCallback(() => {
-    if (vadInstanceRef.current) {
-      vadInstanceRef.current.destroy();
-      vadInstanceRef.current = null;
-      isSpeakingRef.current = false;
-    }
-  }, []);
-
-  const pause = useCallback(() => {
-    vadInstanceRef.current?.pause();
-  }, []);
-
-  const start = useCallback(() => {
-    vadInstanceRef.current?.start();
-  }, []);
-
-  return {
-    initialize,
-    destroy,
-    pause,
-    start,
-    isSpeaking: isSpeakingRef.current,
-  };
+    };
+  }, [
+    enabled,
+    onSpeechStart,
+    onSpeechEnd,
+    onVADMisfire,
+    positiveSpeechThreshold,
+    negativeSpeechThreshold,
+  ]);
 }

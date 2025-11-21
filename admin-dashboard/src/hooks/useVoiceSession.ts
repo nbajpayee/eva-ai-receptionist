@@ -386,23 +386,14 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
 
   // Initialize Enhanced VAD for 'hybrid' mode
   // Uses RMS pre-filter + Silero confirmation for balanced accuracy
-  const enhancedVAD = useEnhancedVAD({
+  // Lifecycle is managed automatically by the hook
+  useEnhancedVAD({
     enabled: vadMode === "hybrid" && vadEnabled && isActive,
     onSpeechStart: handleMLVADSpeechStart,
     onSpeechEnd: handleMLVADSpeechEnd,
     positiveSpeechThreshold: 0.8,
     negativeSpeechThreshold: 0.65,
   });
-
-  // Manage Enhanced VAD lifecycle
-  useEffect(() => {
-    if (vadMode === "hybrid" && isActive && vadEnabled) {
-      enhancedVAD.initialize();
-      return () => {
-        enhancedVAD.destroy();
-      };
-    }
-  }, [vadMode, isActive, vadEnabled]);
 
   const handleServerMessage = useCallback(
     (event: MessageEvent<string>) => {
