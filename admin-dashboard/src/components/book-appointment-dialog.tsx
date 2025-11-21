@@ -22,6 +22,8 @@ type Service = {
   duration_minutes: number;
   price_range: string;
   description: string;
+  prep_instructions?: string;
+  aftercare?: string;
 };
 
 type Provider = {
