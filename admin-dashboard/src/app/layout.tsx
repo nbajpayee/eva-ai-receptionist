@@ -67,11 +67,6 @@ const NAV_ITEMS: SidebarNavItem[] = [
     href: "/settings",
     icon: "dashboard",
   },
-  {
-    title: "Console Reports",
-    href: "/reports",
-    icon: "reports",
-  },
 ];
 
 export const metadata: Metadata = {
