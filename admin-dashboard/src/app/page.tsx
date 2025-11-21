@@ -349,8 +349,8 @@ export default function Home() {
 
           <Select
             value={channelFilter}
-            onValueChange={(value: CallRecord["channel"] | "all") => {
-              setChannelFilter(value);
+            onValueChange={(value) => {
+              setChannelFilter(value as CallRecord["channel"] | "all");
             }}
           >
             <SelectTrigger className="w-[130px] bg-white">
