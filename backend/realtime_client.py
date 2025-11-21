@@ -942,7 +942,12 @@ class RealtimeClient:
             self._refresh_conversation()
             return
 
-        if self._infer_slot_selection_from_text(message, sanitized):
+        inferred = self._infer_slot_selection_from_text(message, sanitized)
+        if inferred:
+            self._refresh_conversation()
+            return
+
+        if self._backfill_slot_selection_from_history(message):
             self._refresh_conversation()
 
     def _infer_slot_selection_from_text(self, message: Any, text: str) -> bool:
@@ -1000,6 +1005,36 @@ class RealtimeClient:
             text,
         )
         return True
+
+    def _backfill_slot_selection_from_history(self, anchor_message: Any) -> bool:
+        pending = SlotSelectionManager.get_pending_slot_offers(
+            self.db, self.conversation, enforce_expiry=False
+        )
+        if not pending:
+            return False
+
+        messages = [
+            m
+            for m in getattr(self.conversation, "messages", [])
+            if getattr(m, "direction", None) == "inbound"
+        ]
+        if not messages:
+            return False
+
+        recent_messages = messages[-5:]
+        anchor_id = getattr(anchor_message, "id", None)
+
+        for msg in reversed(recent_messages):
+            if getattr(msg, "id", None) == anchor_id:
+                continue
+            content = getattr(msg, "content", None) or ""
+            text = content.strip()
+            if not text:
+                continue
+            if self._infer_slot_selection_from_text(msg, text):
+                return True
+
+        return False
 
     def _extract_time_preferences(self, text: str) -> List[int]:
         """Return candidate minutes-from-midnight for times mentioned in text."""
