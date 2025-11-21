@@ -7,6 +7,8 @@ const statusConfig: Record<VoiceConnectionStatus, { label: string; variant?: "de
   connecting: { label: "Connecting", variant: "outline", tone: "bg-amber-200" },
   connected: { label: "Connected", tone: "bg-emerald-200" },
   listening: { label: "Listening", tone: "bg-emerald-200" },
+  disconnected: { label: "Disconnected", variant: "outline", tone: "bg-zinc-200" },
+  reconnecting: { label: "Reconnecting", variant: "outline", tone: "bg-amber-200" },
   error: { label: "Error", variant: "outline", tone: "bg-red-200" },
 };
 

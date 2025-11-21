@@ -83,7 +83,7 @@ export function CampaignList({ campaigns, onUpdate }: CampaignListProps) {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+    const variants: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
       draft: { label: "Draft", variant: "secondary" },
       active: { label: "Active", variant: "default" },
       paused: { label: "Paused", variant: "outline" },

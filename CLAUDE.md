@@ -6,7 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is **Ava**, a voice AI receptionist for medical spas built with FastAPI (backend), Next.js 14 (admin dashboard), and OpenAI's Realtime API. The system handles appointment scheduling via Google Calendar, tracks call analytics with AI-powered satisfaction scoring, and provides a comprehensive admin dashboard for monitoring conversations and metrics.
 
-**Current Status (Nov 18, 2025)**: Phase 1A is production-ready. Voice interface complete with smart commits and interruption handling. **Phase 2 (Omnichannel Migration) is COMPLETE** ✅ - Backend now supports SMS and email communications with multi-message threading. All 77 historical call sessions migrated successfully. See `OMNICHANNEL_MIGRATION.md`, `IMPLEMENTATION_COMPLETE.md`, and `MIGRATION_SUCCESS.md` for full documentation.
+**Current Status (Nov 21, 2025)**: **DEPLOYED TO PRODUCTION** ✅
+- **Marketing Site**: https://getevaai.com (Vercel)
+- **Admin Dashboard**: https://dashboard.getevaai.com (Vercel)
+- **Backend API**: https://api.getevaai.com (Railway)
+
+Phase 1A is production-ready. Voice interface complete with smart commits and interruption handling. **Phase 2 (Omnichannel Migration) is COMPLETE** ✅ - Backend now supports SMS and email communications with multi-message threading. All 77 historical call sessions migrated successfully. **Phase 2.6 (Dashboard Enhancements) is COMPLETE** ✅ - Full analytics visualizations, customer management, live status monitoring. See deployment details in `DEPLOYMENT.md`.
 
 **Key Architecture**:
 - **Backend**: FastAPI + Supabase PostgreSQL (fully migrated from SQLite)
@@ -384,17 +389,22 @@ curl "http://localhost:8000/api/admin/calls?page=1&page_size=10"
 
 ## Current Sprint Focus
 
-Per `TODO.md`, the project is in **Sprint 1 (Nov 7-14)**:
-- Migrating to Supabase from SQLite
-- Building Next.js admin dashboard with live data
-- Connecting dashboard to FastAPI backend via proxy routes
-- Next: SMS confirmations via Twilio, enhanced analytics visualizations
+Per `TODO.md`, the project is in **Production Deployment Phase (Nov 18-21)**:
+- ✅ Marketing site deployed to Vercel (https://getevaai.com)
+- ✅ Admin dashboard deployed to Vercel (https://dashboard.getevaai.com)
+- ✅ Backend API deployed to Railway (https://api.getevaai.com)
+- ✅ Google Calendar credentials configured via Railway secrets
+- ✅ Analytics visualizations (4 chart components)
+- ✅ Customer management interface (full CRUD)
+- ✅ Real-time call status monitoring
+- ✅ Silero VAD infrastructure ready for integration
 
-**Not yet implemented**:
+**Up Next**:
+- Silero VAD integration into voice interface
+- Authentication for admin dashboard (Supabase Auth)
 - Row Level Security (RLS) policies in Supabase
-- Authentication for admin dashboard
-- Twilio SMS integration
-- Boulevard scheduling (still using Google Calendar)
+- Twilio SMS production integration (console testing complete)
+- Boulevard scheduling (currently using Google Calendar)
 - Multi-language support
 
 ## File Organization
@@ -432,26 +442,67 @@ Ava/
 └── TODO.md                       # Project tracker, sprint goals, architecture decisions
 ```
 
-## Deployment Considerations
+## Production Deployment (Nov 21, 2025)
 
-**Backend (FastAPI)**:
-- Requires Python 3.9+
-- Must have `credentials.json` for Google Calendar API
-- Ensure `DATABASE_URL` points to Supabase (not SQLite) in production
-- Use production ASGI server (uvicorn with multiple workers)
+**Current Deployment Status:** ✅ LIVE
 
-**Frontend (Next.js)**:
-- Build with `npm run build` in `admin-dashboard/`
-- Set `NEXT_PUBLIC_BACKEND_URL` if FastAPI is on different domain
-- Vercel deployment recommended
+### Deployed Services
 
-**WebSocket**:
-- Ensure WebSocket protocol is supported (wss:// for HTTPS)
-- Configure load balancer to support WebSocket upgrades (sticky sessions)
+1. **Marketing Site** (Vercel)
+   - URL: https://getevaai.com
+   - Tech: Next.js 14 + TailwindCSS
+   - Features: Hero, features, testimonials, pricing, legal pages, Calendly integration
 
-**Security**:
-- Enable HTTPS/WSS in production
-- Implement authentication for admin dashboard
-- Add RLS policies in Supabase for multi-tenant support
-- Never commit `.env`, `credentials.json`, `token.json`
-- HIPAA compliance required for production med spa use (encryption at rest, BAAs, audit logs)
+2. **Admin Dashboard** (Vercel)
+   - URL: https://dashboard.getevaai.com
+   - Tech: Next.js 14 + TypeScript + Shadcn/ui
+   - Environment Variables:
+     - `NEXT_PUBLIC_API_BASE_URL=https://api.getevaai.com`
+     - `NEXT_PUBLIC_BACKEND_URL=https://api.getevaai.com`
+   - Features: Analytics charts, customer management, live status, call history, appointments calendar
+
+3. **Backend API** (Railway)
+   - URL: https://api.getevaai.com
+   - Tech: FastAPI + Python 3.11
+   - Google Calendar credentials configured via Railway secrets (base64-encoded)
+   - Environment variables configured for production
+   - WebSocket support enabled for voice calls
+
+### Deployment Configuration
+
+**Google Calendar Credentials (Railway):**
+- `GOOGLE_CREDENTIALS_BASE64`: Base64-encoded `credentials.json`
+- `GOOGLE_TOKEN_BASE64`: Base64-encoded `token.json`
+- Decoded on startup via `railway_setup_credentials.sh` script
+
+**Next.js Build Configuration:**
+- Admin dashboard uses Next.js proxy routes to forward requests to Railway backend
+- `NEXT_PUBLIC_*` environment variables embedded at build time
+- Requires redeployment when environment variables change
+
+### Security Considerations
+
+**Current (Production):**
+- ✅ HTTPS/WSS enabled via Vercel and Railway
+- ✅ CORS configured for dashboard.getevaai.com
+- ✅ Environment variables properly secured
+- ✅ Google Calendar credentials stored as Railway secrets
+
+**To Implement:**
+- [ ] Authentication for admin dashboard (Supabase Auth)
+- [ ] Row Level Security (RLS) policies in Supabase
+- [ ] Rate limiting for API endpoints
+- [ ] HIPAA compliance for production med spa use (encryption at rest, BAAs, audit logs)
+
+### Monitoring & Operations
+
+**Health Checks:**
+- Backend: `https://api.getevaai.com/health`
+- Dashboard: Access dashboard UI directly
+- Marketing: Access marketing site directly
+
+**Logs:**
+- Railway: Dashboard → Deployments → View Logs
+- Vercel: Dashboard → Deployments → Function Logs
+
+See `DEPLOYMENT.md` for full deployment guide and troubleshooting.
