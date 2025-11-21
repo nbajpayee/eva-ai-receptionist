@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, AlertTriangle, Baby, Calendar, MessageSquare, Headphones } from "lucide-react";
+import { ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, AlertTriangle, Baby, Calendar, MessageSquare, Headphones, TrendingUp, DollarSign, Star, Activity, Send, CalendarPlus } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
 
@@ -97,10 +97,25 @@ interface CustomerHistory {
   conversations: Conversation[];
 }
 
+interface CustomerStats {
+  customer_id: number;
+  total_appointments: number;
+  completed_appointments: number;
+  cancelled_appointments: number;
+  no_show_rate: number;
+  total_calls: number;
+  total_conversations: number;
+  avg_satisfaction_score: number | null;
+  is_new_client: boolean;
+  has_allergies: boolean;
+  is_pregnant: boolean;
+}
+
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const router = useRouter();
   const [data, setData] = useState<CustomerHistory | null>(null);
+  const [stats, setStats] = useState<CustomerStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -110,14 +125,25 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(`/api/admin/customers/${resolvedParams.id}/history`);
+        // Fetch both history and stats in parallel
+        const [historyResponse, statsResponse] = await Promise.all([
+          fetch(`/api/admin/customers/${resolvedParams.id}/history`),
+          fetch(`/api/admin/customers/${resolvedParams.id}/stats`),
+        ]);
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch customer");
+        if (!historyResponse.ok) {
+          throw new Error("Failed to fetch customer history");
         }
 
-        const historyData = await response.json();
+        if (!statsResponse.ok) {
+          throw new Error("Failed to fetch customer stats");
+        }
+
+        const historyData = await historyResponse.json();
+        const statsData = await statsResponse.json();
+
         setData(historyData);
+        setStats(statsData);
         setEditForm(historyData.customer);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unknown error");
@@ -252,6 +278,113 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           )}
         </div>
       </div>
+
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>Common tasks for this customer</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center gap-2">
+          <Link href={`/messaging?customer_id=${customer.id}`}>
+            <Button variant="default">
+              <Send className="mr-2 h-4 w-4" />
+              Send Message
+            </Button>
+          </Link>
+          <Link href={`/appointments?customer_id=${customer.id}&action=new`}>
+            <Button variant="outline">
+              <CalendarPlus className="mr-2 h-4 w-4" />
+              Book Appointment
+            </Button>
+          </Link>
+          {customer.phone && (
+            <a href={`tel:${customer.phone}`}>
+              <Button variant="outline">
+                <Phone className="mr-2 h-4 w-4" />
+                Call
+              </Button>
+            </a>
+          )}
+          {customer.email && (
+            <a href={`mailto:${customer.email}`}>
+              <Button variant="outline">
+                <Mail className="mr-2 h-4 w-4" />
+                Email
+              </Button>
+            </a>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Customer Statistics */}
+      {stats && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {/* Lifetime Value - Calculated from completed appointments */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Lifetime Value</CardTitle>
+              <DollarSign className="h-4 w-4 text-zinc-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                ${(stats.completed_appointments * 350).toLocaleString()}
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">
+                Estimated from {stats.completed_appointments} completed appointments
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Total Appointments */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Appointments</CardTitle>
+              <Calendar className="h-4 w-4 text-zinc-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.total_appointments}</div>
+              <p className="text-xs text-zinc-500 mt-1">
+                {stats.completed_appointments} completed • {stats.cancelled_appointments} cancelled
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Satisfaction Score */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Satisfaction</CardTitle>
+              <Star className="h-4 w-4 text-zinc-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.avg_satisfaction_score !== null
+                  ? `${stats.avg_satisfaction_score.toFixed(1)}/10`
+                  : "N/A"}
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">
+                From {stats.total_calls} voice calls
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Total Interactions */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Interactions</CardTitle>
+              <Activity className="h-4 w-4 text-zinc-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.total_calls + stats.total_conversations}
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">
+                {stats.total_calls} calls • {stats.total_conversations} messages
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Customer Information Card */}
       <Card>
