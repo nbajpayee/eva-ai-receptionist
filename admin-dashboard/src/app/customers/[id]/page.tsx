@@ -57,6 +57,7 @@ interface Conversation {
   satisfaction_score?: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function formatTime(isoString: string): string {
   const date = new Date(isoString);
   return date.toLocaleTimeString("en-US", {

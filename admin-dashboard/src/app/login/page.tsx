@@ -41,7 +41,7 @@ export default function LoginPage() {
       // Redirect to original destination or dashboard
       router.push(redirect)
       router.refresh()
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred')
       setLoading(false)
     }

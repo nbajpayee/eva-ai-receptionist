@@ -1,5 +1,6 @@
 export const runtime = "edge";
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type RouteContext = {
   params: {
     sessionId: string;
