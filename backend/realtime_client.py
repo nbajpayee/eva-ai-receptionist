@@ -501,6 +501,24 @@ class RealtimeClient:
                         "customer_email": customer_email,
                     }
 
+                    # Mirror deterministic booking metadata used by messaging flow so
+                    # cross-channel logic can avoid duplicate bookings for the same slot.
+                    metadata = SlotSelectionManager.conversation_metadata(
+                        self.conversation
+                    )
+                    metadata["last_appointment"] = {
+                        "calendar_event_id": booking_result.get("event_id"),
+                        "service_type": service_type,
+                        "provider": normalized_args.get("provider"),
+                        "start_time": start_iso,
+                        "status": "scheduled",
+                    }
+                    # Clear any pending booking intent flags once the appointment is set.
+                    metadata["pending_booking_intent"] = False
+                    SlotSelectionManager.persist_conversation_metadata(
+                        self.db, self.conversation, metadata
+                    )
+
                 return booking_result
 
             elif function_name == "get_service_info":
