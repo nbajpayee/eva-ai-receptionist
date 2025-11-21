@@ -28,6 +28,7 @@ from starlette.websockets import WebSocketState
 from ai_insights_service import AIInsightsService
 from analytics import AnalyticsService
 from api_messaging import messaging_router
+from auth import User, get_current_user, get_current_user_optional, require_owner
 from calendar_service import check_calendar_credentials
 from config import get_settings
 from consultation_service import ConsultationService
@@ -498,14 +499,19 @@ def _ensure_med_spa_settings(db: Session) -> MedSpaSettings:
 
 
 @app.get("/api/admin/settings", response_model=MedSpaSettingsResponse)
-def get_admin_settings(db: Session = Depends(get_db)):
+def get_admin_settings(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     settings_row = _ensure_med_spa_settings(db)
     return MedSpaSettingsResponse.from_orm(settings_row)
 
 
 @app.put("/api/admin/settings", response_model=MedSpaSettingsResponse)
 def update_admin_settings(
-    payload: MedSpaSettingsUpdateRequest, db: Session = Depends(get_db)
+    payload: MedSpaSettingsUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
 ):
     updated = SettingsService.update_settings(db, payload.dict())
     return MedSpaSettingsResponse.from_orm(updated)
@@ -516,6 +522,7 @@ def list_services(
     active_only: bool = Query(False),
     category: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     services = SettingsService.get_all_services(
         db, active_only=active_only, category=category
@@ -524,7 +531,11 @@ def list_services(
 
 
 @app.get("/api/admin/services/{service_id}", response_model=ServiceResponse)
-def get_service(service_id: int, db: Session = Depends(get_db)):
+def get_service(
+    service_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     service = SettingsService.get_service(db, service_id)
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
@@ -532,7 +543,11 @@ def get_service(service_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/admin/services", response_model=ServiceResponse, status_code=201)
-def create_service(payload: ServiceCreateRequest, db: Session = Depends(get_db)):
+def create_service(
+    payload: ServiceCreateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
+):
     service_data = payload.dict(exclude_unset=True)
     service = SettingsService.create_service(db, service_data)
     return _serialize_service(service)
@@ -540,7 +555,10 @@ def create_service(payload: ServiceCreateRequest, db: Session = Depends(get_db))
 
 @app.put("/api/admin/services/{service_id}", response_model=ServiceResponse)
 def update_service(
-    service_id: int, payload: ServiceUpdateRequest, db: Session = Depends(get_db)
+    service_id: int,
+    payload: ServiceUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
 ):
     service_data = payload.dict(exclude_unset=True)
     if not service_data:
@@ -556,7 +574,11 @@ def update_service(
 
 
 @app.delete("/api/admin/services/{service_id}")
-def delete_service(service_id: int, db: Session = Depends(get_db)):
+def delete_service(
+    service_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
+):
     deleted = SettingsService.delete_service(db, service_id)
     if not deleted:
         raise HTTPException(
@@ -566,13 +588,21 @@ def delete_service(service_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/admin/providers", response_model=List[ProviderResponse])
-def list_providers(active_only: bool = Query(False), db: Session = Depends(get_db)):
+def list_providers(
+    active_only: bool = Query(False),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     providers = SettingsService.get_all_providers(db, active_only=active_only)
     return [_serialize_provider(provider) for provider in providers]
 
 
 @app.get("/api/admin/providers/{provider_id}", response_model=ProviderResponse)
-def get_provider(provider_id: str, db: Session = Depends(get_db)):
+def get_provider(
+    provider_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     provider = SettingsService.get_provider(db, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
@@ -580,7 +610,11 @@ def get_provider(provider_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/admin/providers", response_model=ProviderResponse, status_code=201)
-def create_provider(payload: ProviderCreateRequest, db: Session = Depends(get_db)):
+def create_provider(
+    payload: ProviderCreateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
+):
     provider_data = payload.dict(exclude_unset=True)
     if "hire_date" in provider_data:
         provider_data["hire_date"] = _parse_hire_date(provider_data["hire_date"])
@@ -590,7 +624,10 @@ def create_provider(payload: ProviderCreateRequest, db: Session = Depends(get_db
 
 @app.put("/api/admin/providers/{provider_id}", response_model=ProviderResponse)
 def update_provider(
-    provider_id: str, payload: ProviderUpdateRequest, db: Session = Depends(get_db)
+    provider_id: str,
+    payload: ProviderUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
 ):
     provider_data = payload.dict(exclude_unset=True)
     if "hire_date" in provider_data:
@@ -603,7 +640,11 @@ def update_provider(
 
 
 @app.delete("/api/admin/providers/{provider_id}")
-def delete_provider(provider_id: str, db: Session = Depends(get_db)):
+def delete_provider(
+    provider_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
+):
     deleted = SettingsService.delete_provider(db, provider_id)
     if not deleted:
         raise HTTPException(
@@ -613,7 +654,11 @@ def delete_provider(provider_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/api/admin/locations", response_model=List[LocationResponse])
-def list_locations(active_only: bool = Query(False), db: Session = Depends(get_db)):
+def list_locations(
+    active_only: bool = Query(False),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     locations = SettingsService.get_all_locations(db, active_only=active_only)
     serialized = []
     for location in locations:
@@ -623,7 +668,11 @@ def list_locations(active_only: bool = Query(False), db: Session = Depends(get_d
 
 
 @app.get("/api/admin/locations/{location_id}", response_model=LocationResponse)
-def get_location(location_id: int, db: Session = Depends(get_db)):
+def get_location(
+    location_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     location = SettingsService.get_location(db, location_id)
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
@@ -634,7 +683,11 @@ def get_location(location_id: int, db: Session = Depends(get_db)):
 @app.get(
     "/api/admin/locations/{location_id}/hours", response_model=List[BusinessHourEntry]
 )
-def get_location_hours(location_id: int, db: Session = Depends(get_db)):
+def get_location_hours(
+    location_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     location = SettingsService.get_location(db, location_id)
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
@@ -643,7 +696,11 @@ def get_location_hours(location_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/admin/locations", response_model=LocationResponse, status_code=201)
-def create_location(payload: LocationCreateRequest, db: Session = Depends(get_db)):
+def create_location(
+    payload: LocationCreateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
+):
     location_data = payload.model_dump(exclude={"business_hours"}, exclude_none=True)
     location = SettingsService.create_location(db, location_data)
 
@@ -656,7 +713,10 @@ def create_location(payload: LocationCreateRequest, db: Session = Depends(get_db
 
 @app.put("/api/admin/locations/{location_id}", response_model=LocationResponse)
 def update_location(
-    location_id: int, payload: LocationUpdateRequest, db: Session = Depends(get_db)
+    location_id: int,
+    payload: LocationUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
 ):
     location_data = payload.model_dump(exclude={"business_hours"}, exclude_unset=True)
 
@@ -681,6 +741,7 @@ def update_location_hours(
     location_id: int,
     entries: List[BusinessHourEntry],
     db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
 ):
     location = SettingsService.get_location(db, location_id)
     if not location:
@@ -692,7 +753,11 @@ def update_location_hours(
 
 
 @app.delete("/api/admin/locations/{location_id}")
-def delete_location(location_id: int, db: Session = Depends(get_db)):
+def delete_location(
+    location_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
+):
     try:
         deleted = SettingsService.delete_location(db, location_id)
     except ValueError as exc:  # e.g., deleting primary or only location
@@ -1295,6 +1360,7 @@ async def get_customer_history(customer_id: int, db: Session = Depends(get_db)):
 async def get_metrics_overview(
     period: str = Query("today", regex="^(today|week|month)$"),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Get overview metrics for dashboard."""
     return AnalyticsService.get_dashboard_overview(db, period)
@@ -1310,6 +1376,7 @@ async def get_call_history(
     ),
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Get paginated call history."""
     return AnalyticsService.get_call_history(
@@ -1323,7 +1390,11 @@ async def get_call_history(
 
 
 @app.get("/api/admin/calls/{call_id}")
-async def get_call_details(call_id: int, db: Session = Depends(get_db)):
+async def get_call_details(
+    call_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Get detailed information about a specific call."""
     call = db.query(CallSession).filter(CallSession.id == call_id).first()
     if not call:
@@ -1369,7 +1440,11 @@ async def get_call_details(call_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/admin/calls/{call_id}/transcript")
-async def get_call_transcript(call_id: int, db: Session = Depends(get_db)):
+async def get_call_transcript(
+    call_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Get call transcript."""
     call = db.query(CallSession).filter(CallSession.id == call_id).first()
     if not call:
@@ -1384,7 +1459,9 @@ async def get_call_transcript(call_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/admin/analytics/daily")
 async def get_daily_analytics(
-    days: int = Query(30, ge=1, le=90), db: Session = Depends(get_db)
+    days: int = Query(30, ge=1, le=90),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Get daily analytics for the specified number of days."""
     from datetime import timedelta
@@ -1420,6 +1497,7 @@ async def get_timeseries_analytics(
     period: str = Query("week", regex="^(today|week|month)$"),
     interval: str = Query("hour", regex="^(hour|day)$"),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Get time-series metrics for charting."""
     return AnalyticsService.get_timeseries_metrics(
@@ -1431,6 +1509,7 @@ async def get_timeseries_analytics(
 async def get_conversion_funnel(
     period: str = Query("week", regex="^(today|week|month)$"),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Get conversion funnel metrics."""
     return AnalyticsService.get_conversion_funnel(db=db, period=period)
@@ -1438,7 +1517,9 @@ async def get_conversion_funnel(
 
 @app.get("/api/admin/analytics/peak-hours")
 async def get_peak_hours(
-    period: str = Query("week", regex="^(week|month)$"), db: Session = Depends(get_db)
+    period: str = Query("week", regex="^(week|month)$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Get peak hours heatmap data."""
     return AnalyticsService.get_peak_hours(db=db, period=period)
@@ -1448,6 +1529,7 @@ async def get_peak_hours(
 async def get_channel_distribution(
     period: str = Query("week", regex="^(today|week|month)$"),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Get channel distribution data."""
     return AnalyticsService.get_channel_distribution(db=db, period=period)
@@ -1457,6 +1539,7 @@ async def get_channel_distribution(
 async def get_outcome_distribution(
     period: str = Query("week", regex="^(today|week|month)$"),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Get outcome distribution data."""
     return AnalyticsService.get_outcome_distribution(db=db, period=period)
@@ -1468,6 +1551,7 @@ async def get_customers_list(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Get customers list with search and pagination."""
     from sqlalchemy import case
@@ -1542,6 +1626,7 @@ async def get_customer_timeline(
     customer_id: int,
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Get conversation timeline for a specific customer."""
     try:
@@ -1595,6 +1680,7 @@ async def get_communications(
     page: int = 1,
     page_size: int = 20,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """
     Get conversations with filtering and pagination.
@@ -1665,7 +1751,11 @@ async def get_communications(
 
 
 @app.get("/api/admin/communications/{conversation_id}")
-async def get_conversation_detail(conversation_id: str, db: Session = Depends(get_db)):
+async def get_conversation_detail(
+    conversation_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """
     Get full conversation with all messages, events, and channel-specific details.
     """
