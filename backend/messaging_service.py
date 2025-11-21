@@ -284,15 +284,6 @@ class MessagingService:
         if not last_message or not last_message.content:
             return None
 
-        selected_message_id = (
-            pending.get("selected_by_message_id") if isinstance(pending, dict) else None
-        )
-        if not selected_message_id:
-            return None
-
-        if str(last_message.id) != str(selected_message_id):
-            return None
-
         # Don't execute if last appointment already matches this slot (prevents duplicates)
         metadata = SlotSelectionManager.conversation_metadata(conversation)
         last_appointment = (
