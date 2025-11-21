@@ -3,10 +3,12 @@ Authentication utilities for FastAPI
 Validates Supabase JWT tokens and provides auth dependencies
 """
 
-from jose import jwt, JWTError
 from typing import Optional
+
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+
 from config import get_settings
 
 settings = get_settings()
@@ -46,23 +48,22 @@ def decode_jwt(token: str) -> dict:
             token,
             settings.SUPABASE_SERVICE_ROLE_KEY,
             algorithms=["HS256"],
-            options={"verify_signature": False}  # Supabase validates on their end
+            options={"verify_signature": False},  # Supabase validates on their end
         )
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired"
         )
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token"
+            detail="Invalid authentication token",
         )
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> User:
     """
     FastAPI dependency to get current authenticated user from JWT token
@@ -83,8 +84,7 @@ async def get_current_user(
 
     if not user_id or not email:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
         )
 
     return User(user_id=user_id, email=email, role=role)
@@ -103,11 +103,12 @@ async def require_role(*roles: str):
             # Only owners can access this endpoint
             pass
     """
+
     async def role_checker(user: User = Depends(get_current_user)) -> User:
         if not user.has_role(*roles):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Insufficient permissions. Required role: {', '.join(roles)}"
+                detail=f"Insufficient permissions. Required role: {', '.join(roles)}",
             )
         return user
 
@@ -119,8 +120,7 @@ async def require_owner(user: User = Depends(get_current_user)) -> User:
     """Require owner role"""
     if not user.has_role("owner"):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Owner access required"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Owner access required"
         )
     return user
 
@@ -129,8 +129,7 @@ async def require_staff(user: User = Depends(get_current_user)) -> User:
     """Require staff or higher role"""
     if not user.has_role("owner", "staff"):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Staff access required"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Staff access required"
         )
     return user
 
@@ -139,8 +138,7 @@ async def require_provider(user: User = Depends(get_current_user)) -> User:
     """Require provider or higher role"""
     if not user.has_role("owner", "provider"):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Provider access required"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Provider access required"
         )
     return user
 
@@ -149,7 +147,7 @@ async def require_provider(user: User = Depends(get_current_user)) -> User:
 async def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(
         HTTPBearer(auto_error=False)
-    )
+    ),
 ) -> Optional[User]:
     """
     FastAPI dependency for optional authentication
