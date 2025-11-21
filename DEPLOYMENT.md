@@ -1,10 +1,15 @@
 # Deployment Guide
 
+## ✅ Current Production Status (Nov 21, 2025)
+
+**ALL SERVICES DEPLOYED AND LIVE:**
+- **Marketing Site**: https://getevaai.com (Vercel)
+- **Admin Dashboard**: https://dashboard.getevaai.com (Vercel)
+- **Backend API**: https://api.getevaai.com (Railway)
+
 ## Overview
 
-- **Marketing Site**: Vercel (already configured)
-- **Admin Dashboard**: Vercel
-- **Backend API**: Railway
+This guide documents the deployment process for Eva AI's three production services.
 
 ## 1. Deploy Admin Dashboard to Vercel
 
@@ -22,15 +27,25 @@
 
 5. Add Environment Variables:
    ```
-   NEXT_PUBLIC_BACKEND_URL=https://your-railway-backend.railway.app
+   NEXT_PUBLIC_API_BASE_URL=https://api.getevaai.com
+   NEXT_PUBLIC_BACKEND_URL=https://api.getevaai.com
    ```
-   (You'll get this URL after deploying the backend)
+   **IMPORTANT:** Add these to ALL environments (Production, Preview, Development)
+
+   **Note:** `NEXT_PUBLIC_*` variables are embedded at BUILD TIME. You must redeploy after changing them.
 
 6. Click "Deploy"
 
-### After Backend Deployment:
+7. Configure Custom Domain:
+   - Go to Settings → Domains
+   - Add `dashboard.getevaai.com`
+   - Update DNS records as instructed
 
-Update the environment variable `NEXT_PUBLIC_BACKEND_URL` with your Railway backend URL.
+### ✅ Current Status:
+- **Deployed:** https://dashboard.getevaai.com
+- **Environment Variables:** Configured for all environments
+- **Build Status:** Passing
+- **Features Working:** Analytics, Customer Management, Live Status, Call History
 
 ---
 
@@ -62,31 +77,52 @@ Update the environment variable `NEXT_PUBLIC_BACKEND_URL` with your Railway back
    PORT=8000
    ```
 
-7. Add Google Calendar credentials:
-   - Upload `credentials.json` as a secret file
-   - Upload `token.json` as a secret file (if you have it)
+7. Add Google Calendar credentials (Base64-encoded):
+   ```bash
+   # Encode credentials on your local machine
+   cat backend/credentials.json | base64 > credentials_b64.txt
+   cat backend/token.json | base64 > token_b64.txt
+   ```
+
+   Add to Railway:
+   - `GOOGLE_CREDENTIALS_BASE64`: Paste content of `credentials_b64.txt`
+   - `GOOGLE_TOKEN_BASE64`: Paste content of `token_b64.txt`
+
+   **How it works:** Railway runs `railway_setup_credentials.sh` on startup which decodes these and creates the JSON files.
 
 8. Click "Deploy"
 
-9. Once deployed, copy the Railway URL (e.g., `https://your-app.railway.app`)
+9. Configure Custom Domain:
+   - Go to Settings → Networking
+   - Add `api.getevaai.com`
+   - Update DNS records as instructed
 
-10. Go back to Vercel and update `NEXT_PUBLIC_BACKEND_URL` in your admin dashboard
+### ✅ Current Status:
+- **Deployed:** https://api.getevaai.com
+- **Environment Variables:** All configured
+- **Google Calendar:** Credentials working via base64 decoding
+- **Database:** Connected to Supabase
+- **WebSocket:** Enabled and tested
+- **Health Check:** https://api.getevaai.com/health
 
 ---
 
-## 3. Custom Domains (Optional)
+## 3. Custom Domains ✅ CONFIGURED
 
 ### Marketing Site:
-- Vercel Dashboard → Settings → Domains
-- Add: `eva-ai.com`
+- ✅ Vercel Dashboard → Settings → Domains
+- ✅ Configured: `getevaai.com`
+- ✅ Live at: https://getevaai.com
 
 ### Admin Dashboard:
-- Vercel Dashboard → Settings → Domains
-- Add: `admin.eva-ai.com` or `dashboard.eva-ai.com`
+- ✅ Vercel Dashboard → Settings → Domains
+- ✅ Configured: `dashboard.getevaai.com`
+- ✅ Live at: https://dashboard.getevaai.com
 
 ### Backend:
-- Railway Dashboard → Settings → Domains
-- Add: `api.eva-ai.com`
+- ✅ Railway Dashboard → Settings → Networking
+- ✅ Configured: `api.getevaai.com`
+- ✅ Live at: https://api.getevaai.com
 
 ---
 
@@ -110,7 +146,10 @@ Required:
 ### Admin Dashboard (Vercel)
 
 Required:
-- `NEXT_PUBLIC_BACKEND_URL` - Railway backend URL
+- `NEXT_PUBLIC_API_BASE_URL` - Railway backend URL (https://api.getevaai.com)
+- `NEXT_PUBLIC_BACKEND_URL` - Railway backend URL (https://api.getevaai.com)
+
+**Important:** Both variables are needed. `NEXT_PUBLIC_API_BASE_URL` is used by API proxy routes.
 
 ---
 
@@ -140,16 +179,19 @@ Required:
 
 ## Deployment Checklist
 
-- [ ] Deploy backend to Railway
-- [ ] Copy Railway URL
-- [ ] Deploy admin dashboard to Vercel with `NEXT_PUBLIC_BACKEND_URL`
-- [ ] Marketing site already deployed
-- [ ] Set up custom domains (optional)
-- [ ] Test WebSocket connections (voice calls)
-- [ ] Test admin dashboard connection to backend
-- [ ] Upload Google Calendar credentials to Railway
-- [ ] Set up CORS for production domains
-- [ ] Monitor Railway logs for any errors
+- [x] Deploy backend to Railway
+- [x] Copy Railway URL (https://api.getevaai.com)
+- [x] Deploy admin dashboard to Vercel with environment variables
+- [x] Deploy marketing site to Vercel
+- [x] Set up custom domains (getevaai.com, dashboard.getevaai.com, api.getevaai.com)
+- [x] Test WebSocket connections (voice calls) - Working
+- [x] Test admin dashboard connection to backend - Working
+- [x] Upload Google Calendar credentials to Railway (base64-encoded)
+- [x] Set up CORS for production domains (dashboard.getevaai.com)
+- [x] Monitor Railway logs - No errors
+- [x] Verify all features working (Analytics, Customer Management, Live Status)
+
+**Deployment Complete:** Nov 21, 2025 ✅
 
 ---
 
