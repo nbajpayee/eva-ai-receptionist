@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, AlertTriangle, Baby, Calendar, MessageSquare, Headphones, TrendingUp, DollarSign, Star, Activity, Send, CalendarPlus } from "lucide-react";
+import { ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, AlertTriangle, Baby, Calendar, MessageSquare, Headphones, TrendingUp, DollarSign, Star, Activity, Send, CalendarPlus, Clock, UserX } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
 
@@ -111,6 +111,12 @@ interface CustomerStats {
   is_pregnant: boolean;
 }
 
+type TimelineItem = {
+  type: 'appointment' | 'call' | 'conversation';
+  date: Date;
+  data: Appointment | Call | Conversation;
+};
+
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const router = useRouter();
@@ -121,6 +127,49 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Customer>>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  // Create unified timeline from all interactions
+  const createTimeline = (): TimelineItem[] => {
+    if (!data) return [];
+
+    const timeline: TimelineItem[] = [];
+
+    // Add appointments
+    data.appointments.forEach(apt => {
+      timeline.push({
+        type: 'appointment',
+        date: new Date(apt.appointment_datetime),
+        data: apt
+      });
+    });
+
+    // Add calls
+    data.calls.forEach(call => {
+      if (call.started_at) {
+        timeline.push({
+          type: 'call',
+          date: new Date(call.started_at),
+          data: call
+        });
+      }
+    });
+
+    // Add conversations
+    data.conversations.forEach(conv => {
+      if (conv.initiated_at) {
+        timeline.push({
+          type: 'conversation',
+          date: new Date(conv.initiated_at),
+          data: conv
+        });
+      }
+    });
+
+    // Sort by date (most recent first)
+    return timeline.sort((a, b) => b.date.getTime() - a.date.getTime());
+  };
+
+  const timeline = createTimeline();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -318,8 +367,23 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       </Card>
 
       {/* Customer Statistics */}
-      {stats && (
+      {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="h-4 w-24 bg-zinc-200 rounded animate-pulse" />
+                <div className="h-4 w-4 bg-zinc-200 rounded animate-pulse" />
+              </CardHeader>
+              <CardContent>
+                <div className="h-8 w-16 bg-zinc-200 rounded animate-pulse mb-2" />
+                <div className="h-3 w-32 bg-zinc-200 rounded animate-pulse" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : stats ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           {/* Lifetime Value - Calculated from completed appointments */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -383,8 +447,24 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
               </p>
             </CardContent>
           </Card>
+
+          {/* No Show Rate */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">No Show Rate</CardTitle>
+              <UserX className="h-4 w-4 text-zinc-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.no_show_rate.toFixed(1)}%
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">
+                {stats.cancelled_appointments} of {stats.total_appointments} appointments
+              </p>
+            </CardContent>
+          </Card>
         </div>
-      )}
+      ) : null}
 
       {/* Customer Information Card */}
       <Card>
@@ -525,8 +605,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       </Card>
 
       {/* Activity Tabs */}
-      <Tabs defaultValue="appointments" className="w-full">
+      <Tabs defaultValue="timeline" className="w-full">
         <TabsList>
+          <TabsTrigger value="timeline">
+            <Clock className="mr-2 h-4 w-4" />
+            Timeline ({timeline.length})
+          </TabsTrigger>
           <TabsTrigger value="appointments">
             <Calendar className="mr-2 h-4 w-4" />
             Appointments ({data.appointments.length})
@@ -540,6 +624,137 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             Messages ({data.conversations.length})
           </TabsTrigger>
         </TabsList>
+
+        {/* Unified Timeline Tab */}
+        <TabsContent value="timeline" className="space-y-4">
+          {timeline.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-zinc-500">
+                No activity yet
+              </CardContent>
+            </Card>
+          ) : (
+            timeline.map((item, index) => {
+              if (item.type === 'appointment') {
+                const apt = item.data as Appointment;
+                const badgeProps = getStatusBadgeProps(apt.status);
+                return (
+                  <Card key={`apt-${apt.id}-${index}`}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 p-2 bg-blue-100 rounded-full">
+                            <Calendar className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg">Appointment: {apt.service_type}</CardTitle>
+                            <CardDescription>
+                              {format(new Date(apt.appointment_datetime), "PPP 'at' p")}
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                          {apt.status}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="text-sm pl-[60px]">
+                      {apt.provider && <p className="text-zinc-500">Provider: {apt.provider}</p>}
+                      {apt.special_requests && <p className="mt-2 text-zinc-700">{apt.special_requests}</p>}
+                      <p className="text-xs text-zinc-400 mt-2">Booked by {apt.booked_by}</p>
+                    </CardContent>
+                  </Card>
+                );
+              } else if (item.type === 'call') {
+                const call = item.data as Call;
+                const badgeProps = getStatusBadgeProps(call.outcome);
+                return (
+                  <Card key={`call-${call.id}-${index}`}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 p-2 bg-green-100 rounded-full">
+                            <Headphones className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg">Voice Call</CardTitle>
+                            <CardDescription>
+                              {call.started_at ? format(new Date(call.started_at), "PPP 'at' p") : "Unknown"}
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {call.outcome && (
+                            <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                              {call.outcome}
+                            </Badge>
+                          )}
+                          {call.escalated && (
+                            <Badge variant="outline" className="border-red-200 bg-red-100 text-red-700">
+                              Escalated
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="text-sm space-y-1 pl-[60px]">
+                      {call.duration_seconds && (
+                        <p className="text-zinc-500">Duration: {Math.floor(call.duration_seconds / 60)}m {call.duration_seconds % 60}s</p>
+                      )}
+                      {call.satisfaction_score !== undefined && call.satisfaction_score !== null && (
+                        <p className="text-zinc-500">Satisfaction: {call.satisfaction_score}/10</p>
+                      )}
+                      {call.sentiment && (
+                        <p className="text-zinc-500">Sentiment: {call.sentiment}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              } else if (item.type === 'conversation') {
+                const conv = item.data as Conversation;
+                const statusBadgeProps = getStatusBadgeProps(conv.status);
+                const outcomeBadgeProps = getStatusBadgeProps(conv.outcome);
+                return (
+                  <Card key={`conv-${conv.id}-${index}`}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 p-2 bg-purple-100 rounded-full">
+                            <MessageSquare className="h-4 w-4 text-purple-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg capitalize">{conv.channel} Conversation</CardTitle>
+                            <CardDescription>
+                              {conv.initiated_at ? format(new Date(conv.initiated_at), "PPP 'at' p") : "Unknown"}
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {conv.status && (
+                            <Badge variant={statusBadgeProps.variant} className={statusBadgeProps.className}>
+                              {conv.status}
+                            </Badge>
+                          )}
+                          {conv.outcome && (
+                            <Badge variant={outcomeBadgeProps.variant} className={outcomeBadgeProps.className}>
+                              {conv.outcome}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    {conv.satisfaction_score !== undefined && conv.satisfaction_score !== null && (
+                      <CardContent className="text-sm pl-[60px]">
+                        <p className="text-zinc-500">Satisfaction: {conv.satisfaction_score}/10</p>
+                      </CardContent>
+                    )}
+                  </Card>
+                );
+              }
+              return null;
+            })
+          )}
+        </TabsContent>
 
         <TabsContent value="appointments" className="space-y-4">
           {data.appointments.length === 0 ? (
