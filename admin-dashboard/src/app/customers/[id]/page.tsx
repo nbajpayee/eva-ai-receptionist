@@ -1,13 +1,13 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, AlertTriangle, Baby, Calendar, MessageSquare, Headphones } from "lucide-react";
-import { format } from "date-fns";
+import { ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, AlertTriangle, Baby, Calendar, MessageSquare, Headphones, TrendingUp, DollarSign, Star, Activity, Send, CalendarPlus, Clock, UserX } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 
 interface Customer {
@@ -91,6 +91,19 @@ function getStatusBadgeProps(status?: string | null) {
   }
 }
 
+// Type guard functions for timeline items
+function isAppointmentItem(item: TimelineItem): item is TimelineItem & { type: 'appointment'; data: Appointment } {
+  return item.type === 'appointment';
+}
+
+function isCallItem(item: TimelineItem): item is TimelineItem & { type: 'call'; data: Call } {
+  return item.type === 'call';
+}
+
+function isConversationItem(item: TimelineItem): item is TimelineItem & { type: 'conversation'; data: Conversation } {
+  return item.type === 'conversation';
+}
+
 interface CustomerHistory {
   customer: Customer;
   appointments: Appointment[];
@@ -98,36 +111,147 @@ interface CustomerHistory {
   conversations: Conversation[];
 }
 
+interface CustomerStats {
+  customer_id: number;
+  total_appointments: number;
+  completed_appointments: number;
+  cancelled_appointments: number;
+  no_show_rate: number;
+  total_calls: number;
+  total_conversations: number;
+  avg_satisfaction_score: number | null;
+  is_new_client: boolean;
+  has_allergies: boolean;
+  is_pregnant: boolean;
+}
+
+type TimelineItem = {
+  type: 'appointment' | 'call' | 'conversation';
+  date: Date;
+  data: Appointment | Call | Conversation;
+};
+
+// Constants for calculations
+const AVG_APPOINTMENT_VALUE = 350; // Average revenue per completed appointment
+
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const router = useRouter();
   const [data, setData] = useState<CustomerHistory | null>(null);
+  const [stats, setStats] = useState<CustomerStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Customer>>({});
   const [isSaving, setIsSaving] = useState(false);
 
+  // Create unified timeline from all interactions (memoized for performance)
+  const timeline = useMemo((): TimelineItem[] => {
+    if (!data) return [];
+
+    const items: TimelineItem[] = [];
+
+    // Add appointments (with date validation)
+    data.appointments.forEach(apt => {
+      try {
+        const date = new Date(apt.appointment_datetime);
+        if (!isNaN(date.getTime())) {
+          items.push({
+            type: 'appointment',
+            date,
+            data: apt
+          });
+        }
+      } catch (e) {
+        console.error('Invalid appointment date:', apt.appointment_datetime);
+      }
+    });
+
+    // Add calls (with date validation)
+    data.calls.forEach(call => {
+      if (call.started_at) {
+        try {
+          const date = new Date(call.started_at);
+          if (!isNaN(date.getTime())) {
+            items.push({
+              type: 'call',
+              date,
+              data: call
+            });
+          }
+        } catch (e) {
+          console.error('Invalid call date:', call.started_at);
+        }
+      }
+    });
+
+    // Add conversations (with date validation)
+    data.conversations.forEach(conv => {
+      if (conv.initiated_at) {
+        try {
+          const date = new Date(conv.initiated_at);
+          if (!isNaN(date.getTime())) {
+            items.push({
+              type: 'conversation',
+              date,
+              data: conv
+            });
+          }
+        } catch (e) {
+          console.error('Invalid conversation date:', conv.initiated_at);
+        }
+      }
+    });
+
+    // Sort by date (most recent first)
+    return items.sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [data]);
+
   useEffect(() => {
+    let isMounted = true;
+
     const fetchData = async () => {
       try {
-        const response = await fetch(`/api/admin/customers/${resolvedParams.id}/history`);
+        // Fetch both history and stats in parallel
+        const [historyResponse, statsResponse] = await Promise.all([
+          fetch(`/api/admin/customers/${resolvedParams.id}/history`),
+          fetch(`/api/admin/customers/${resolvedParams.id}/stats`),
+        ]);
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch customer");
+        if (!historyResponse.ok) {
+          throw new Error("Failed to fetch customer history");
         }
 
-        const historyData = await response.json();
-        setData(historyData);
-        setEditForm(historyData.customer);
+        if (!statsResponse.ok) {
+          throw new Error("Failed to fetch customer stats");
+        }
+
+        const historyData = await historyResponse.json();
+        const statsData = await statsResponse.json();
+
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setData(historyData);
+          setStats(statsData);
+          setEditForm(historyData.customer);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unknown error");
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : "Unknown error");
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchData();
+
+    // Cleanup function to prevent state updates on unmounted component
+    return () => {
+      isMounted = false;
+    };
   }, [resolvedParams.id]);
 
   const handleSave = async () => {
@@ -253,6 +377,146 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           )}
         </div>
       </div>
+
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>Common tasks for this customer</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-2">
+          <Link href={`/messaging?customer_id=${customer.id}`}>
+            <Button variant="default" aria-label="Send message to customer">
+              <Send className="mr-2 h-4 w-4" />
+              Send Message
+            </Button>
+          </Link>
+          <Link href={`/appointments?customer_id=${customer.id}&action=new`}>
+            <Button variant="outline" aria-label="Book new appointment for customer">
+              <CalendarPlus className="mr-2 h-4 w-4" />
+              Book Appointment
+            </Button>
+          </Link>
+          {customer.phone && (
+            <a href={`tel:${customer.phone}`} aria-label={`Call customer at ${customer.phone}`}>
+              <Button variant="outline">
+                <Phone className="mr-2 h-4 w-4" />
+                Call
+              </Button>
+            </a>
+          )}
+          {customer.email && (
+            <a href={`mailto:${customer.email}`} aria-label={`Email customer at ${customer.email}`}>
+              <Button variant="outline">
+                <Mail className="mr-2 h-4 w-4" />
+                Email
+              </Button>
+            </a>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Customer Statistics */}
+      {isLoading ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          {[...Array(5)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="h-4 w-24 bg-zinc-200 rounded animate-pulse" />
+                <div className="h-4 w-4 bg-zinc-200 rounded animate-pulse" />
+              </CardHeader>
+              <CardContent>
+                <div className="h-8 w-16 bg-zinc-200 rounded animate-pulse mb-2" />
+                <div className="h-3 w-32 bg-zinc-200 rounded animate-pulse" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : stats ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          {/* Lifetime Value - Calculated from completed appointments */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Lifetime Value</CardTitle>
+              <DollarSign className="h-4 w-4 text-zinc-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                ${(stats.completed_appointments * AVG_APPOINTMENT_VALUE).toLocaleString()}
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">
+                Est. from {stats.completed_appointments} completed appointments @ ${AVG_APPOINTMENT_VALUE} avg
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Total Appointments */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Appointments</CardTitle>
+              <Calendar className="h-4 w-4 text-zinc-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.total_appointments}</div>
+              <p className="text-xs text-zinc-500 mt-1">
+                {stats.completed_appointments} completed • {stats.cancelled_appointments} cancelled
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Satisfaction Score */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Satisfaction</CardTitle>
+              <Star className="h-4 w-4 text-zinc-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.avg_satisfaction_score !== null
+                  ? `${stats.avg_satisfaction_score.toFixed(1)}/10`
+                  : "N/A"}
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">
+                From {stats.total_calls} voice calls
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Total Interactions */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Interactions</CardTitle>
+              <Activity className="h-4 w-4 text-zinc-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.total_calls + stats.total_conversations}
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">
+                {stats.total_calls} calls • {stats.total_conversations} messages
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* No Show Rate */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">No Show Rate</CardTitle>
+              <UserX className="h-4 w-4 text-zinc-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.total_appointments > 0 ? `${stats.no_show_rate.toFixed(1)}%` : "N/A"}
+              </div>
+              <p className="text-xs text-zinc-500 mt-1">
+                {stats.total_appointments > 0
+                  ? `${stats.cancelled_appointments} of ${stats.total_appointments} appointments`
+                  : "No appointments yet"}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
 
       {/* Customer Information Card */}
       <Card>
@@ -393,8 +657,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       </Card>
 
       {/* Activity Tabs */}
-      <Tabs defaultValue="appointments" className="w-full">
+      <Tabs defaultValue="timeline" className="w-full">
         <TabsList>
+          <TabsTrigger value="timeline">
+            <Clock className="mr-2 h-4 w-4" />
+            Timeline ({timeline.length})
+          </TabsTrigger>
           <TabsTrigger value="appointments">
             <Calendar className="mr-2 h-4 w-4" />
             Appointments ({data.appointments.length})
@@ -408,6 +676,157 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             Messages ({data.conversations.length})
           </TabsTrigger>
         </TabsList>
+
+        {/* Unified Timeline Tab */}
+        <TabsContent value="timeline" className="space-y-4">
+          {timeline.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-zinc-500">
+                No activity yet
+              </CardContent>
+            </Card>
+          ) : (
+            timeline.map((item, index) => {
+              if (isAppointmentItem(item)) {
+                const badgeProps = getStatusBadgeProps(item.data.status);
+                return (
+                  <Card key={`apt-${item.data.id}-${index}`} className="hover:shadow-md transition-shadow">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 p-2 bg-blue-100 rounded-full">
+                            <Calendar className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg">Appointment: {item.data.service_type}</CardTitle>
+                            <CardDescription>
+                              {format(new Date(item.data.appointment_datetime), "PPP 'at' p")}
+                              {" • "}
+                              {formatDistanceToNow(new Date(item.data.appointment_datetime), { addSuffix: true })}
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                          {item.data.status}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="text-sm pl-[60px]">
+                      {item.data.provider && <p className="text-zinc-500">Provider: {item.data.provider}</p>}
+                      {item.data.special_requests && <p className="mt-2 text-zinc-700">{item.data.special_requests}</p>}
+                      <p className="text-xs text-zinc-400 mt-2">Booked by {item.data.booked_by}</p>
+                    </CardContent>
+                  </Card>
+                );
+              } else if (isCallItem(item)) {
+                const badgeProps = getStatusBadgeProps(item.data.outcome);
+                const callDate = item.data.started_at
+                  ? formatDistanceToNow(new Date(item.data.started_at), { addSuffix: true })
+                  : "unknown time";
+                return (
+                  <Link
+                    href={`/calls/${item.data.session_id}`}
+                    key={`call-${item.data.id}-${index}`}
+                    aria-label={`View voice call details from ${callDate}`}
+                  >
+                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                      <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 p-2 bg-green-100 rounded-full">
+                            <Headphones className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg">Voice Call</CardTitle>
+                            <CardDescription>
+                              {item.data.started_at ? (
+                                <>
+                                  {format(new Date(item.data.started_at), "PPP 'at' p")}
+                                  {" • "}
+                                  {formatDistanceToNow(new Date(item.data.started_at), { addSuffix: true })}
+                                </>
+                              ) : "Unknown"}
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {item.data.outcome && (
+                            <Badge variant={badgeProps.variant} className={badgeProps.className}>
+                              {item.data.outcome}
+                            </Badge>
+                          )}
+                          {item.data.escalated && (
+                            <Badge variant="outline" className="border-red-200 bg-red-100 text-red-700">
+                              Escalated
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="text-sm space-y-1 pl-[60px]">
+                      {item.data.duration_seconds && (
+                        <p className="text-zinc-500">Duration: {Math.floor(item.data.duration_seconds / 60)}m {item.data.duration_seconds % 60}s</p>
+                      )}
+                      {item.data.satisfaction_score !== undefined && item.data.satisfaction_score !== null && (
+                        <p className="text-zinc-500">Satisfaction: {item.data.satisfaction_score}/10</p>
+                      )}
+                      {item.data.sentiment && (
+                        <p className="text-zinc-500">Sentiment: {item.data.sentiment}</p>
+                      )}
+                    </CardContent>
+                    </Card>
+                  </Link>
+                );
+              } else if (isConversationItem(item)) {
+                const statusBadgeProps = getStatusBadgeProps(item.data.status);
+                const outcomeBadgeProps = getStatusBadgeProps(item.data.outcome);
+                return (
+                  <Card key={`conv-${item.data.id}-${index}`} className="hover:shadow-md transition-shadow">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 p-2 bg-purple-100 rounded-full">
+                            <MessageSquare className="h-4 w-4 text-purple-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg capitalize">{item.data.channel} Conversation</CardTitle>
+                            <CardDescription>
+                              {item.data.initiated_at ? (
+                                <>
+                                  {format(new Date(item.data.initiated_at), "PPP 'at' p")}
+                                  {" • "}
+                                  {formatDistanceToNow(new Date(item.data.initiated_at), { addSuffix: true })}
+                                </>
+                              ) : "Unknown"}
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {item.data.status && (
+                            <Badge variant={statusBadgeProps.variant} className={statusBadgeProps.className}>
+                              {item.data.status}
+                            </Badge>
+                          )}
+                          {item.data.outcome && (
+                            <Badge variant={outcomeBadgeProps.variant} className={outcomeBadgeProps.className}>
+                              {item.data.outcome}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    {item.data.satisfaction_score !== undefined && item.data.satisfaction_score !== null && (
+                      <CardContent className="text-sm pl-[60px]">
+                        <p className="text-zinc-500">Satisfaction: {item.data.satisfaction_score}/10</p>
+                      </CardContent>
+                    )}
+                  </Card>
+                );
+              }
+              return null;
+            })
+          )}
+        </TabsContent>
 
         <TabsContent value="appointments" className="space-y-4">
           {data.appointments.length === 0 ? (
