@@ -26,7 +26,7 @@ export default function ProblemSection() {
 
   // ROI Calculator state
   const [callsPerDay, setCallsPerDay] = useState(20);
-  const [avgAppointmentValue, setAvgAppointmentValue] = useState(300);
+  const [avgAppointmentValue, setAvgAppointmentValue] = useState(500);
   const [missedCallRate, setMissedCallRate] = useState(25);
 
   // Calculations
@@ -46,7 +46,7 @@ export default function ProblemSection() {
                   Every Missed Call is <span className="text-red-600">Lost Revenue</span>
                 </h2>
                 <p className="text-xl text-gray-600 leading-relaxed">
-                  The average medical spa loses <span className="font-bold text-gray-900">&gt;$300K/year</span> to missed calls and inefficient scheduling. Don&apos;t let revenue walk out the door.
+                  The average medical spa loses <span className="font-bold text-gray-900">$300K to $500K/year per location</span> due to missed calls and inefficient scheduling. Don&apos;t let revenue walk out the door.
                 </p>
               </div>
             </FadeInUp>
@@ -86,7 +86,7 @@ export default function ProblemSection() {
           <div className="lg:col-span-7 sticky top-8">
             <FadeInUp delay={0.4}>
               <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-                <div className="bg-gray-50 p-6 border-b border-gray-100 flex items-center gap-3">
+                <div className="bg-gray-50 p-4 border-b border-gray-100 flex items-center gap-3">
                   <div className="p-2 bg-white rounded-lg shadow-sm">
                     <Calculator className="w-5 h-5 text-primary-600" />
                   </div>
@@ -100,13 +100,13 @@ export default function ProblemSection() {
                   </div>
                 </div>
 
-                <div className="p-6 lg:p-8 space-y-8">
+                <div className="p-6 space-y-6">
                   {/* Sliders */}
-                  <div className="space-y-6">
+                  <div className="space-y-5">
                     <div>
-                      <div className="flex justify-between mb-2">
+                      <div className="flex justify-between mb-1">
                         <label className="text-sm font-medium text-gray-700">Average Calls Per Day</label>
-                        <span className="text-sm font-bold text-primary-600 bg-primary-50 px-3 py-1 rounded-full">{callsPerDay}</span>
+                        <span className="text-sm font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">{callsPerDay}</span>
                       </div>
                       <input
                         type="range"
@@ -123,29 +123,29 @@ export default function ProblemSection() {
                     </div>
 
                     <div>
-                      <div className="flex justify-between mb-2">
+                      <div className="flex justify-between mb-1">
                         <label className="text-sm font-medium text-gray-700">Avg. Appointment Value</label>
-                        <span className="text-sm font-bold text-primary-600 bg-primary-50 px-3 py-1 rounded-full">{formatCurrency(avgAppointmentValue)}</span>
+                        <span className="text-sm font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">{formatCurrency(avgAppointmentValue)}</span>
                       </div>
                       <input
                         type="range"
-                        min="100"
-                        max="1000"
+                        min="200"
+                        max="2000"
                         step="50"
                         value={avgAppointmentValue}
                         onChange={(e) => setAvgAppointmentValue(Number(e.target.value))}
                         className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary-600 hover:accent-primary-700 transition-colors"
                       />
                       <div className="flex justify-between mt-1 text-xs text-gray-400">
-                        <span>$100</span>
-                        <span>$1,000</span>
+                        <span>$200</span>
+                        <span>$2,000</span>
                       </div>
                     </div>
 
                     <div>
-                      <div className="flex justify-between mb-2">
+                      <div className="flex justify-between mb-1">
                         <label className="text-sm font-medium text-gray-700">Missed Call Rate</label>
-                        <span className="text-sm font-bold text-primary-600 bg-primary-50 px-3 py-1 rounded-full">{missedCallRate}%</span>
+                        <span className="text-sm font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">{missedCallRate}%</span>
                       </div>
                       <input
                         type="range"
@@ -163,17 +163,17 @@ export default function ProblemSection() {
                   </div>
 
                   {/* Results - Full width Revenue Lost */}
-                  <div className="bg-red-50 rounded-2xl p-6 border border-red-200 text-center transition-transform hover:scale-[1.02]">
-                    <p className="text-red-900 text-sm font-medium mb-2">Revenue Lost Annually</p>
-                    <p className="text-4xl lg:text-5xl font-bold text-red-600 mb-2">
+                  <div className="bg-red-50 rounded-2xl p-5 border border-red-200 text-center transition-transform hover:scale-[1.02]">
+                    <p className="text-red-900 text-sm font-medium mb-1">Revenue Lost Annually</p>
+                    <p className="text-4xl font-bold text-red-600 mb-1">
                       {formatCurrency(lostRevenuePerYear)}
                     </p>
-                    <p className="text-red-700 text-sm mt-2">
+                    <p className="text-red-700 text-xs mt-1">
                       From {Math.round(missedCallsPerYear).toLocaleString()} missed calls per year
                     </p>
                   </div>
 
-                  <p className="text-xs text-center text-gray-400 mt-2">
+                  <p className="text-xs text-center text-gray-400 mt-1">
                     *Estimates based on 60% booking conversion rate. Industry average missed call rate is 20-30%.
                   </p>
                 </div>

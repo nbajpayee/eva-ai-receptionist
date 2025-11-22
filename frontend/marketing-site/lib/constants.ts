@@ -7,7 +7,7 @@ export const SITE_CONFIG = {
   url: "https://eva-ai.com",
   ogImage: "https://eva-ai.com/og-image.png",
   contact: {
-    email: "hello@eva-ai.com",
+    email: "hello@getevaai.com",
     phone: "(555) 123-4567",
     phoneDisplay: "(555) 123-4567",
   },

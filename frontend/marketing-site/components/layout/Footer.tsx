@@ -18,8 +18,6 @@ export default function Footer() {
     legal: [
       { title: "Privacy Policy", href: "/privacy" },
       { title: "Terms of Service", href: "/terms" },
-      { title: "HIPAA Compliance", href: "/hipaa" },
-      { title: "Security", href: "/security" },
     ],
   };
 

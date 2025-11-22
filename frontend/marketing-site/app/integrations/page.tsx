@@ -87,8 +87,8 @@ export default function IntegrationsPage() {
                 Eva doesn&apos;t work in a silo. She connects directly with your existing EHR, scheduling, and communication tools to create a unified workflow.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Link href="/contact" className="btn-primary">
-                  Request Integration
+                <Link href="#book-demo" className="btn-primary">
+                  Request New Integration
                   <ArrowRight className="ml-2 w-4 h-4" />
                 </Link>
                 <Link
