@@ -4,9 +4,12 @@ backend/
 # Other directories not needed for Vercel deployment
 docs/
 scripts/
-frontend/
 .github/
 .claude/
+
+# Exclude legacy frontend files (but NOT frontend/marketing-site/)
+frontend/index.html
+frontend/app.js
 
 # Python files
 *.pyc
