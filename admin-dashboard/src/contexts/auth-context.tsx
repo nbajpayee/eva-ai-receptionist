@@ -54,19 +54,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
+    console.log('[AuthProvider] mount')
+
     const initAuth = async () => {
       try {
+        console.log('[AuthProvider] initAuth start')
         const { data: { session } } = await supabase.auth.getSession()
-        setSession(session)
-        setUser(session?.user ?? null)
 
-        if (session?.user) {
-          const userProfile = await fetchProfile(session.user.id)
-          setProfile(userProfile)
+        console.log('[AuthProvider] initAuth session', session)
+
+        const finalUser = session?.user ?? null
+
+        setSession(session ?? null)
+        setUser(finalUser)
+
+        if (finalUser) {
+          // Fetch profile in background so we don't block loading state
+          fetchProfile(finalUser.id)
+            .then((userProfile) => {
+              setProfile(userProfile)
+            })
+            .catch((error) => {
+              console.error('Error fetching profile during initAuth:', error)
+            })
+        } else {
+          setProfile(null)
         }
       } catch (error) {
         console.error('Error initializing auth:', error)
       } finally {
+        console.log('[AuthProvider] initAuth done, setting loading=false')
         setLoading(false)
       }
     }
@@ -76,21 +93,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('[AuthProvider] onAuthStateChange', _event, session)
       setSession(session)
       setUser(session?.user ?? null)
 
       if (session?.user) {
-        const userProfile = await fetchProfile(session.user.id)
-        setProfile(userProfile)
+        // Fetch profile in background, independent of loading state
+        fetchProfile(session.user.id)
+          .then((userProfile) => {
+            setProfile(userProfile)
+          })
+          .catch((error) => {
+            console.error('Error fetching profile on auth state change:', error)
+          })
       } else {
         setProfile(null)
       }
 
+      console.log('[AuthProvider] onAuthStateChange done, setting loading=false')
       setLoading(false)
     })
 
     return () => {
+      console.log('[AuthProvider] unsubscribe auth state')
       subscription.unsubscribe()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -29,9 +29,13 @@ export function UserNav() {
   }
 
   const handleSignOut = async () => {
-    await signOut()
-    router.push('/login')
-    router.refresh()
+    try {
+      await signOut()
+    } catch (error) {
+      console.error('Error signing out:', error)
+    } finally {
+      router.replace('/login')
+    }
   }
 
   return (
@@ -62,7 +66,7 @@ export function UserNav() {
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleSignOut}>
+        <DropdownMenuItem onSelect={handleSignOut}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out
         </DropdownMenuItem>
