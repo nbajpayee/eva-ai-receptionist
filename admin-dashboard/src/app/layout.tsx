@@ -5,6 +5,8 @@ import "./globals.css";
 import { SidebarNav, type SidebarNavItem } from "@/components/ui/sidebar-nav";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { ToastProviderWrapper } from "@/components/providers/toast-provider-wrapper";
+import { AuthProvider } from "@/contexts/auth-context";
+import { UserNav } from "@/components/layout/user-nav";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -85,8 +87,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} bg-zinc-50 text-zinc-900 antialiased`}
       >
-        <ToastProviderWrapper>
-          <div className="flex min-h-screen bg-zinc-100/60">
+        <AuthProvider>
+          <ToastProviderWrapper>
+            <div className="flex min-h-screen bg-zinc-100/60">
           <aside className="hidden border-r border-zinc-200 bg-white/80 backdrop-blur lg:flex lg:w-64 lg:flex-col">
             <div className="flex h-20 flex-col justify-center gap-1 border-b border-zinc-200 px-6">
               <span className="text-xs uppercase tracking-[0.2em] text-zinc-500">
@@ -104,9 +107,22 @@ export default function RootLayout({
             </div>
           </aside>
           <div className="flex flex-1 flex-col">
-            <header className="flex h-16 items-center justify-between border-b border-zinc-200 bg-white/80 px-4 backdrop-blur lg:hidden">
-              <MobileSidebar items={NAV_ITEMS} />
-              <div className="flex flex-col items-end">
+            <header className="flex h-16 items-center justify-between border-b border-zinc-200 bg-white/80 px-4 backdrop-blur">
+              <div className="lg:hidden">
+                <MobileSidebar items={NAV_ITEMS} />
+              </div>
+              <div className="hidden lg:flex flex-col items-start">
+                <span className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+                  Ava Command Center
+                </span>
+                <span className="text-sm font-semibold text-zinc-900">
+                  Med Spa Voice Operations
+                </span>
+              </div>
+              <div className="flex items-center gap-4 lg:ml-auto">
+                <UserNav />
+              </div>
+              <div className="flex lg:hidden flex-col items-end">
                 <span className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">
                   Ava Command Center
                 </span>
@@ -120,9 +136,10 @@ export default function RootLayout({
                 {children}
               </div>
             </main>
+            </div>
           </div>
-        </div>
-        </ToastProviderWrapper>
+          </ToastProviderWrapper>
+        </AuthProvider>
       </body>
     </html>
   );
