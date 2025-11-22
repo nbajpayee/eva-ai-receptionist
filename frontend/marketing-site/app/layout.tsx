@@ -6,7 +6,7 @@ import Footer from "@/components/layout/Footer";
 
 export const metadata: Metadata = {
   title: {
-    default: SITE_CONFIG.name,
+    default: "Eva - The AI Receptionist for Med Spas",
     template: `%s | ${SITE_CONFIG.name}`,
   },
   description: SITE_CONFIG.description,
@@ -51,8 +51,11 @@ export const metadata: Metadata = {
     creator: "@eva-ai",
   },
   icons: {
-    icon: "/favicon.ico",
+    icon: "/icon-med.png",
+    shortcut: "/icon-med.png",
+    apple: "/icon-med.png",
   },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({

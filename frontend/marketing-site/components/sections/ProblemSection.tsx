@@ -46,7 +46,7 @@ export default function ProblemSection() {
                   Every Missed Call is <span className="text-red-600">Lost Revenue</span>
                 </h2>
                 <p className="text-xl text-gray-600 leading-relaxed">
-                  The average medical spa loses <span className="font-bold text-gray-900">$300K to $500K/year per location</span> due to missed calls and inefficient scheduling. Don&apos;t let revenue walk out the door.
+                  The average medical spa loses <span className="font-bold text-gray-900">$300K to $500K per year per location</span> due to missed calls and inefficient scheduling. Don&apos;t let revenue walk out the door.
                 </p>
               </div>
             </FadeInUp>

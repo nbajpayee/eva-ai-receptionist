@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Phone, Mail, MapPin, Linkedin, Twitter } from "lucide-react";
+import { Mail, MapPin, Linkedin, Twitter } from "lucide-react";
 import { SITE_CONFIG, NAV_ITEMS } from "@/lib/constants";
+import Image from "next/image";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
@@ -29,8 +30,13 @@ export default function Footer() {
             {/* Brand Column */}
             <div className="lg:col-span-2">
               <div className="flex items-center space-x-2 mb-4">
-                <div className="flex items-center justify-center w-10 h-10 bg-primary rounded-lg">
-                  <Phone className="w-6 h-6 text-white" />
+                <div className="relative w-10 h-10 rounded-lg overflow-hidden">
+                    <Image 
+                        src="/icon-med.png" 
+                        alt="Eva AI Logo" 
+                        fill
+                        className="object-cover"
+                    />
                 </div>
                 <span className="text-xl font-bold text-white">
                   {SITE_CONFIG.name}

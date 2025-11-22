@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Phone } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { NAV_ITEMS, SITE_CONFIG } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -33,9 +34,15 @@ export default function Header() {
       <nav className="container-wide">
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="flex items-center justify-center w-10 h-10 bg-primary rounded-lg">
-              <Phone className="w-6 h-6 text-white" />
+          <Link href="/" className="flex items-center space-x-3">
+            <div className="relative w-10 h-10 rounded-lg overflow-hidden">
+              <Image 
+                src="/icon-med.png" 
+                alt="Eva AI Logo" 
+                fill
+                className="object-cover"
+                priority
+              />
             </div>
             <span className="text-xl font-bold text-gray-900">
               {SITE_CONFIG.name}
