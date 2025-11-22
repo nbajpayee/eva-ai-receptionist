@@ -8,7 +8,6 @@ import {
   CallLogTable,
   type CallRecord,
 } from "@/components/call-log-table";
-import { LiveStatus } from "@/components/dashboard/live-status";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -255,9 +254,6 @@ export default function Home() {
           </ToggleGroup>
         </div>
       </div>
-
-      {/* Live Status Indicator */}
-      <LiveStatus />
 
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         {/* Card 1: Appointments Booked */}

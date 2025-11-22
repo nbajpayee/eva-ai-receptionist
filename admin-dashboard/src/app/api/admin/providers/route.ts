@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -10,8 +11,13 @@ export async function GET(request: NextRequest) {
       proxyUrl.searchParams.set(key, value);
     });
 
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
     const response = await fetch(proxyUrl.toString(), {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       cache: "no-store",
     });
 
@@ -40,9 +46,14 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
     const response = await fetch(`${baseUrl}/api/admin/providers`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify(body),
     });
 

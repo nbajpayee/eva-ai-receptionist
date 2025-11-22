@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
 
 export async function GET(
   request: NextRequest,
@@ -17,10 +18,16 @@ export async function GET(
   const proxyUrl = new URL(`/api/admin/customers/${id}/history`, baseUrl);
 
   try {
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
     const response = await fetch(proxyUrl.toString(), {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
       },
       cache: "no-store",
     });

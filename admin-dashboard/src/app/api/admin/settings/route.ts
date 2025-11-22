@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
+import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 export async function GET() {
   try {
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
     const response = await fetch(`${baseUrl}/api/admin/settings`, {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       cache: "no-store",
     });
 
@@ -34,9 +40,14 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json();
 
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
     const response = await fetch(`${baseUrl}/api/admin/settings`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify(body),
     });
 

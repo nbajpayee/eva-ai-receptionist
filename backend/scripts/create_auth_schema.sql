@@ -32,14 +32,7 @@ CREATE POLICY "Users can update own profile"
     ON profiles
     FOR UPDATE
     USING (auth.uid() = id)
-    WITH CHECK (
-        auth.uid() = id
-        AND (
-            SELECT role FROM profiles WHERE id = auth.uid()
-        ) = (
-            SELECT role FROM profiles WHERE id = NEW.id
-        )
-    );
+    WITH CHECK (auth.uid() = id);
 
 -- Create policy: Only owners can view all profiles
 CREATE POLICY "Owners can view all profiles"
