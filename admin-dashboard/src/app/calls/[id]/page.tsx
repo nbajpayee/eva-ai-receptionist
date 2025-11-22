@@ -156,7 +156,7 @@ function getAppOrigin(): string {
 
 function resolveInternalUrl(path: string): string {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-  return `${getAppOrigin()}${basePath}${path}`;
+  return `${basePath}${path}`;
 }
 
 async function fetchCallDetails(id: string): Promise<CallDetails | null> {

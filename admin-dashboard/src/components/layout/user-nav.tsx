@@ -22,7 +22,9 @@ export function UserNav() {
   const { user, profile, signOut } = useAuth()
   const router = useRouter()
 
-  if (!user || !profile) {
+  // Render user menu as long as we have an authenticated Supabase user.
+  // Profile information is optional and will fall back to user email when missing.
+  if (!user) {
     return null
   }
 
@@ -45,13 +47,13 @@ export function UserNav() {
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">
-              {profile.full_name || 'User'}
+              {profile?.full_name || user.email || 'User'}
             </p>
             <p className="text-xs leading-none text-zinc-500">
-              {profile.email}
+              {profile?.email || user.email}
             </p>
             <p className="text-xs leading-none text-zinc-400 capitalize mt-1">
-              Role: {profile.role}
+              Role: {profile?.role ?? 'unknown'}
             </p>
           </div>
         </DropdownMenuLabel>

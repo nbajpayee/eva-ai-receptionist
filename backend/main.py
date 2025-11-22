@@ -28,6 +28,7 @@ from starlette.websockets import WebSocketState
 from ai_insights_service import AIInsightsService
 from analytics import AnalyticsService
 from api_messaging import messaging_router
+from api_research import router as research_router
 from auth import User, get_current_user, get_current_user_optional, require_owner
 from calendar_service import check_calendar_credentials
 from config import get_settings
@@ -63,6 +64,7 @@ app = FastAPI(
 
 # Register routers
 app.include_router(messaging_router)
+app.include_router(research_router)
 
 
 class MedSpaSettingsResponse(BaseModel):

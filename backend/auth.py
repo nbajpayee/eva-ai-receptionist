@@ -4,10 +4,12 @@ Validates Supabase JWT tokens and provides auth dependencies
 """
 
 from typing import Optional
+import base64
+import json
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+from jose import JWTError
 
 from config import get_settings
 
@@ -29,33 +31,25 @@ class User:
 
 
 def decode_jwt(token: str) -> dict:
-    """
-    Decode and validate Supabase JWT token
+    """Decode Supabase JWT token without verifying the signature.
 
-    Args:
-        token: JWT token string
+    We trust Supabase to issue and validate tokens; here we only need the claims
+    (sub, email, user_metadata) so we base64url-decode the payload portion.
 
-    Returns:
-        Decoded token payload
-
-    Raises:
-        HTTPException: If token is invalid or expired
+    Raises HTTP 401 if the token is malformed.
     """
     try:
-        # Supabase uses the SUPABASE_JWT_SECRET to sign tokens
-        # For production, you should validate with Supabase's public key
-        payload = jwt.decode(
-            token,
-            settings.SUPABASE_SERVICE_ROLE_KEY,
-            algorithms=["HS256"],
-            options={"verify_signature": False},  # Supabase validates on their end
-        )
+        parts = token.split(".")
+        if len(parts) != 3:
+            raise JWTError("Invalid token format")
+
+        payload_segment = parts[1]
+        # Add padding for base64url decoding
+        padding = "=" * (-len(payload_segment) % 4)
+        decoded_bytes = base64.urlsafe_b64decode(payload_segment + padding)
+        payload = json.loads(decoded_bytes.decode("utf-8"))
         return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired"
-        )
-    except JWTError:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token",

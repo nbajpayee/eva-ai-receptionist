@@ -57,7 +57,8 @@ function getAppOrigin(): string {
 
 function resolveInternalUrl(path: string): string {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-  return `${getAppOrigin()}${basePath}${path}`;
+  // Use relative URLs so calls always go to the same origin/port as the app
+  return `${basePath}${path}`;
 }
 
 async function fetchCallHistory(): Promise<CallRecord[]> {
