@@ -1,0 +1,32 @@
+# Backend is deployed to Railway, not Vercel
+backend/
+
+# Other directories not needed for Vercel deployment
+docs/
+scripts/
+frontend/
+.github/
+.claude/
+
+# Python files
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
