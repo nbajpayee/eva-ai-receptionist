@@ -1,18 +1,16 @@
 "use client";
 
 import { format } from "date-fns";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
-  CHANNEL_TONES,
   CommunicationMessage,
   getChannelLabel,
 } from "@/types/communication";
 
 export function MessageBubble({ message }: { message: CommunicationMessage }) {
   const isAssistant = message.author === "assistant";
-  const channelTone = CHANNEL_TONES[message.channel];
-
+  // We'll use custom styling instead of CHANNEL_TONES for the bubble itself to match the new aesthetic
+  
   return (
     <div
       className={cn(
@@ -20,27 +18,29 @@ export function MessageBubble({ message }: { message: CommunicationMessage }) {
         isAssistant ? "items-start" : "items-end"
       )}
     >
-      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
+      <div className={cn(
+        "flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider",
+        isAssistant ? "text-zinc-500 ml-1" : "text-zinc-400 mr-1"
+      )}>
         <span>{isAssistant ? "Eva" : "Guest"}</span>
-        <span className="h-1 w-1 rounded-full bg-zinc-300" />
-        <span>{format(new Date(message.timestamp), "MMM d, yyyy • h:mm a")}</span>
+        <span className="h-0.5 w-0.5 rounded-full bg-zinc-300" />
+        <span>{format(new Date(message.timestamp), "h:mm a")}</span>
       </div>
       <div
         className={cn(
-          "max-w-xl rounded-2xl border px-5 py-4 text-sm leading-relaxed shadow-sm",
+          "relative max-w-xl rounded-2xl px-5 py-4 text-sm leading-relaxed shadow-sm transition-all",
           isAssistant
-            ? "border-zinc-200 bg-white text-zinc-800"
-            : "border-zinc-900 bg-zinc-900 text-white"
+            ? "rounded-tl-none border border-zinc-200/60 bg-white/80 text-zinc-700 backdrop-blur-sm"
+            : "rounded-tr-none border border-sky-600/20 bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/10"
         )}
       >
         <div className="whitespace-pre-line">{message.body}</div>
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-          <Badge variant="outline" className={cn("border", channelTone)}>
-            {getChannelLabel(message.channel)}
-          </Badge>
-          <Badge variant="secondary" className="uppercase tracking-wide">
-            {message.direction === "inbound" ? "Incoming" : "Outgoing"}
-          </Badge>
+        <div className={cn(
+          "mt-3 flex flex-wrap items-center gap-2 text-[10px] font-medium opacity-80",
+          isAssistant ? "text-zinc-400" : "text-sky-100"
+        )}>
+           {/* Simplified footer info */}
+           <span>{getChannelLabel(message.channel)}</span>
         </div>
       </div>
     </div>

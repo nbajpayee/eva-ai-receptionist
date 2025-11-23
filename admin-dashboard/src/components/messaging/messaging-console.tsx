@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,9 +11,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { MessageBubble } from "@/components/communication/message-bubble";
 import type { CommunicationChannel, CommunicationMessage } from "@/types/communication";
-import { Loader2, Mail, MessageSquare, Menu, Plus } from "lucide-react";
+import { 
+  Loader2, 
+  Mail, 
+  MessageSquare, 
+  Menu, 
+  Plus, 
+  Send, 
+  RefreshCw, 
+  Zap,
+  Search
+} from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, isFuture } from "date-fns";
+import { motion, AnimatePresence } from "framer-motion";
 
 type MessagingChannel = Extract<CommunicationChannel, "sms" | "email">;
 
@@ -44,6 +54,55 @@ const CHANNEL_DEFAULTS: Record<MessagingChannel, { customer_name: string; custom
   },
 };
 
+// Random Names List
+const RANDOM_NAMES = [
+  "Alice Smith", "Bob Johnson", "Carol Williams", "David Brown", "Eve Davis",
+  "Frank Miller", "Grace Wilson", "Henry Moore", "Isabel Taylor", "Jack Anderson",
+  "Kelly Thomas", "Liam Jackson", "Mia White", "Noah Harris", "Olivia Martin"
+];
+
+const getRandomName = () => {
+  return RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
+};
+
+const RANDOM_SUBJECTS = [
+  "Question about pricing", "Booking inquiry", "Reschedule appointment",
+  "Botox consultation", "Follow up on visit", "Feedback about service",
+  "New patient question", "Appointment confirmation"
+];
+
+const getRandomSubject = () => {
+  return RANDOM_SUBJECTS[Math.floor(Math.random() * RANDOM_SUBJECTS.length)];
+};
+
+const getRandomEmail = (name: string) => {
+  const sanitized = name.toLowerCase().replace(/[^a-z]/g, "");
+  return `${sanitized}${Math.floor(Math.random() * 100)}@test.com`;
+};
+
+const QUICK_SCENARIOS = [
+  { label: "Check Availability", text: "Hi, do you have any appointments available for tomorrow?" },
+  { label: "Book Botox", text: "I'd like to book a botox appointment for Friday afternoon." },
+  { label: "Ask Pricing", text: "How much do you charge for a consultation?" },
+  { label: "Reschedule", text: "I need to reschedule my appointment." },
+  { label: "Cancel", text: "Please cancel my appointment." },
+];
+
+function safeFormatDistanceToNow(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  
+  // If date is invalid, return empty string
+  if (isNaN(date.getTime())) return "";
+
+  // If date is in the future (due to slight server drift or timezone issues), clamp to "Just now"
+  if (isFuture(date)) {
+    return "Just now";
+  }
+
+  return formatDistanceToNow(date, { addSuffix: true });
+}
+
 interface MessagingConsoleProps {
   initialConversations: ConversationSummary[];
   initialMessages: CommunicationMessage[];
@@ -55,11 +114,14 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(initialConversation?.id ?? null);
   const [conversationChannelFilter, setConversationChannelFilter] = useState<"all" | MessagingChannel>("all");
+  const [conversationSearchQuery, setConversationSearchQuery] = useState("");
   const [messages, setMessages] = useState<CommunicationMessage[]>(initialMessages);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversation, setConversation] = useState<ConversationSummary | null>(initialConversation ?? null);
   const [channel, setChannel] = useState<MessagingChannel>(initialConversation?.channel ?? "sms");
+  
+  // Form State
   const [newCustomerName, setNewCustomerName] = useState<string>(
     initialConversation?.customer_name ?? CHANNEL_DEFAULTS[channel].customer_name
   );
@@ -78,6 +140,7 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isRefreshPaused, setIsRefreshPaused] = useState(false);
 
+  // Sync props to state
   useEffect(() => {
     setMessages(initialMessages);
   }, [initialMessages]);
@@ -90,6 +153,7 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
     setActiveConversationId(initialConversation?.id ?? null);
   }, [initialConversation]);
 
+  // Update form defaults when conversation/channel changes
   useEffect(() => {
     if (conversation) {
       const defaults = CHANNEL_DEFAULTS[conversation.channel];
@@ -101,14 +165,12 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
         setNewSubject(conversation.subject ?? CHANNEL_DEFAULTS.email.subject ?? "");
       }
     } else {
-      const defaults = CHANNEL_DEFAULTS[channel];
-      setNewCustomerName(defaults.customer_name);
-      setNewCustomerPhone(defaults.customer_phone ?? "");
-      setNewCustomerEmail(defaults.customer_email ?? "");
-      setNewSubject(defaults.subject ?? "");
+      // If no active conversation, don't force reset unless channel changed explicitly
+      // We handle resets in startNewConversationFlow
     }
-  }, [conversation, channel]);
+  }, [conversation]);
 
+  // Auto-scroll
   useEffect(() => {
     const node = scrollRef.current;
     if (node) {
@@ -134,16 +196,30 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
   });
 
   const filteredConversations = useMemo(() => {
-    const filtered = conversationChannelFilter === "all"
-      ? conversations
-      : conversations.filter((item) => item.channel === conversationChannelFilter);
+    let filtered = conversations;
+    
+    // Filter by Channel
+    if (conversationChannelFilter !== "all") {
+      filtered = filtered.filter((item) => item.channel === conversationChannelFilter);
+    }
+    
+    // Filter by Search Query
+    if (conversationSearchQuery.trim()) {
+      const query = conversationSearchQuery.toLowerCase();
+      filtered = filtered.filter(item => 
+        (item.customer_name?.toLowerCase().includes(query)) ||
+        (item.customer_phone?.includes(query)) ||
+        (item.customer_email?.toLowerCase().includes(query)) ||
+        (item.last_message_preview?.toLowerCase().includes(query))
+      );
+    }
 
     return [...filtered].sort((a, b) => {
       const aTime = a.last_activity_at ? new Date(a.last_activity_at).getTime() : 0;
       const bTime = b.last_activity_at ? new Date(b.last_activity_at).getTime() : 0;
       return bTime - aTime;
     });
-  }, [conversations, conversationChannelFilter]);
+  }, [conversations, conversationChannelFilter, conversationSearchQuery]);
 
   const refreshConversations = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!silent) {
@@ -234,16 +310,41 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
     [loadConversationMessages]
   );
 
-  const handleStartNewConversation = useCallback(() => {
+  const getNextPhoneNumber = useCallback(() => {
+    // Find highest phone number ending
+    let maxNum = 5555550100; // default base
+    conversations.forEach(c => {
+      if (c.channel === 'sms' && c.customer_phone) {
+        // Simple heuristic to extract digits
+        const digits = c.customer_phone.replace(/\D/g, '');
+        if (digits.length >= 10) {
+           const num = parseInt(digits);
+           if (!isNaN(num) && num > maxNum) {
+             maxNum = num;
+           }
+        }
+      }
+    });
+    // Format back to +1...
+    return `+${maxNum + 1}`;
+  }, [conversations]);
+
+  const startNewConversationFlow = useCallback(() => {
     setConversation(null);
     setActiveConversationId(null);
     setMessages([]);
-    setChannel("sms");
-    setNewMessage("");
     setError(null);
     setIsLoadingMessages(false);
-    setIsSheetOpen(false);
-  }, []);
+    
+    // Auto-populate random data
+    setChannel("sms");
+    const name = getRandomName();
+    setNewCustomerName(name);
+    setNewCustomerPhone(getNextPhoneNumber());
+    setNewCustomerEmail(getRandomEmail(name));
+    setNewSubject(getRandomSubject());
+    setNewMessage("");
+  }, [getNextPhoneNumber]);
 
   useEffect(() => {
     if (isRefreshPaused) {
@@ -298,21 +399,21 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
           }
         }
       } else {
-        const defaults = CHANNEL_DEFAULTS[activeChannel];
+        // New conversation flow
         const trimmedName = newCustomerName.trim();
         const trimmedPhone = newCustomerPhone.trim();
         const trimmedEmail = newCustomerEmail.trim();
         const trimmedSubject = newSubject.trim();
 
+        // Ensure we have fallbacks if fields are empty
+        const defaults = CHANNEL_DEFAULTS[activeChannel];
         payload.customer_name = trimmedName || defaults.customer_name;
-        if (defaults.customer_phone || trimmedPhone) {
-          payload.customer_phone = trimmedPhone || defaults.customer_phone;
-        }
-        if (defaults.customer_email || trimmedEmail) {
-          payload.customer_email = trimmedEmail || defaults.customer_email;
-        }
-        if (defaults.subject || trimmedSubject) {
-          payload.subject = trimmedSubject || defaults.subject;
+        
+        if (activeChannel === "sms") {
+            payload.customer_phone = trimmedPhone || defaults.customer_phone;
+        } else {
+            payload.customer_email = trimmedEmail || defaults.customer_email;
+            payload.subject = trimmedSubject || defaults.subject;
         }
       }
 
@@ -395,7 +496,7 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
     ? [
         `${conversation.message_count ?? messages.length} messages`,
         conversation.last_activity_at
-          ? `Last activity ${formatDistanceToNow(new Date(conversation.last_activity_at), { addSuffix: true })}`
+          ? `Last activity ${safeFormatDistanceToNow(conversation.last_activity_at)}`
           : "No activity yet",
         conversation.channel.toUpperCase(),
       ]
@@ -405,103 +506,130 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
 
   const ConversationListContent = () => (
     <>
-      <div className="space-y-4 border-b border-zinc-100 pb-4">
-        <div className="flex items-start justify-between gap-2">
+      <div className="space-y-4 border-b border-zinc-100/80 pb-4">
+        <div className="flex items-start justify-between gap-2 px-1">
           <div className="space-y-1">
-            <CardTitle className="text-base">Conversations</CardTitle>
-            <p className="text-xs text-zinc-500">Browse recent SMS and email interactions.</p>
+            <h3 className="text-sm font-medium text-zinc-900">Conversations</h3>
+            <p className="text-[11px] text-zinc-500">Recent SMS & Email threads</p>
           </div>
           {isLoadingConversations ? (
-            <div className="flex items-center gap-1 text-xs text-zinc-400">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              <span>Refreshing...</span>
-            </div>
+             <motion.div 
+               animate={{ rotate: 360 }}
+               transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+             >
+              <RefreshCw className="h-3.5 w-3.5 text-zinc-400" />
+             </motion.div>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
+        
+        <Button
             size="sm"
-            onClick={handleStartNewConversation}
-            className="flex items-center gap-1"
-            variant="secondary"
-          >
-            <Plus className="h-3 w-3" /> New conversation
-          </Button>
-          <ToggleGroup
-            type="single"
-            value={conversationChannelFilter}
-            onValueChange={(value) => {
-              if (value) {
-                setConversationChannelFilter(value as "all" | MessagingChannel);
-              }
-            }}
-            className="inline-flex items-center gap-1 rounded-full bg-zinc-100 p-1"
-          >
-            {[
-              { value: "all", label: "All" },
-              { value: "sms", label: "SMS" },
-              { value: "email", label: "Email" },
-            ].map((option) => (
-              <ToggleGroupItem
-                key={option.value}
-                value={option.value}
-                aria-label={option.label}
-                className={cn(
-                  "rounded-full px-3 py-2 text-[11px] font-semibold uppercase tracking-wide",
-                  conversationChannelFilter === option.value
-                    ? "bg-white text-zinc-900 shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-900"
-                )}
-              >
-                {option.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+            onClick={startNewConversationFlow}
+            className="w-full items-center gap-1.5 rounded-lg bg-sky-500 text-white hover:bg-sky-600 shadow-sm transition-all"
+        >
+            <Plus className="h-3.5 w-3.5" /> New Simulation
+        </Button>
+        
+        <div className="space-y-2">
+            <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
+                <Input 
+                    className="h-9 pl-8 text-xs bg-zinc-50/50 border-zinc-200" 
+                    placeholder="Search conversations..." 
+                    value={conversationSearchQuery}
+                    onChange={(e) => setConversationSearchQuery(e.target.value)}
+                />
+            </div>
+            
+            <ToggleGroup
+                type="single"
+                value={conversationChannelFilter}
+                onValueChange={(value) => {
+                if (value) {
+                    setConversationChannelFilter(value as "all" | MessagingChannel);
+                }
+                }}
+                className="inline-flex w-full items-center gap-1 rounded-lg bg-zinc-100/50 p-1 ring-1 ring-zinc-200/50"
+            >
+                {[
+                { value: "all", label: "All" },
+                { value: "sms", label: "SMS" },
+                { value: "email", label: "Email" },
+                ].map((option) => (
+                <ToggleGroupItem
+                    key={option.value}
+                    value={option.value}
+                    aria-label={option.label}
+                    className={cn(
+                    "h-7 flex-1 rounded-md text-[10px] font-semibold uppercase tracking-wide transition-all",
+                    conversationChannelFilter === option.value
+                        ? "bg-white text-zinc-900 shadow-sm ring-1 ring-black/5"
+                        : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50"
+                    )}
+                >
+                    {option.label}
+                </ToggleGroupItem>
+                ))}
+            </ToggleGroup>
         </div>
       </div>
+      
       {filteredConversations.length === 0 ? (
-        <div className="mt-6 flex flex-col items-center justify-center gap-4 rounded-md border border-dashed border-zinc-200 p-10 text-center">
-          <MessageSquare className="h-12 w-12 text-zinc-300" />
+        <div className="mt-8 flex flex-col items-center justify-center gap-3 text-center opacity-60">
+          <div className="rounded-full bg-zinc-100 p-3">
+            <MessageSquare className="h-6 w-6 text-zinc-400" />
+          </div>
           <div className="space-y-1">
-            <p className="text-sm font-medium text-zinc-900">No messaging conversations yet</p>
-            <p className="text-xs text-zinc-500">Use the form to start a new SMS or email thread with Eva.</p>
+            <p className="text-sm font-medium text-zinc-900">No conversations</p>
+            <p className="text-xs text-zinc-500">
+                {conversationSearchQuery ? "Try a different search term" : "Start a new simulation"}
+            </p>
           </div>
         </div>
       ) : (
-        <ScrollArea className="mt-4 max-h-[440px] pr-3">
-          <div className="flex flex-col gap-2">
+        <ScrollArea className="flex-1 -mr-3 pr-3">
+          <div className="flex flex-col gap-2 p-1 pb-4">
             {filteredConversations.map((item) => {
               const isActive = activeConversationId === item.id;
               const icon = item.channel === "sms" ? <MessageSquare className="h-3 w-3" /> : <Mail className="h-3 w-3" />;
               const subtitle = item.channel === "sms" ? item.customer_phone : item.customer_email;
               const timestamp = item.last_activity_at
-                ? formatDistanceToNow(new Date(item.last_activity_at), { addSuffix: true })
-                : "Unknown";
+                ? safeFormatDistanceToNow(item.last_activity_at)
+                : "Just now";
 
               return (
                 <button
                   key={item.id}
                   onClick={() => handleConversationSelect(item.id)}
                   className={cn(
-                    "w-full rounded-lg border px-3 py-3 text-left transition",
-                    isActive ? "border-zinc-900 bg-zinc-900/5" : "border-zinc-200 hover:border-zinc-300"
+                    "relative w-full rounded-xl p-3 text-left transition-all duration-200 group",
+                    isActive 
+                      ? "bg-gradient-to-br from-white to-sky-50 shadow-md ring-1 ring-sky-100" 
+                      : "hover:bg-white hover:shadow-sm hover:ring-1 hover:ring-zinc-200/50"
                   )}
                 >
-                  <div className="flex items-center justify-between">
+                  {isActive && (
+                    <div
+                      className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-sky-500"
+                    />
+                  )}
+                  <div className={cn("flex items-center justify-between", isActive ? "pl-2" : "")}>
                     <div className="flex items-center gap-2">
-                      <Badge variant={isActive ? "default" : "outline"} className="flex items-center gap-1 text-[10px]">
+                      <div className={cn(
+                        "flex h-6 w-6 items-center justify-center rounded-full border shadow-sm",
+                        isActive ? "bg-sky-100 border-sky-200 text-sky-700" : "bg-white border-zinc-100 text-zinc-400"
+                      )}>
                         {icon}
-                        {item.channel.toUpperCase()}
-                      </Badge>
-                      <span className="text-sm font-semibold text-zinc-900">
+                      </div>
+                      <span className={cn("text-sm font-medium truncate max-w-[120px]", isActive ? "text-sky-900" : "text-zinc-700")}>
                         {item.customer_name ?? "Guest"}
                       </span>
                     </div>
-                    <span className="text-[11px] uppercase tracking-wide text-zinc-400">{timestamp}</span>
+                    <span className="text-[9px] text-zinc-400 whitespace-nowrap">{timestamp}</span>
                   </div>
-                  <div className="mt-2 space-y-1">
-                    <p className="text-xs text-zinc-500">{subtitle ?? "No contact info"}</p>
-                    <p className="line-clamp-2 text-xs text-zinc-600">
+                  <div className={cn("mt-2 space-y-1", isActive ? "pl-2" : "")}>
+                    <p className="text-[10px] text-zinc-400 font-medium truncate">{subtitle ?? "No contact info"}</p>
+                    <p className={cn("line-clamp-1 text-xs", isActive ? "text-sky-700/80" : "text-zinc-500")}>
                       {item.last_message_preview ?? "No messages yet"}
                     </p>
                   </div>
@@ -515,8 +643,8 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
   );
 
   const conversationListPanel = (
-    <Card className="border-zinc-200">
-      <div className="p-4">
+    <Card className="h-full border-white/40 bg-white/60 shadow-xl backdrop-blur-xl ring-1 ring-zinc-900/5 overflow-hidden rounded-2xl">
+      <div className="p-4 h-full flex flex-col">
         <ConversationListContent />
       </div>
     </Card>
@@ -526,224 +654,311 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
     <div className="space-y-5">
       <header className="flex items-center justify-between gap-3">
         <div className="space-y-1">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Messaging console</h2>
-          <p className="text-xs text-zinc-500">
-            Simulate SMS and email interactions. Conversations refresh automatically every 10 seconds.
-          </p>
+           {/* Mobile Header elements if needed */}
         </div>
         <div className="flex items-center gap-2 lg:hidden">
           <Button
             size="sm"
             variant="outline"
-            className="flex items-center justify-center"
+            className="flex items-center justify-center rounded-full"
             onClick={() => setIsSheetOpen(true)}
           >
             <Menu className="h-4 w-4" />
             <span className="sr-only">Open conversations</span>
           </Button>
-          <Button size="sm" onClick={handleStartNewConversation} className="flex items-center gap-1" variant="secondary">
+          <Button size="sm" onClick={startNewConversationFlow} className="flex items-center gap-1 rounded-full bg-sky-500 text-white hover:bg-sky-600">
             <Plus className="h-3 w-3" />
             <span>New</span>
           </Button>
         </div>
       </header>
 
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-        <aside className="hidden w-80 flex-shrink-0 lg:block">{conversationListPanel}</aside>
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch lg:h-[700px]">
+        <aside className="hidden w-80 flex-shrink-0 lg:block lg:h-full">
+            {conversationListPanel}
+        </aside>
 
-        <main className="flex-1 min-w-0">
-          <Card className="border-zinc-200">
-            <CardHeader className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-100 pb-4">
+        <main className="flex-1 min-w-0 h-full">
+          <Card className="flex flex-col h-full border-white/40 bg-white/80 shadow-2xl backdrop-blur-xl ring-1 ring-zinc-900/5 overflow-hidden rounded-2xl">
+            <CardHeader className="flex-shrink-0 flex flex-wrap items-center justify-between gap-4 border-b border-zinc-100/80 bg-white/50 px-6 py-4 backdrop-blur-md">
               <div className="space-y-1">
                 {conversation ? (
-                  <>
-                    <CardTitle className="text-base">
-                      {conversation.customer_name ?? "Conversation"}
-                    </CardTitle>
-                    <p className="text-xs text-zinc-500">{threadSubtitle}</p>
-                  </>
-                ) : (
-                  <>
-                    <CardTitle className="text-base text-zinc-400">No conversation selected</CardTitle>
-                    <p className="text-xs text-zinc-500">Choose from the list or start a new conversation below.</p>
-                  </>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {!conversation ? (
-                  <ToggleGroup
-                    type="single"
-                    value={channel}
-                    onValueChange={(value) => {
-                      if (value) {
-                        setChannel(value as MessagingChannel);
-                      }
-                    }}
-                    className="inline-flex items-center gap-1 rounded-full bg-zinc-100 p-1"
+                  <motion.div
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    key={conversation.id}
                   >
-                    {[
-                      { value: "sms", label: "SMS" },
-                      { value: "email", label: "Email" },
-                    ].map((option) => (
-                      <ToggleGroupItem
-                        key={option.value}
-                        value={option.value}
-                        aria-label={option.label}
-                        className={cn(
-                          "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide",
-                          channel === option.value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-900"
-                        )}
-                      >
-                        {option.label}
-                      </ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
-                ) : null}
+                    <div className="flex items-center gap-3">
+                        <CardTitle className="text-lg font-semibold text-zinc-900">
+                        {conversation.customer_name ?? "Conversation"}
+                        </CardTitle>
+                        <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-100 border-sky-100 capitalize">
+                            {conversation.channel}
+                        </Badge>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 mt-1.5">
+                         {conversation.channel === 'email' && conversation.subject && (
+                             <span className="text-xs font-medium text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded-md truncate max-w-[200px]">
+                                {conversation.subject}
+                             </span>
+                         )}
+                         <p className="text-xs text-zinc-500 flex items-center gap-2">
+                            <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                            {threadSubtitle}
+                        </p>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                     initial={{ opacity: 0 }}
+                     animate={{ opacity: 1 }}
+                  >
+                    <CardTitle className="text-lg font-medium text-zinc-400">New Simulation</CardTitle>
+                    <p className="text-xs text-zinc-500 mt-1">Configure the guest details to start.</p>
+                  </motion.div>
+                )}
               </div>
             </CardHeader>
-          <CardContent className="space-y-5">
-            {error ? (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                {error}
-              </div>
-            ) : null}
-
-            <ScrollArea className="h-[360px] border border-zinc-100">
-              <div ref={scrollRef} className="flex flex-col gap-5 p-4">
-                {isLoadingMessages ? (
-                  <div className="flex items-center justify-center py-20 text-sm text-zinc-500">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading messages...
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-zinc-200 bg-white p-12 text-center">
-                    <MessageSquare className="h-12 w-12 text-zinc-300" />
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-zinc-900">
-                        {conversation ? "No messages yet" : "Start a conversation"}
-                      </p>
-                      <p className="text-sm text-zinc-500">
-                        {conversation
-                          ? "Send a follow-up below to continue the thread."
-                          : "Fill in guest details below to start a conversation."}
-                      </p>
+            
+            <CardContent className="flex flex-col flex-1 p-0 overflow-hidden">
+               {/* Messages Area */}
+              <ScrollArea className="flex-1 bg-zinc-50/30">
+                <div ref={scrollRef} className="flex flex-col gap-6 p-6 min-h-full">
+                  {error ? (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50/50 px-4 py-3 text-sm text-rose-700 backdrop-blur-sm">
+                      {error}
                     </div>
-                  </div>
-                ) : (
-                  messages.map((message) => <MessageBubble key={message.id} message={message} />)
-                )}
-              </div>
-            </ScrollArea>
+                  ) : null}
 
-            <form
-              className="space-y-4 rounded-lg border border-dashed border-zinc-200 bg-zinc-50 p-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!canSend || isSending) {
-                  return;
-                }
-                setIsSending(true);
-                const content = newMessage.trim();
-                if (!content) {
-                  setIsSending(false);
-                  return;
-                }
-                void handleSend({ channel, content }).finally(() => setIsSending(false));
-              }}
-            >
-              {!conversation && (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Guest name</label>
-                    <Input
-                      value={newCustomerName}
-                      onChange={(event) => setNewCustomerName(event.target.value)}
-                      placeholder="Guest name"
-                    />
-                  </div>
-                  {channel === "sms" ? (
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Phone number</label>
-                      <Input
-                        value={newCustomerPhone}
-                        onChange={(event) => setNewCustomerPhone(event.target.value)}
-                        placeholder="+15555550100"
-                      />
+                  {isLoadingMessages ? (
+                    <div className="flex h-full items-center justify-center py-20 text-sm text-zinc-500">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin text-sky-500" /> Loading messages...
+                    </div>
+                  ) : messages.length === 0 ? (
+                     <div className="flex h-full w-full flex-col items-center justify-center p-2">
+                      {!conversation ? (
+                          <div className="flex w-full max-w-3xl flex-row items-center justify-center gap-8">
+                              {/* Left Pane: Visuals & Context */}
+                              <div className="flex max-w-[200px] flex-col items-start gap-3 text-left">
+                                <div className="rounded-xl bg-gradient-to-br from-sky-100 to-white p-3 shadow-sm ring-1 ring-sky-100">
+                                  {channel === 'sms' ? (
+                                    <MessageSquare className="h-6 w-6 text-sky-500" />
+                                  ) : (
+                                    <Mail className="h-6 w-6 text-sky-500" />
+                                  )}
+                                </div>
+                                <div className="space-y-1">
+                                  <h3 className="text-lg font-semibold tracking-tight text-zinc-900">
+                                    Start New Simulation
+                                  </h3>
+                                  <p className="text-xs leading-relaxed text-zinc-500">
+                                    Configure a guest persona to test Eva's capabilities. 
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Divider */}
+                              <div className="h-32 w-px bg-gradient-to-b from-transparent via-zinc-200 to-transparent" />
+
+                              {/* Right Pane: Configuration Form */}
+                              <div className="w-full max-w-xs space-y-4">
+                                 {/* Channel Selector */}
+                                 <div className="space-y-2">
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Channel</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button
+                                            size="sm"
+                                            variant={channel === "sms" ? "default" : "outline"}
+                                            className={cn("justify-start h-8 text-xs", channel === "sms" ? "bg-sky-500 hover:bg-sky-600 shadow-md shadow-sky-500/20" : "bg-white hover:bg-zinc-50")}
+                                            onClick={() => setChannel("sms")}
+                                        >
+                                            <MessageSquare className="mr-2 h-3.5 w-3.5" /> SMS
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant={channel === "email" ? "default" : "outline"}
+                                            className={cn("justify-start h-8 text-xs", channel === "email" ? "bg-sky-500 hover:bg-sky-600 shadow-md shadow-sky-500/20" : "bg-white hover:bg-zinc-50")}
+                                            onClick={() => setChannel("email")}
+                                        >
+                                            <Mail className="mr-2 h-3.5 w-3.5" /> Email
+                                        </Button>
+                                    </div>
+                                 </div>
+
+                                 <div className="space-y-2">
+                                     <div className="space-y-1">
+                                         <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Guest Details</label>
+                                         <Input 
+                                            className="bg-white h-8 text-xs"
+                                            placeholder="Guest Name"
+                                            value={newCustomerName} 
+                                            onChange={(e) => setNewCustomerName(e.target.value)} 
+                                         />
+                                     </div>
+                                     
+                                     {channel === 'sms' ? (
+                                         <Input 
+                                             className="bg-white h-8 text-xs"
+                                             placeholder="Phone Number"
+                                             value={newCustomerPhone} 
+                                             onChange={(e) => setNewCustomerPhone(e.target.value)} 
+                                         />
+                                     ) : (
+                                         <div className="space-y-2">
+                                             <Input 
+                                                 className="bg-white h-8 text-xs"
+                                                 placeholder="Email Address"
+                                                 value={newCustomerEmail} 
+                                                 onChange={(e) => setNewCustomerEmail(e.target.value)} 
+                                             />
+                                             <Input 
+                                                 className="bg-white h-8 text-xs"
+                                                 placeholder="Subject Line"
+                                                 value={newSubject} 
+                                                 onChange={(e) => setNewSubject(e.target.value)} 
+                                             />
+                                         </div>
+                                     )}
+                                 </div>
+                              </div>
+                          </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-6 text-center opacity-80">
+                           <div className="rounded-full bg-gradient-to-br from-sky-100 to-white p-6 shadow-sm ring-1 ring-sky-100">
+                              {channel === 'sms' ? <MessageSquare className="h-10 w-10 text-sky-400" /> : <Mail className="h-10 w-10 text-sky-400" />}
+                           </div>
+                           <div className="space-y-2 max-w-sm">
+                               <p className="text-lg font-semibold text-zinc-900">No messages yet</p>
+                               <p className="text-sm text-zinc-500 leading-relaxed">
+                                   Send a message below to simulate a guest inquiry.
+                               </p>
+                           </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Email</label>
-                      <Input
-                        value={newCustomerEmail}
-                        onChange={(event) => setNewCustomerEmail(event.target.value)}
-                        placeholder="guest@example.com"
-                        type="email"
-                      />
-                    </div>
-                  )}
-                  {channel === "email" && (
-                    <div className="md:col-span-2">
-                      <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Subject</label>
-                      <Input
-                        value={newSubject}
-                        onChange={(event) => setNewSubject(event.target.value)}
-                        placeholder="Reason for outreach"
-                      />
-                    </div>
+                    <AnimatePresence initial={false}>
+                        {messages.map((message) => (
+                            <motion.div
+                                key={message.id}
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                transition={{ duration: 0.3 }}
+                            >
+                                <MessageBubble message={message} />
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
                   )}
                 </div>
-              )}
+              </ScrollArea>
 
-              <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Message</label>
-                <Textarea
-                  value={newMessage}
-                  onChange={(event) => setNewMessage(event.target.value)}
-                  onFocus={() => setIsRefreshPaused(true)}
-                  onBlur={() => setIsRefreshPaused(false)}
-                  onKeyDown={(event) => {
-                    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                      event.preventDefault();
-                      event.currentTarget.form?.requestSubmit();
+              {/* Input Area */}
+              <div className="flex-shrink-0 p-4 bg-white border-t border-zinc-100/80">
+                <form
+                  className="relative rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4 transition-all focus-within:bg-white focus-within:shadow-lg focus-within:ring-1 focus-within:ring-sky-200"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!canSend || isSending) {
+                      return;
                     }
+                    setIsSending(true);
+                    const content = newMessage.trim();
+                    if (!content) {
+                      setIsSending(false);
+                      return;
+                    }
+                    void handleSend({ channel, content }).finally(() => setIsSending(false));
                   }}
-                  placeholder={
-                    conversation
-                      ? "Type a follow-up to Eva's last message"
-                      : channel === "sms"
-                        ? "Introduce yourself and ask a question via SMS"
-                        : "Introduce yourself and ask a question via email"
-                  }
-                  rows={4}
-                />
-              </div>
+                >
+                  {/* Quick Scenarios */}
+                  <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    <div className="flex items-center gap-1 pr-2 text-[10px] font-semibold uppercase tracking-wider text-sky-600/80 whitespace-nowrap">
+                         <Zap className="h-3 w-3" /> Scenarios
+                    </div>
+                    {QUICK_SCENARIOS.map((scenario) => (
+                        <button
+                            key={scenario.label}
+                            type="button"
+                            onClick={() => setNewMessage(scenario.text)}
+                            className="flex-shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-600 transition-colors hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+                        >
+                            {scenario.label}
+                        </button>
+                    ))}
+                  </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-zinc-500">
-                  {conversation
-                    ? "Messages are simulated responses from Eva."
-                    : "Eva will automatically continue the conversation after your message."}
-                </p>
-                <Button type="submit" disabled={!canSend || isSending}>
-                  {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  {conversation ? "Send follow-up" : "Start conversation"}
-                </Button>
+                  {!conversation && (
+                    <div className="mb-3 rounded-lg bg-sky-50/50 p-3 text-xs text-sky-700 border border-sky-100">
+                        <p>You are composing the <strong>first message</strong> as a new guest.</p>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Textarea
+                      value={newMessage}
+                      onChange={(event) => setNewMessage(event.target.value)}
+                      onFocus={() => setIsRefreshPaused(true)}
+                      onBlur={() => setIsRefreshPaused(false)}
+                      onKeyDown={(event) => {
+                        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                          event.preventDefault();
+                          event.currentTarget.form?.requestSubmit();
+                        }
+                      }}
+                      placeholder={
+                        conversation
+                          ? "Type a message as the guest..."
+                          : `Simulate an incoming ${channel === 'sms' ? 'SMS' : 'Email'}...`
+                      }
+                      rows={conversation ? 2 : 4}
+                      className="min-h-[60px] resize-none border-0 bg-transparent p-0 placeholder:text-zinc-400 focus-visible:ring-0 text-base"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-dashed border-zinc-200">
+                    <div className="flex items-center gap-2">
+                        <span className="flex h-2 w-2 rounded-full bg-sky-500 animate-pulse"></span>
+                        <p className="text-[10px] text-zinc-400 font-medium">
+                            Simulating Guest • Eva will auto-reply
+                        </p>
+                    </div>
+                    <Button 
+                        type="submit" 
+                        disabled={!canSend || isSending}
+                        className={cn(
+                            "rounded-full px-6 transition-all duration-300",
+                            canSend 
+                                ? "bg-gradient-to-r from-sky-500 to-blue-600 shadow-lg shadow-sky-500/25 hover:shadow-sky-500/40 hover:-translate-y-0.5" 
+                                : "bg-zinc-100 text-zinc-400"
+                        )}
+                    >
+                      {isSending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
+                      ) : (
+                        <Send className="mr-2 h-4 w-4" />
+                      )}
+                      {conversation ? "Send Reply" : "Start Simulation"}
+                    </Button>
+                  </div>
+                </form>
               </div>
-            </form>
-          </CardContent>
-        </Card>
-      </main>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+
+      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+        <SheetContent side="left" className="flex w-full max-w-xs flex-col p-0">
+          <SheetHeader className="border-b border-zinc-100 p-4 text-left">
+            <SheetTitle className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Conversations</SheetTitle>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto p-4">
+            <ConversationListContent />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
-
-    <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-      <SheetContent side="left" className="flex w-full max-w-xs flex-col p-0">
-        <SheetHeader className="border-b border-zinc-100 p-4 text-left">
-          <SheetTitle className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Conversations</SheetTitle>
-        </SheetHeader>
-        <div className="flex-1 overflow-y-auto p-4">
-          <ConversationListContent />
-        </div>
-      </SheetContent>
-    </Sheet>
-  </div>
-);
+  );
 }
