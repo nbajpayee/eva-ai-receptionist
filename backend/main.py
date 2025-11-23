@@ -53,10 +53,14 @@ from database import (
 from provider_analytics_service import ProviderAnalyticsService
 from rate_limit import get_limiter, get_rate_limit_handler, RateLimits
 from realtime_client import RealtimeClient
+from sentry_config import init_sentry
 from settings_service import SettingsService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+# Initialize Sentry for error monitoring
+init_sentry()
 
 # Initialize rate limiter
 limiter = get_limiter()
