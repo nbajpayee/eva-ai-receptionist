@@ -6,8 +6,25 @@ import { Check, ArrowRight, Calendar, MessageSquare, Mail, Shield, Database, Ser
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Integrations",
-  description: "Connect Eva with your existing medical spa software stack including Boulevard, Zenoti, Google Calendar, and more.",
+  title: "Integrations - Connect Eva AI with Your Medical Spa Software",
+  description: "Eva AI integrates seamlessly with Boulevard, Zenoti, Google Calendar, Twilio, SendGrid, Vagaro, and more. Two-way sync for appointments, client profiles, and automated communications.",
+  keywords: [
+    "medical spa integrations",
+    "Boulevard integration",
+    "Zenoti integration",
+    "Google Calendar integration",
+    "medical spa software integrations",
+    "AI receptionist integrations",
+    "healthcare software API",
+  ],
+  openGraph: {
+    title: "Eva AI Integrations - Seamless Medical Spa Software Connections",
+    description: "Connect Eva AI with Boulevard, Zenoti, Google Calendar, and your entire tech stack. Setup takes less than an hour.",
+    url: "https://getevaai.com/integrations",
+  },
+  alternates: {
+    canonical: "https://getevaai.com/integrations",
+  },
 };
 
 const INTEGRATIONS = [

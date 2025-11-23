@@ -9,8 +9,25 @@ import VoiceAIViz from "@/components/ui/VoiceAIViz";
 import { Phone, Calendar, MessageSquare, BarChart3, Shield, Check } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Features",
-  description: "Discover all the powerful features that make Eva the industry-leading AI receptionist for medical spas and aesthetic practices.",
+  title: "Features - AI Receptionist for Medical Spas & Aesthetic Practices",
+  description: "Explore Eva AI's powerful features: HIPAA-compliant voice AI, deterministic booking, omnichannel communications, AI analytics, and seamless integrations with Boulevard, Zenoti & Google Calendar.",
+  keywords: [
+    "AI receptionist features",
+    "medical spa AI features",
+    "HIPAA compliant AI",
+    "deterministic booking",
+    "omnichannel healthcare communication",
+    "AI voice assistant features",
+    "medical spa automation features",
+  ],
+  openGraph: {
+    title: "Eva AI Features - Complete AI Receptionist for Medical Spas",
+    description: "Natural voice AI, 100% reliable booking, HIPAA compliance, omnichannel support, and enterprise security for your medical spa.",
+    url: "https://getevaai.com/features",
+  },
+  alternates: {
+    canonical: "https://getevaai.com/features",
+  },
 };
 
 export default function FeaturesPage() {
