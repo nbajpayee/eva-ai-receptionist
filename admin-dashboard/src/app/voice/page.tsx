@@ -10,11 +10,11 @@ import type { TranscriptEntry } from "@/hooks/useVoiceSession";
 import type { VoiceConnectionStatus } from "@/lib/voice-utils";
 
 const statusCopy: Record<VoiceConnectionStatus, string> = {
-  idle: "Press start to begin a live call with Ava.",
+  idle: "Press start to begin a live call with Eva.",
   disconnected: "Session ended. Start a new call to continue testing.",
   connecting: "Establishing secure connection…",
   connected: "Connection ready. Initializing audio stream…",
-  listening: "Ava is listening. Try asking about services or booking an appointment!",
+  listening: "Eva is listening. Try asking about services or booking an appointment!",
   error: "Something went wrong. Review the error below and try again.",
   reconnecting: "Connection dropped. Attempting automatic reconnection…",
 };
@@ -179,7 +179,7 @@ export default function VoiceConsolePage() {
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold text-zinc-900">Voice Console</h1>
         <p className="text-sm text-zinc-500">
-          Run a live call with Ava using the FastAPI Realtime endpoint. Keep this tab active
+          Run a live call with Eva using the FastAPI Realtime endpoint. Keep this tab active
           while testing; audio capture pauses automatically when you end the session.
         </p>
       </header>
@@ -314,7 +314,7 @@ export default function VoiceConsolePage() {
               <CardTitle className="text-base">Transcript</CardTitle>
             </div>
             <p className="text-sm text-zinc-500">
-              Live transcript of your conversation with Ava. Messages update in near real-time
+              Live transcript of your conversation with Eva. Messages update in near real-time
               as the session progresses.
             </p>
           </CardHeader>

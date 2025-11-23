@@ -411,7 +411,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
         }
         case "transcript": {
           const payload = message as Extract<VoiceServerMessage, { type: "transcript" }>;
-          const speaker = payload.data?.speaker ?? "Ava";
+          const speaker = payload.data?.speaker ?? "Eva";
           const text = payload.data?.text ?? "";
           addTranscriptEntry(speaker, text);
           break;

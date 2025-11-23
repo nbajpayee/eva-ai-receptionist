@@ -76,7 +76,7 @@ export function CallLogTable({ calls }: CallLogTableProps) {
         <div>
           <CardTitle>Recent sessions</CardTitle>
           <p className="text-sm text-zinc-500">
-            Live feed of Ava-managed conversations. Data refreshes every minute.
+            Live feed of Eva-managed conversations. Data refreshes every minute.
           </p>
         </div>
         <span className="text-xs uppercase tracking-[0.2em] text-zinc-400">

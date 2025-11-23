@@ -401,7 +401,7 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
       ]
         .filter(Boolean)
         .join(" · ")
-    : "Start a simulated SMS or email thread with Ava.";
+    : "Start a simulated SMS or email thread with Eva.";
 
   const ConversationListContent = () => (
     <>
@@ -464,7 +464,7 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
           <MessageSquare className="h-12 w-12 text-zinc-300" />
           <div className="space-y-1">
             <p className="text-sm font-medium text-zinc-900">No messaging conversations yet</p>
-            <p className="text-xs text-zinc-500">Use the form to start a new SMS or email thread with Ava.</p>
+            <p className="text-xs text-zinc-500">Use the form to start a new SMS or email thread with Eva.</p>
           </div>
         </div>
       ) : (
@@ -708,7 +708,7 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
                   }}
                   placeholder={
                     conversation
-                      ? "Type a follow-up to Ava's last message"
+                      ? "Type a follow-up to Eva's last message"
                       : channel === "sms"
                         ? "Introduce yourself and ask a question via SMS"
                         : "Introduce yourself and ask a question via email"
@@ -720,8 +720,8 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-zinc-500">
                   {conversation
-                    ? "Messages are simulated responses from Ava."
-                    : "Ava will automatically continue the conversation after your message."}
+                    ? "Messages are simulated responses from Eva."
+                    : "Eva will automatically continue the conversation after your message."}
                 </p>
                 <Button type="submit" disabled={!canSend || isSending}>
                   {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

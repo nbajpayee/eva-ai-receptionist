@@ -60,9 +60,9 @@ const NAV_ITEMS: SidebarNavItem[] = [
 ];
 
 export const metadata: Metadata = {
-  title: "Ava Admin Dashboard",
+  title: "Eva Admin Dashboard",
   description:
-    "Internal analytics and call insights for the Ava Med Spa voice assistant.",
+    "Internal analytics and call insights for the Eva Med Spa voice assistant.",
 };
 
 export default function RootLayout({

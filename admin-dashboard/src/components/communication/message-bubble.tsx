@@ -21,7 +21,7 @@ export function MessageBubble({ message }: { message: CommunicationMessage }) {
       )}
     >
       <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
-        <span>{isAssistant ? "Ava" : "Guest"}</span>
+        <span>{isAssistant ? "Eva" : "Guest"}</span>
         <span className="h-1 w-1 rounded-full bg-zinc-300" />
         <span>{format(new Date(message.timestamp), "MMM d, yyyy • h:mm a")}</span>
       </div>

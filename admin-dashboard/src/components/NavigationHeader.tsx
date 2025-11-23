@@ -30,7 +30,7 @@ export function NavigationHeader() {
     <header className="border-b border-zinc-200 bg-white">
       <div className="flex items-center justify-between px-8 py-4">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-zinc-900">Ava Admin</h1>
+          <h1 className="text-xl font-bold text-zinc-900">Eva Admin</h1>
         </div>
 
         <nav className="flex items-center gap-1">

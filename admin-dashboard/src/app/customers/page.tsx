@@ -205,7 +205,7 @@ export default function CustomersPage() {
       {!isLoading && customers.length === 0 && (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
           <p className="text-sm text-zinc-600">
-            No customers found. Customers will appear here once they interact with Ava.
+            No customers found. Customers will appear here once they interact with Eva.
           </p>
         </div>
       )}

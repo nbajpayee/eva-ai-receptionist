@@ -8,7 +8,7 @@ import type { CommunicationChannel } from "@/types/communication";
 
 const PLACEHOLDERS: Record<CommunicationChannel, string> = {
   sms: "Send a quick SMS update",
-  email: "Compose the email Ava should send",
+  email: "Compose the email Eva should send",
   voice: "Voice responses are captured automatically after calls.",
 };
 
@@ -77,7 +77,7 @@ export function MessageComposer({ channel, onSend, disabled }: MessageComposerPr
           {SHORTCUT_HINTS[channel] ?? "Press Enter to send."}
         </p>
         <Button type="submit" disabled={isSending || disabled || !message.trim()}>
-          {isSending ? "Sending…" : "Send to Ava"}
+          {isSending ? "Sending…" : "Send to Eva"}
         </Button>
       </div>
     </form>

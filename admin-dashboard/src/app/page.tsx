@@ -261,7 +261,7 @@ export default function Home() {
         <StatCard
           title="Appointments Booked"
           value={metrics.appointments_booked.toString()}
-          description="Bookings directly handled by Ava"
+          description="Bookings directly handled by Eva"
           icon={<ArrowUpRight className="h-5 w-5" />}
           trend={
             <span className="text-xs uppercase tracking-[0.2em] text-emerald-600">
@@ -274,7 +274,7 @@ export default function Home() {
         <StatCard
           title="Customers Engaged"
           value={metrics.customers_engaged.toString()}
-          description="Unique customers Ava has assisted"
+          description="Unique customers Eva has assisted"
           icon={<Users className="h-5 w-5" />}
           trend={
             <span className="flex items-center gap-1 text-sky-600">

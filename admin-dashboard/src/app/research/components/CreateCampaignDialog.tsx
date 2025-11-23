@@ -433,7 +433,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onSuccess }: CreateCa
               <Label htmlFor="system-prompt">System Prompt *</Label>
               <Textarea
                 id="system-prompt"
-                placeholder="You are Ava, an AI assistant from..."
+                placeholder="You are Eva, an AI assistant from..."
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 rows={6}

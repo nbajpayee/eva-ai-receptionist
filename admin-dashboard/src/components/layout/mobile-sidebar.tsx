@@ -31,7 +31,7 @@ export function MobileSidebar({ items }: { items: SidebarNavItem[] }) {
       <SheetContent side="left" className="w-80 gap-6 border-r bg-white/95 backdrop-blur">
         <SheetHeader className="items-start gap-1">
           <SheetTitle className="text-left text-sm uppercase tracking-[0.3em] text-zinc-500">
-            Ava Command Center
+            Eva Command Center
           </SheetTitle>
         </SheetHeader>
         <SidebarNav items={items} onNavigate={() => setOpen(false)} />

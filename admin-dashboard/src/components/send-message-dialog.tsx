@@ -135,7 +135,7 @@ export function SendMessageDialog({
         <DialogHeader>
           <DialogTitle>Send Message</DialogTitle>
           <DialogDescription>
-            Send an SMS or email to {customerName}. Ava AI will automatically respond.
+            Send an SMS or email to {customerName}. Eva AI will automatically respond.
           </DialogDescription>
         </DialogHeader>
 
@@ -237,7 +237,7 @@ export function SendMessageDialog({
             <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium text-emerald-900">
                 <MessageSquare className="h-4 w-4" />
-                <span>Ava&apos;s Response:</span>
+                <span>Eva&apos;s Response:</span>
               </div>
               <p className="text-sm text-emerald-800">{response}</p>
             </div>

@@ -136,7 +136,7 @@ export function TrendsSection() {
         {/* Bookings Trend */}
         <ChartCard
           title="Bookings Over Time"
-          description="Appointments scheduled by Ava"
+          description="Appointments scheduled by Eva"
           isLoading={isLoading}
           error={error}
         >

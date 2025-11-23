@@ -52,7 +52,7 @@ export function AppShell({ children, navItems }: AppShellProps) {
       <aside className="hidden border-r border-zinc-200 bg-white/80 backdrop-blur lg:flex lg:w-64 lg:flex-col">
         <div className="flex h-20 flex-col justify-center gap-1 border-b border-zinc-200 px-6">
           <span className="text-xs uppercase tracking-[0.2em] text-zinc-500">
-            Ava Command Center
+            Eva Command Center
           </span>
           <span className="text-sm font-semibold text-zinc-900">
             Med Spa Voice Operations
@@ -72,7 +72,7 @@ export function AppShell({ children, navItems }: AppShellProps) {
           </div>
           <div className="hidden lg:flex flex-col items-start">
             <span className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">
-              Ava Command Center
+              Eva Command Center
             </span>
             <span className="text-sm font-semibold text-zinc-900">
               Med Spa Voice Operations
@@ -83,7 +83,7 @@ export function AppShell({ children, navItems }: AppShellProps) {
           </div>
           <div className="flex lg:hidden flex-col items-end">
             <span className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">
-              Ava Command Center
+              Eva Command Center
             </span>
             <span className="text-sm font-semibold text-zinc-900">
               Med Spa Voice Operations

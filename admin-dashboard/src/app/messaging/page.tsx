@@ -124,7 +124,7 @@ export default async function MessagingPage() {
       <header className="space-y-1">
         <h1 className="text-3xl font-bold text-zinc-900">Messaging console</h1>
         <p className="text-sm text-zinc-500">
-          Simulate guest conversations across SMS and email channels. Use this space to test how Ava
+          Simulate guest conversations across SMS and email channels. Use this space to test how Eva
           handles written requests alongside voice calls.
         </p>
       </header>
