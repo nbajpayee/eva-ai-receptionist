@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
+import { withCsrfProtection } from "@/lib/csrf";
+import { validateRequestBody, providerUpdateSchema } from "@/lib/api-validation";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -7,9 +10,14 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
     const { id } = await context.params;
     const response = await fetch(`${baseUrl}/api/admin/providers/${id}`, {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       cache: "no-store",
     });
 
@@ -34,18 +42,27 @@ export async function GET(
   }
 }
 
-export async function PUT(
+const putHandler = async (
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
     const { id } = await context.params;
     const body = await request.json();
+    const validation = await validateRequestBody(providerUpdateSchema, body);
+    if (!validation.success) {
+      return validation.response;
+    }
 
     const response = await fetch(`${baseUrl}/api/admin/providers/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify(validation.data),
     });
 
     if (!response.ok) {
@@ -67,16 +84,24 @@ export async function PUT(
       { status: 502 }
     );
   }
-}
+};
 
-export async function DELETE(
+export const PUT = withCsrfProtection(putHandler);
+
+const deleteHandler = async (
   _request: NextRequest,
   context: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
     const { id } = await context.params;
     const response = await fetch(`${baseUrl}/api/admin/providers/${id}`, {
       method: "DELETE",
+      headers: { "Content-Type": "application/json", ...authHeaders },
     });
 
     if (!response.ok) {
@@ -98,4 +123,6 @@ export async function DELETE(
       { status: 502 }
     );
   }
-}
+};
+
+export const DELETE = withCsrfProtection(deleteHandler);

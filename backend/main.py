@@ -664,7 +664,9 @@ def create_provider(
 
 
 @app.put("/api/admin/providers/{provider_id}", response_model=ProviderResponse)
+@limiter.limit(RateLimits.WRITE)
 def update_provider(
+    request: Request,
     provider_id: str,
     payload: ProviderUpdateRequest,
     db: Session = Depends(get_db),
@@ -681,7 +683,9 @@ def update_provider(
 
 
 @app.delete("/api/admin/providers/{provider_id}")
+@limiter.limit(RateLimits.WRITE)
 def delete_provider(
+    request: Request,
     provider_id: str,
     db: Session = Depends(get_db),
     user: User = Depends(require_owner),
@@ -737,7 +741,9 @@ def get_location_hours(
 
 
 @app.post("/api/admin/locations", response_model=LocationResponse, status_code=201)
+@limiter.limit(RateLimits.WRITE)
 def create_location(
+    request: Request,
     payload: LocationCreateRequest,
     db: Session = Depends(get_db),
     user: User = Depends(require_owner),
@@ -753,7 +759,9 @@ def create_location(
 
 
 @app.put("/api/admin/locations/{location_id}", response_model=LocationResponse)
+@limiter.limit(RateLimits.WRITE)
 def update_location(
+    request: Request,
     location_id: int,
     payload: LocationUpdateRequest,
     db: Session = Depends(get_db),
@@ -778,7 +786,9 @@ def update_location(
 
 
 @app.put("/api/admin/locations/{location_id}/hours", response_model=LocationResponse)
+@limiter.limit(RateLimits.WRITE)
 def update_location_hours(
+    request: Request,
     location_id: int,
     entries: List[BusinessHourEntry],
     db: Session = Depends(get_db),
@@ -794,7 +804,9 @@ def update_location_hours(
 
 
 @app.delete("/api/admin/locations/{location_id}")
+@limiter.limit(RateLimits.WRITE)
 def delete_location(
+    request: Request,
     location_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_owner),
@@ -1370,8 +1382,13 @@ async def voice_websocket(
 
 
 @app.post("/api/customers")
+@limiter.limit(RateLimits.WRITE)
 async def create_customer(
-    name: str, phone: str, email: Optional[str] = None, db: Session = Depends(get_db)
+    request: Request,
+    name: str,
+    phone: str,
+    email: Optional[str] = None,
+    db: Session = Depends(get_db),
 ):
     """Create a new customer."""
     # Check if customer exists
@@ -1965,6 +1982,7 @@ async def get_conversation_detail(
 
 
 @app.post("/api/webhooks/twilio/sms")
+@limiter.limit(RateLimits.WEBHOOK)
 async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
     """
     Twilio SMS webhook handler.
@@ -1990,6 +2008,7 @@ async def handle_twilio_sms(request: Request, db: Session = Depends(get_db)):
 
 
 @app.post("/api/webhooks/sendgrid/email")
+@limiter.limit(RateLimits.WEBHOOK)
 async def handle_sendgrid_email(request: Request, db: Session = Depends(get_db)):
     """
     SendGrid inbound email webhook handler.

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
+import { withCsrfProtection } from "@/lib/csrf";
+import { validateRequestBody, providerCreateSchema } from "@/lib/api-validation";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -42,19 +44,23 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withCsrfProtection(async (request: NextRequest) => {
   try {
-    const body = await request.json();
-
     const authHeaders = await getBackendAuthHeaders();
     if (!authHeaders) {
       return unauthorizedResponse();
     }
 
+    const body = await request.json();
+    const validation = await validateRequestBody(providerCreateSchema, body);
+    if (!validation.success) {
+      return validation.response;
+    }
+
     const response = await fetch(`${baseUrl}/api/admin/providers`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify(body),
+      body: JSON.stringify(validation.data),
     });
 
     if (!response.ok) {
@@ -76,4 +82,4 @@ export async function POST(request: NextRequest) {
       { status: 502 }
     );
   }
-}
+});

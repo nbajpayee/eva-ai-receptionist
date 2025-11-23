@@ -1,4 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
+import { withCsrfProtection } from "@/lib/csrf";
+import { validateRequestBody, appointmentCreateSchema } from "@/lib/api-validation";
 
 export async function GET(request: Request) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -19,10 +22,16 @@ export async function GET(request: Request) {
   });
 
   try {
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
     const response = await fetch(proxyUrl.toString(), {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
       },
       cache: "no-store",
     });
@@ -52,7 +61,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export const POST = withCsrfProtection(async (request: NextRequest) => {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   if (!baseUrl) {
@@ -65,11 +74,20 @@ export async function POST(request: Request) {
   const proxyUrl = new URL("/api/admin/appointments", baseUrl);
 
   try {
-    const body = await request.json();
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
 
-    // Build query params from body
+    const body = await request.json();
+    const validation = await validateRequestBody(appointmentCreateSchema, body);
+    if (!validation.success) {
+      return validation.response;
+    }
+
+    // Build query params from validated body
     const searchParams = new URLSearchParams();
-    Object.entries(body).forEach(([key, value]) => {
+    Object.entries(validation.data).forEach(([key, value]) => {
       if (value !== null && value !== undefined) {
         searchParams.append(key, String(value));
       }
@@ -79,6 +97,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
       },
     });
 
@@ -105,4 +124,4 @@ export async function POST(request: Request) {
       { status: 502 }
     );
   }
-}
+});

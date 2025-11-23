@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
+import { withCsrfProtection } from "@/lib/csrf";
+import { validateRequestBody, customerUpdateSchema } from "@/lib/api-validation";
 
 export async function GET(
   request: NextRequest,
@@ -56,10 +58,10 @@ export async function GET(
   }
 }
 
-export async function PUT(
+const putHandler = async (
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
-) {
+) => {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   if (!baseUrl) {
@@ -73,20 +75,24 @@ export async function PUT(
   const proxyUrl = new URL(`/api/admin/customers/${customerId}`, baseUrl);
 
   try {
-    const body = (await request.json()) as Record<string, unknown>;
-
-    // Build query params from body
-    const searchParams = new URLSearchParams();
-    Object.entries(body).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
-        searchParams.append(key, String(value));
-      }
-    });
-
     const authHeaders = await getBackendAuthHeaders();
     if (!authHeaders) {
       return unauthorizedResponse();
     }
+
+    const body = await request.json();
+    const validation = await validateRequestBody(customerUpdateSchema, body);
+    if (!validation.success) {
+      return validation.response;
+    }
+
+    // Build query params from validated body
+    const searchParams = new URLSearchParams();
+    Object.entries(validation.data).forEach(([key, value]) => {
+      if (value !== null && value !== undefined) {
+        searchParams.append(key, String(value));
+      }
+    });
 
     const response = await fetch(`${proxyUrl.toString()}?${searchParams.toString()}`, {
       method: "PUT",
@@ -119,4 +125,6 @@ export async function PUT(
       { status: 502 }
     );
   }
-}
+};
+
+export const PUT = withCsrfProtection(putHandler);
