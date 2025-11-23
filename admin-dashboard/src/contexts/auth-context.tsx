@@ -9,6 +9,9 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { UserRole } from '@/types/database'
+import { logError, createLogger } from '@/lib/logger'
+
+const logger = createLogger({ module: 'AuthContext' })
 
 interface Profile {
   id: string
@@ -45,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single()
 
     if (error) {
-      console.error('Error fetching profile:', error)
+      logError(error, { context: 'fetchProfile', userId })
       return null
     }
 
@@ -70,13 +73,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setProfile(userProfile)
             })
             .catch((error) => {
-              console.error('Error fetching profile during initAuth:', error)
+              logError(error, { context: 'initAuth', userId: finalUser.id })
             })
         } else {
           setProfile(null)
         }
       } catch (error) {
-        console.error('Error initializing auth:', error)
+        logError(error, { context: 'initAuth' })
       } finally {
         setLoading(false)
       }
@@ -98,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setProfile(userProfile)
           })
           .catch((error) => {
-            console.error('Error fetching profile on auth state change:', error)
+            logError(error, { context: 'onAuthStateChange', userId: session.user.id })
           })
       } else {
         setProfile(null)

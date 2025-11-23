@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { LogOut, User, Settings } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { logError } from '@/lib/logger'
 
 export function UserNav() {
   const { user, profile, signOut } = useAuth()
@@ -32,7 +33,7 @@ export function UserNav() {
     try {
       await signOut()
     } catch (error) {
-      console.error('Error signing out:', error)
+      logError(error, { context: 'signOut', userId: user.id })
     } finally {
       router.replace('/login')
     }

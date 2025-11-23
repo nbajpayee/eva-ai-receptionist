@@ -5,6 +5,10 @@ import type { SidebarNavItem } from "@/components/ui/sidebar-nav";
 import { ToastProviderWrapper } from "@/components/providers/toast-provider-wrapper";
 import { AuthProvider } from "@/contexts/auth-context";
 import { AppShell } from "@/components/layout/app-shell";
+import { initializeApp } from "@/lib/init";
+
+// Initialize application (validates environment, etc.)
+initializeApp();
 
 const NAV_ITEMS: SidebarNavItem[] = [
   {

@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from starlette.websockets import WebSocketState
@@ -33,6 +34,7 @@ from auth import User, get_current_user, get_current_user_optional, require_owne
 from calendar_service import check_calendar_credentials
 from config import get_settings
 from consultation_service import ConsultationService
+from env_validator import validate_environment, get_environment_summary
 from database import (
     AIInsight,
     Appointment,
@@ -49,11 +51,15 @@ from database import (
     init_db,
 )
 from provider_analytics_service import ProviderAnalyticsService
+from rate_limit import get_limiter, get_rate_limit_handler, RateLimits
 from realtime_client import RealtimeClient
 from settings_service import SettingsService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+# Initialize rate limiter
+limiter = get_limiter()
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -61,6 +67,12 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="AI-powered voice receptionist for medical spas",
 )
+
+# Add rate limiter to app state
+app.state.limiter = limiter
+
+# Add rate limit exception handler
+app.add_exception_handler(RateLimitExceeded, get_rate_limit_handler())
 
 # Register routers
 app.include_router(messaging_router)
@@ -928,6 +940,17 @@ active_connections: Dict[str, WebSocket] = {}
 @app.on_event("startup")
 async def startup_event():
     """Initialize database on startup."""
+    # Validate environment configuration first
+    logger.info("Validating environment configuration...")
+    try:
+        validate_environment()
+        # Log environment summary (safe, with masked secrets)
+        env_summary = get_environment_summary()
+        logger.info("Environment Summary: %s", env_summary)
+    except Exception as e:
+        logger.error("Environment validation failed: %s", e)
+        raise  # Prevent startup if environment is invalid
+
     init_db()
     credential_status = check_calendar_credentials()
     app.state.calendar_credentials = credential_status
@@ -941,7 +964,8 @@ async def startup_event():
 
 
 @app.get("/")
-async def root():
+@limiter.limit(RateLimits.PUBLIC)
+async def root(request: Request):
     """Root endpoint."""
     return {
         "app": settings.APP_NAME,
@@ -951,7 +975,8 @@ async def root():
 
 
 @app.get("/health")
-async def health_check():
+@limiter.limit(RateLimits.HEALTH)
+async def health_check(request: Request):
     """Health check endpoint."""
     return {"status": "healthy"}
 
@@ -1564,7 +1589,9 @@ async def get_outcome_distribution(
 
 
 @app.get("/api/admin/customers")
+@limiter.limit(RateLimits.READ)
 async def get_customers_list(
+    request: Request,
     search: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
