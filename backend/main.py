@@ -992,8 +992,26 @@ async def voice_websocket(
     )
 
     # Initialize OpenAI Realtime client
+    async def transcript_callback(speaker: str, text: str) -> None:
+        """Stream transcript entries to the connected browser client."""
+        if websocket.client_state != WebSocketState.CONNECTED:
+            return
+
+        try:
+            await websocket.send_json(
+                {
+                    "type": "transcript",
+                    "data": {"speaker": speaker, "text": text},
+                }
+            )
+        except Exception as send_err:  # noqa: BLE001
+            print(f"⚠️  Failed to send transcript entry to client: {send_err}")
+
     realtime_client = RealtimeClient(
-        session_id=session_id, db=db, conversation=conversation
+        session_id=session_id,
+        db=db,
+        conversation=conversation,
+        transcript_callback=transcript_callback,
     )
 
     session_finalized = False

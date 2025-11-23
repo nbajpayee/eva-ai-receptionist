@@ -37,6 +37,7 @@ class RealtimeClient:
         db: Optional[Session] = None,
         conversation: Optional[Conversation] = None,
         legacy_call_session_id: Optional[str] = None,
+        transcript_callback: Optional[Callable[[str, str], Any]] = None,
     ) -> None:
         """Initialize the Realtime client with database context."""
         self.ws = None
@@ -63,6 +64,8 @@ class RealtimeClient:
         self._pending_items: Dict[str, Dict[str, Any]] = {}
         self._last_transcript_entry: Optional[str] = None
         self._awaiting_response: bool = False
+        # Optional callback to stream transcript entries back to the client in real time
+        self._transcript_callback = transcript_callback
 
         # Load services and providers from database (with caching)
         self._services_dict = None
@@ -931,6 +934,14 @@ class RealtimeClient:
         }
         self.session_data["transcript"].append(entry)
         self._last_transcript_entry = fingerprint
+
+        # Optionally stream transcript entries to the connected browser client
+        if self._transcript_callback is not None:
+            try:
+                asyncio.create_task(self._transcript_callback(speaker, text))
+            except RuntimeError:
+                # Event loop may be closed during shutdown; ignore in that case.
+                pass
         if speaker == "customer" and self._awaiting_response:
             self._awaiting_response = False
             asyncio.create_task(self._request_response())

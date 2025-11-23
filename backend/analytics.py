@@ -1242,7 +1242,22 @@ Consider:
         if not customer:
             raise ValueError(f"Customer {customer_id} not found")
 
-        # Get conversations
+        # Get full history objects
+        appointments = (
+            db.query(Appointment)
+            .filter(Appointment.customer_id == customer_id)
+            .order_by(Appointment.appointment_datetime.desc())
+            .all()
+        )
+
+        calls = (
+            db.query(CallSession)
+            .filter(CallSession.customer_id == customer_id)
+            .order_by(CallSession.started_at.desc())
+            .all()
+        )
+
+        # Get recent conversations with messages for rich timeline
         conversations = (
             db.query(Conversation)
             .options(joinedload(Conversation.messages))
@@ -1252,8 +1267,8 @@ Consider:
             .all()
         )
 
-        # Serialize timeline
-        timeline = []
+        # Serialize rich timeline (per-conversation, with summary fields)
+        timeline: List[Dict[str, Any]] = []
         for conv in conversations:
             timeline.append(
                 {
@@ -1263,6 +1278,7 @@ Consider:
                         conv.initiated_at.isoformat() if conv.initiated_at else None
                     ),
                     "completed_at": (
+
                         conv.completed_at.isoformat() if conv.completed_at else None
                     ),
                     "outcome": conv.outcome,
@@ -1274,32 +1290,147 @@ Consider:
                 }
             )
 
-        # Calculate customer stats
-        total_conversations = len(conversations)
-        avg_satisfaction = sum(c.satisfaction_score or 0 for c in conversations) / max(
-            total_conversations, 1
+        # Serialize appointments
+        appointments_data = [
+            {
+                "id": apt.id,
+                "appointment_datetime": apt.appointment_datetime.isoformat(),
+                "service_type": apt.service_type,
+                "provider": apt.provider,
+                "status": apt.status,
+                "booked_by": apt.booked_by,
+                "special_requests": apt.special_requests,
+                "created_at": apt.created_at.isoformat() if apt.created_at else None,
+            }
+            for apt in appointments
+        ]
+
+        # Serialize calls
+        calls_data = [
+            {
+                "id": call.id,
+                "session_id": call.session_id,
+                "started_at": call.started_at.isoformat() if call.started_at else None,
+                "duration_seconds": call.duration_seconds,
+                "satisfaction_score": call.satisfaction_score,
+                "sentiment": call.sentiment,
+                "outcome": call.outcome,
+                "escalated": call.escalated,
+            }
+            for call in calls
+        ]
+
+        # Simplified conversations list (for stats and message tab)
+        conversations_data = [
+            {
+                "id": str(conv.id),
+                "channel": conv.channel,
+                "initiated_at": (
+                    conv.initiated_at.isoformat() if conv.initiated_at else None
+                ),
+                "status": conv.status,
+                "outcome": conv.outcome,
+                "satisfaction_score": conv.satisfaction_score,
+            }
+            for conv in conversations
+        ]
+
+        # Calculate customer stats (lifetime, not limited by `limit`)
+        total_appointments = (
+            db.query(func.count(Appointment.id))
+            .filter(Appointment.customer_id == customer_id)
+            .scalar()
         )
+
+        completed_appointments = (
+            db.query(func.count(Appointment.id))
+            .filter(
+                Appointment.customer_id == customer_id,
+                Appointment.status == "completed",
+            )
+            .scalar()
+        )
+
+        cancelled_appointments = (
+            db.query(func.count(Appointment.id))
+            .filter(
+                Appointment.customer_id == customer_id,
+                Appointment.status == "cancelled",
+            )
+            .scalar()
+        )
+
+        total_calls = (
+            db.query(func.count(CallSession.id))
+            .filter(CallSession.customer_id == customer_id)
+            .scalar()
+        )
+
+        avg_call_satisfaction = (
+            db.query(func.avg(CallSession.satisfaction_score))
+            .filter(
+                CallSession.customer_id == customer_id,
+                CallSession.satisfaction_score.isnot(None),
+            )
+            .scalar()
+        )
+
+        total_conversations = (
+            db.query(func.count(Conversation.id))
+            .filter(Conversation.customer_id == customer_id)
+            .scalar()
+        )
+
         total_bookings = sum(
             1 for c in conversations if c.outcome == "appointment_scheduled"
         )
 
+        stats = {
+            "customer_id": customer_id,
+            "total_appointments": total_appointments or 0,
+            "completed_appointments": completed_appointments or 0,
+            "cancelled_appointments": cancelled_appointments or 0,
+            "no_show_rate": (
+                (cancelled_appointments / total_appointments * 100)
+                if total_appointments and total_appointments > 0
+                else 0
+            ),
+            "total_calls": total_calls or 0,
+            "total_conversations": total_conversations or 0,
+            "avg_satisfaction_score": float(avg_call_satisfaction)
+            if avg_call_satisfaction
+            else None,
+            "is_new_client": customer.is_new_client,
+            "has_allergies": customer.has_allergies,
+            "is_pregnant": customer.is_pregnant,
+            "total_bookings": total_bookings,
+            "channels_used": list(set(c.channel for c in conversations)),
+        }
+
+        customer_data = {
+            "id": customer.id,
+            "name": customer.name,
+            "phone": customer.phone,
+            "email": customer.email,
+            "is_new_client": customer.is_new_client,
+            "has_allergies": customer.has_allergies,
+            "is_pregnant": customer.is_pregnant,
+            "notes": customer.notes,
+            "created_at": (
+                customer.created_at.isoformat() if customer.created_at else None
+            ),
+            "updated_at": (
+                customer.updated_at.isoformat() if customer.updated_at else None
+            ),
+        }
+
         return {
-            "customer": {
-                "id": customer.id,
-                "name": customer.name,
-                "phone": customer.phone,
-                "email": customer.email,
-                "created_at": (
-                    customer.created_at.isoformat() if customer.created_at else None
-                ),
-            },
-            "stats": {
-                "total_conversations": total_conversations,
-                "avg_satisfaction_score": round(avg_satisfaction, 2),
-                "total_bookings": total_bookings,
-                "channels_used": list(set(c.channel for c in conversations)),
-            },
+            "customer": customer_data,
+            "appointments": appointments_data,
+            "calls": calls_data,
+            "conversations": conversations_data,
             "timeline": timeline,
+            "stats": stats,
         }
 
     @staticmethod

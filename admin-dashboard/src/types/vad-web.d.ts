@@ -7,6 +7,9 @@ declare module "@ricky0123/vad-web" {
     preSpeechPadFrames?: number;
     redemptionFrames?: number;
     minSpeechFrames?: number;
+    baseAssetPath?: string;
+    onnxWASMBasePath?: string;
+    processorType?: "AudioWorklet" | "ScriptProcessor" | "auto";
     onSpeechStart?: () => void;
     onSpeechEnd?: (audio: unknown) => void;
     onVADMisfire?: () => void;

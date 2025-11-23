@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MicVAD } from "@ricky0123/vad-web";
+import type { MicVAD } from "@ricky0123/vad-web";
 
 export type VADState = "idle" | "loading" | "ready" | "error";
 
@@ -19,6 +19,82 @@ interface UseSileroVADOptions {
   minSpeechMs?: number;
   positiveSpeechThreshold?: number;
   negativeSpeechThreshold?: number;
+  onError?: (error: Error) => void;
+}
+
+type MicVADClass = {
+  new: (options: unknown) => Promise<MicVAD>;
+};
+
+declare global {
+  interface Window {
+    vad?: {
+      MicVAD?: MicVADClass;
+    };
+  }
+}
+
+let micVADLoadPromise: Promise<MicVADClass | null> | null = null;
+
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null;
+    if (existing) {
+      if (existing.dataset.loaded === "true") {
+        resolve();
+        return;
+      }
+
+      existing.addEventListener(
+        "load",
+        () => {
+          resolve();
+        },
+        { once: true }
+      );
+
+      existing.addEventListener(
+        "error",
+        (event) => {
+          reject(event);
+        },
+        { once: true }
+      );
+
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.dataset.loaded = "false";
+    script.onload = () => {
+      script.dataset.loaded = "true";
+      resolve();
+    };
+    script.onerror = (event) => {
+      reject(event);
+    };
+    document.body.appendChild(script);
+  });
+}
+
+export async function getMicVADClass(): Promise<MicVADClass | null> {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  if (micVADLoadPromise) {
+    return micVADLoadPromise;
+  }
+
+  micVADLoadPromise = (async () => {
+    await loadScript("/ort/ort.js");
+    await loadScript("/vad/bundle.min.js");
+    return window.vad?.MicVAD ?? null;
+  })();
+
+  return micVADLoadPromise;
 }
 
 /**
@@ -39,6 +115,7 @@ export function useSileroVAD(options: UseSileroVADOptions) {
     minSpeechMs = 250,
     positiveSpeechThreshold = 0.8,
     negativeSpeechThreshold = 0.8 - 0.15,
+    onError,
   } = options;
 
   const [vadState, setVADState] = useState<VADState>("idle");
@@ -57,37 +134,62 @@ export function useSileroVAD(options: UseSileroVADOptions) {
       return;
     }
 
+    let cancelled = false;
+
     setVADState("loading");
 
-    // Initialize Silero VAD
-    MicVAD.new({
-      positiveSpeechThreshold,
-      negativeSpeechThreshold,
-      minSpeechFrames: Math.floor(minSpeechMs / 30), // 30ms per frame
-      onSpeechStart: () => {
-        setIsSpeaking(true);
-        onSpeechStart?.();
-      },
-      onSpeechEnd: () => {
-        setIsSpeaking(false);
-        onSpeechEnd?.();
-      },
-      onVADMisfire: () => {
-        onVADMisfire?.();
-      },
-    })
+    getMicVADClass()
+      .then((MicVADClass) => {
+        if (!MicVADClass || cancelled) {
+          throw new Error("MicVAD is not available");
+        }
+
+        // Initialize Silero VAD using global MicVAD
+        return MicVADClass.new({
+          positiveSpeechThreshold,
+          negativeSpeechThreshold,
+          onnxWASMBasePath: "/ort/",
+          baseAssetPath: "/vad/",
+          processorType: "ScriptProcessor",
+          minSpeechFrames: Math.floor(minSpeechMs / 30), // 30ms per frame
+          onSpeechStart: () => {
+            setIsSpeaking(true);
+            onSpeechStart?.();
+          },
+          onSpeechEnd: () => {
+            setIsSpeaking(false);
+            onSpeechEnd?.();
+          },
+          onVADMisfire: () => {
+            onVADMisfire?.();
+          },
+        });
+      })
       .then((vad) => {
+        if (!vad || cancelled) {
+          if (vad) {
+            vad.destroy();
+          }
+          return;
+        }
+
         vadRef.current = vad;
         setVADState("ready");
         vad.start();
       })
       .catch((error) => {
+        if (cancelled) {
+          return;
+        }
         console.error("Failed to initialize Silero VAD:", error);
         setVADState("error");
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
+        onError?.(normalizedError);
       });
 
     // Cleanup on unmount or when disabled
     return () => {
+      cancelled = true;
       if (vadRef.current) {
         vadRef.current.destroy();
         vadRef.current = null;

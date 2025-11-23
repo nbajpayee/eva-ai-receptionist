@@ -125,6 +125,14 @@ interface CustomerStats {
   is_pregnant: boolean;
 }
 
+interface CustomerTimelineResponse {
+  customer: Customer;
+  appointments: Appointment[];
+  calls: Call[];
+  conversations: Conversation[];
+  stats: CustomerStats;
+}
+
 type TimelineItem = {
   type: 'appointment' | 'call' | 'conversation';
   date: Date;
@@ -212,28 +220,26 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
     const fetchData = async () => {
       try {
-        // Fetch both history and stats in parallel
-        const [historyResponse, statsResponse] = await Promise.all([
-          fetch(`/api/admin/customers/${resolvedParams.id}/history`),
-          fetch(`/api/admin/customers/${resolvedParams.id}/stats`),
-        ]);
+        const response = await fetch(`/api/admin/customers/${resolvedParams.id}/timeline`);
 
-        if (!historyResponse.ok) {
-          throw new Error("Failed to fetch customer history");
+        if (!response.ok) {
+          throw new Error("Failed to fetch customer timeline");
         }
 
-        if (!statsResponse.ok) {
-          throw new Error("Failed to fetch customer stats");
-        }
-
-        const historyData = await historyResponse.json();
-        const statsData = await statsResponse.json();
+        const timelineData: CustomerTimelineResponse = await response.json();
 
         // Only update state if component is still mounted
         if (isMounted) {
-          setData(historyData);
-          setStats(statsData);
-          setEditForm(historyData.customer);
+          const history: CustomerHistory = {
+            customer: timelineData.customer,
+            appointments: timelineData.appointments,
+            calls: timelineData.calls,
+            conversations: timelineData.conversations,
+          };
+
+          setData(history);
+          setStats(timelineData.stats);
+          setEditForm(timelineData.customer);
         }
       } catch (err) {
         if (isMounted) {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { MicVAD } from "@ricky0123/vad-web";
+import type { MicVAD } from "@ricky0123/vad-web";
+import { getMicVADClass } from "./useSileroVAD";
 
 /**
  * Enhanced VAD using Silero for 95%+ accuracy with RMS pre-filter
@@ -23,6 +24,7 @@ interface EnhancedVADOptions {
   onVADMisfire?: () => void;
   positiveSpeechThreshold?: number;
   negativeSpeechThreshold?: number;
+  onError?: (error: Error) => void;
 }
 
 export function useEnhancedVAD(options: EnhancedVADOptions) {
@@ -33,6 +35,7 @@ export function useEnhancedVAD(options: EnhancedVADOptions) {
     onVADMisfire,
     positiveSpeechThreshold = 0.8,
     negativeSpeechThreshold = 0.65,
+    onError,
   } = options;
 
   const vadInstanceRef = useRef<MicVAD | null>(null);
@@ -56,29 +59,54 @@ export function useEnhancedVAD(options: EnhancedVADOptions) {
 
     isInitializingRef.current = true;
 
-    // Initialize Silero VAD
-    MicVAD.new({
-      positiveSpeechThreshold,
-      negativeSpeechThreshold,
-      preSpeechPadFrames: 10, // 300ms pre-speech padding
-      redemptionFrames: 8, // 240ms before declaring speech end
-      minSpeechFrames: 3, // 90ms minimum speech duration
-      onSpeechStart,
-      onSpeechEnd,
-      onVADMisfire,
-    })
+    let cancelled = false;
+
+    // Initialize Silero VAD using the shared CDN-based loader
+    getMicVADClass()
+      .then((MicVADClass) => {
+        if (!MicVADClass || cancelled) {
+          throw new Error("MicVAD is not available for Enhanced VAD");
+        }
+
+        return MicVADClass.new({
+          positiveSpeechThreshold,
+          negativeSpeechThreshold,
+          onnxWASMBasePath: "/ort/",
+          baseAssetPath: "/vad/",
+          processorType: "ScriptProcessor",
+          preSpeechPadFrames: 10, // 300ms pre-speech padding
+          redemptionFrames: 8, // 240ms before declaring speech end
+          minSpeechFrames: 3, // 90ms minimum speech duration
+          onSpeechStart,
+          onSpeechEnd,
+          onVADMisfire,
+        });
+      })
       .then((vad) => {
+        if (!vad || cancelled) {
+          if (vad) {
+            vad.destroy();
+          }
+          return;
+        }
+
         vadInstanceRef.current = vad;
         vad.start();
         isInitializingRef.current = false;
       })
       .catch((error) => {
+        if (cancelled) {
+          return;
+        }
         console.error("Failed to initialize Enhanced VAD (Hybrid mode):", error);
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
+        onError?.(normalizedError);
         isInitializingRef.current = false;
       });
 
     // Cleanup on unmount or when disabled
     return () => {
+      cancelled = true;
       if (vadInstanceRef.current) {
         vadInstanceRef.current.destroy();
         vadInstanceRef.current = null;

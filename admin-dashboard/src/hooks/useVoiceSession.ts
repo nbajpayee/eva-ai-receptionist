@@ -114,6 +114,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
   const [diagnostics, setDiagnostics] = useState<VoiceDiagnostics>(initialDiagnostics);
   const [vadEnabled, setVadEnabled] = useState(true);
   const [vadThreshold, setVadThreshold] = useState(DEFAULT_VAD_THRESHOLD);
+  const [sileroVADAvailable, setSileroVADAvailable] = useState<boolean | null>(null);
 
   const websocketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -140,6 +141,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
     setDiagnostics(initialDiagnostics);
     setVadEnabled(true);
     setVadThreshold(DEFAULT_VAD_THRESHOLD);
+    setSileroVADAvailable(null);
   }, []);
 
   const addTranscriptEntry = useCallback((speaker: string, text: string) => {
@@ -382,6 +384,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
     minSpeechMs: 250,
     positiveSpeechThreshold: 0.8,
     negativeSpeechThreshold: 0.65,
+    onError: () => setSileroVADAvailable(false),
   });
 
   // Initialize Enhanced VAD for 'hybrid' mode
@@ -393,6 +396,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
     onSpeechEnd: handleMLVADSpeechEnd,
     positiveSpeechThreshold: 0.8,
     negativeSpeechThreshold: 0.65,
+    onError: () => setSileroVADAvailable(false),
   });
 
   const handleServerMessage = useCallback(
@@ -671,5 +675,6 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
     startSession,
     endSession,
     isActive: status !== "idle" && status !== "error",
+    sileroAvailable: sileroVADAvailable,
   };
 }

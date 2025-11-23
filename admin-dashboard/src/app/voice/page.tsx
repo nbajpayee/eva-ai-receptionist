@@ -1,7 +1,7 @@
 "use client";
 
 import { Play, Square, Waves } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVoiceSession } from "@/hooks/useVoiceSession";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -74,6 +74,25 @@ function TranscriptList({ entries }: { entries: TranscriptEntry[] }) {
     }
     return "--";
   }, []);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
+
+  const handleScroll = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const isAtBottom = distanceFromBottom < 32; // small threshold in px
+    shouldAutoScrollRef.current = isAtBottom;
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !shouldAutoScrollRef.current) return;
+
+    // Keep the newest message in view when user is already at the bottom
+    el.scrollTop = el.scrollHeight;
+  }, [entries.length]);
 
   if (!entries.length) {
     return (
@@ -84,7 +103,11 @@ function TranscriptList({ entries }: { entries: TranscriptEntry[] }) {
   }
 
   return (
-    <div className="max-h-[360px] space-y-3 overflow-y-auto pr-2">
+    <div
+      ref={containerRef}
+      onScroll={handleScroll}
+      className="max-h-[360px] space-y-3 overflow-y-auto pr-2"
+    >
       {entries.map((entry) => (
         <div
           key={entry.id}
@@ -137,6 +160,7 @@ export default function VoiceConsolePage() {
     startSession,
     endSession,
     isActive,
+    sileroAvailable,
   } = useVoiceSession({ vadMode });
 
   const helperText = useMemo(() => statusCopy[status] ?? statusCopy.idle, [status]);
@@ -257,6 +281,12 @@ export default function VoiceConsolePage() {
               onVadThresholdChange={setVadThreshold}
               onVadModeChange={handleVadModeChange}
             />
+            {vadEnabled && vadMode !== "rms" && sileroAvailable === false ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                Silero ML VAD is unavailable in this environment. Falling back to RMS-based
+                detection.
+              </div>
+            ) : null}
             <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
               <div className="flex items-center justify-between">
                 <p className="font-semibold text-zinc-700">Diagnostics</p>

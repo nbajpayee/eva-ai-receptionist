@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
 
 export async function POST(request: Request) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -13,10 +14,16 @@ export async function POST(request: Request) {
   const proxyUrl = new URL("/api/admin/messaging/send", baseUrl);
 
   try {
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
     const response = await fetch(proxyUrl.toString(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
       },
       cache: "no-store",
       body: await request.text(),
