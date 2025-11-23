@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
+import { withCsrfProtection } from "@/lib/csrf";
+import { validateRequestBody, customerCreateSchema } from "@/lib/api-validation";
 
 export async function GET(request: Request) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -58,7 +60,8 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+// Apply CSRF protection to POST route
+export const POST = withCsrfProtection(async (request: NextRequest) => {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   if (!baseUrl) {
@@ -76,6 +79,14 @@ export async function POST(request: Request) {
       return unauthorizedResponse();
     }
 
+    // Validate request body with Zod
+    const body = await request.json();
+    const validation = await validateRequestBody(customerCreateSchema, body);
+
+    if (!validation.success) {
+      return validation.response;
+    }
+
     const response = await fetch(proxyUrl.toString(), {
       method: "POST",
       headers: {
@@ -83,7 +94,7 @@ export async function POST(request: Request) {
         ...authHeaders,
       },
       cache: "no-store",
-      body: await request.text(),
+      body: JSON.stringify(validation.data),
     });
 
     if (!response.ok) {
@@ -109,4 +120,4 @@ export async function POST(request: Request) {
       { status: 502 }
     );
   }
-}
+});

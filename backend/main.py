@@ -8,6 +8,15 @@ import uuid
 from datetime import datetime, time, timedelta
 from typing import Any, Dict, List, Optional
 
+# Initialize structured logging first
+from logging_config import setup_logging, get_logger
+import os
+
+setup_logging(
+    level=os.getenv('LOG_LEVEL', 'INFO'),
+    json_logging=os.getenv('ENV', 'development') == 'production'
+)
+
 from fastapi import (
     Depends,
     FastAPI,
@@ -53,11 +62,12 @@ from database import (
 from provider_analytics_service import ProviderAnalyticsService
 from rate_limit import get_limiter, get_rate_limit_handler, RateLimits
 from realtime_client import RealtimeClient
+from request_id_middleware import RequestIDMiddleware
 from sentry_config import init_sentry
 from settings_service import SettingsService
 
 settings = get_settings()
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Initialize Sentry for error monitoring
 init_sentry()
@@ -77,6 +87,9 @@ app.state.limiter = limiter
 
 # Add rate limit exception handler
 app.add_exception_handler(RateLimitExceeded, get_rate_limit_handler())
+
+# Add request ID middleware for debugging
+app.add_middleware(RequestIDMiddleware)
 
 # Register routers
 app.include_router(messaging_router)
