@@ -30,6 +30,7 @@
     "framer-motion": "^12.23.24",
     "html2canvas": "^1.4.1",
     "lucide-react": "^0.553.0",
+    "nanoid": "^5.1.6",
     "next": "16.0.1",
     "pino": "^10.1.0",
     "pino-pretty": "^13.1.2",
