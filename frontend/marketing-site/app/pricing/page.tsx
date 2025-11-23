@@ -35,7 +35,7 @@ const FAQ_ITEMS = [
   },
   {
     question: "What's included in the service?",
-    answer: "All plans include: 24/7 AI receptionist, appointment scheduling, Google Calendar integration, SMS confirmations, call analytics, and ongoing support. Advanced features like multi-location support and custom training are available based on your needs."
+    answer: "All plans include: 24/7 AI receptionist, appointment scheduling, Google Calendar integration, SMS confirmations, call analytics, HIPAA compliance with Business Associate Agreement, and ongoing support. Learn more about our HIPAA compliance and security features."
   },
   {
     question: "How long does implementation take?",
@@ -143,7 +143,7 @@ export default function PricingPage() {
               "AI-powered satisfaction scoring",
               "Customer management & history",
               "Missed call recovery",
-              "HIPAA compliance options",
+              "HIPAA compliance package (BAA included)",
               "Ongoing support & updates",
               "Custom persona training"
             ].map((feature, i) => (

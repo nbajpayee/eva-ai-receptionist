@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import FadeInUp from "@/components/animations/FadeInUp";
 import { Phone, ClipboardCheck, CalendarSearch, CheckCircle2, MessageSquare } from "lucide-react";
 
@@ -48,7 +49,7 @@ export default function HowItWorks() {
             How Eva Handles the Perfect Booking
           </h2>
           <p className="text-xl text-gray-600">
-            From the first &ldquo;Hello&rdquo; to the final confirmation, the entire process is automated, seamless, and reliable.
+            From the first &ldquo;Hello&rdquo; to the final confirmation, the entire process is automated, seamless, and reliable. Learn more about our <Link href="/features" className="text-primary-600 hover:text-primary-700 font-semibold underline underline-offset-2">HIPAA-compliant features</Link> and <Link href="/integrations" className="text-primary-600 hover:text-primary-700 font-semibold underline underline-offset-2">scheduling integrations</Link>.
           </p>
         </FadeInUp>
 
