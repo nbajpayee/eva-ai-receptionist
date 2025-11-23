@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionManager

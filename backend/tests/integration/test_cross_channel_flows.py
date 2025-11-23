@@ -41,7 +41,9 @@ class _CrossChannelFakeCalendarService:
         self._slots = slots
         self.book_calls = []
 
-    def get_available_slots(self, date, service_type, services_dict=None):  # noqa: ARG002
+    def get_available_slots(
+        self, date, service_type, services_dict=None
+    ):  # noqa: ARG002
         return self._slots
 
     def book_appointment(
@@ -72,7 +74,9 @@ class _CrossChannelFakeCalendarService:
         return "evt-cross-channel"
 
 
-def _make_future_slots(base: datetime, *, offsets: tuple[int, ...]) -> list[dict[str, str]]:
+def _make_future_slots(
+    base: datetime, *, offsets: tuple[int, ...]
+) -> list[dict[str, str]]:
     """Build future-dated slots relative to a base Eastern datetime."""
     localized_base = base.astimezone(EASTERN_TZ)
     slots: list[dict[str, str]] = []
@@ -655,7 +659,10 @@ class TestCrossChannelBooking:
             db_session,
             voice_conv,
             tool_call_id="voice-offer",
-            arguments={"date": tomorrow_base.date().isoformat(), "service_type": "botox"},
+            arguments={
+                "date": tomorrow_base.date().isoformat(),
+                "service_type": "botox",
+            },
             output={
                 "success": True,
                 "available_slots": slots,
@@ -762,7 +769,10 @@ class TestCrossChannelBooking:
             db_session,
             sms_conv,
             tool_call_id="sms-offer",
-            arguments={"date": tomorrow_base.date().isoformat(), "service_type": "botox"},
+            arguments={
+                "date": tomorrow_base.date().isoformat(),
+                "service_type": "botox",
+            },
             output={
                 "success": True,
                 "available_slots": slots,

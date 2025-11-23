@@ -27,16 +27,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from dataclasses import dataclass
 from typing import List
 
-import logging
 from sqlalchemy.orm import Session
 
 from booking.time_utils import EASTERN_TZ
 from database import Appointment, Customer, SessionLocal
 from messaging_service import MessagingService
-
 
 # ---------------------------------------------------------------------------
 # Logging: silence noisy SQL during simulations
@@ -87,7 +86,9 @@ class FakeCalendarService:
             )
 
     # Signature matches what booking_handlers.handle_check_availability expects
-    def get_available_slots(self, date, service_type, services_dict=None, duration_minutes=None):  # noqa: ARG002
+    def get_available_slots(
+        self, date, service_type, services_dict=None, duration_minutes=None
+    ):  # noqa: ARG002
         return [
             {
                 "start": slot.start_iso,
