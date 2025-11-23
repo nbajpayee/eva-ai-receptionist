@@ -3,14 +3,12 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
 import { NAV_ITEMS, SITE_CONFIG } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -69,27 +67,39 @@ export default function Header() {
 
           {/* CTA Button (Desktop) */}
           <div className="hidden md:flex items-center space-x-4">
-            <Link href="/#book-demo" className="btn-primary">
-              Book a Demo
+            <Link
+              href="https://dashboard.getevaai.com"
+              className="text-sm font-medium text-gray-500 hover:text-gray-900"
+            >
+              Login
+            </Link>
+            <Link
+              href="/#book-demo"
+              className="btn-primary px-4 py-2 text-xs sm:px-5 sm:py-2.5 sm:text-sm"
+            >
+              Talk to Sales
             </Link>
           </div>
 
           {/* Mobile Menu Button */}
-          <button
-            className="md:hidden p-2 text-gray-700 hover:text-primary transition-colors"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            aria-label="Toggle mobile menu"
-          >
-            {isMobileMenuOpen ? (
-              <X className="w-6 h-6" />
-            ) : (
-              <Menu className="w-6 h-6" />
-            )}
-          </button>
+          <div className="md:hidden flex items-center space-x-3">
+            <Link
+              href="https://dashboard.getevaai.com"
+              className="text-xs font-medium text-gray-500 hover:text-gray-900"
+            >
+              Login
+            </Link>
+            <Link
+              href="/#book-demo"
+              className="btn-primary px-4 py-2 text-xs sm:px-5 sm:py-2.5 sm:text-sm"
+            >
+              Talk to Sales
+            </Link>
+          </div>
         </div>
 
         {/* Mobile Menu */}
-        {isMobileMenuOpen && (
+        {false && (
           <div className="md:hidden py-4 border-t border-gray-200">
             <div className="flex flex-col space-y-4">
               {NAV_ITEMS.map((item) => (
@@ -102,7 +112,6 @@ export default function Header() {
                       ? "text-primary bg-primary-50"
                       : "text-gray-700"
                   )}
-                  onClick={() => setIsMobileMenuOpen(false)}
                 >
                   {item.title}
                 </Link>
@@ -111,7 +120,6 @@ export default function Header() {
                 <Link
                   href="/#book-demo"
                   className="btn-primary w-full"
-                  onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Book a Demo
                 </Link>

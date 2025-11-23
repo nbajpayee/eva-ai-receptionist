@@ -68,7 +68,7 @@ export default function Hero() {
               href="/#book-demo"
               className="btn-primary text-lg px-8 py-4 group shadow-lg shadow-primary-500/20"
             >
-              Book a Demo
+              Book Now
               <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
             <Link
