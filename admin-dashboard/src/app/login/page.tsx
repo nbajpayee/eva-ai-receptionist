@@ -58,10 +58,10 @@ function LoginForm() {
 
   const itemVariants = {
     hidden: { y: 20, opacity: 0 },
-    visible: { 
-      y: 0, 
+    visible: {
+      y: 0,
       opacity: 1,
-      transition: { type: 'spring', stiffness: 300, damping: 24 }
+      transition: { type: 'spring' as const, stiffness: 300, damping: 24 }
     }
   }
 
@@ -136,7 +136,7 @@ function LoginForm() {
             <motion.div
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.1, type: "spring" }}
+              transition={{ delay: 0.1, type: "spring" as const }}
               className="mb-6 inline-flex items-center gap-2 rounded-full border border-sky-100 bg-white/80 px-4 py-1.5 text-sm font-medium text-sky-700 shadow-sm backdrop-blur-sm"
             >
               <span className="relative flex h-2 w-2">
