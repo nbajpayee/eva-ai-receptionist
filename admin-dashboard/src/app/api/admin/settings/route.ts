@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
+import { withCsrfProtection } from "@/lib/csrf";
+import { validateRequestBody, settingsUpdateSchema } from "@/lib/api-validation";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -36,19 +38,25 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: Request) {
+export const PUT = withCsrfProtection(async (request: NextRequest) => {
   try {
-    const body = await request.json();
-
     const authHeaders = await getBackendAuthHeaders();
     if (!authHeaders) {
       return unauthorizedResponse();
     }
 
+    // Validate request body with Zod
+    const body = await request.json();
+    const validation = await validateRequestBody(settingsUpdateSchema, body);
+
+    if (!validation.success) {
+      return validation.response;
+    }
+
     const response = await fetch(`${baseUrl}/api/admin/settings`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify(body),
+      body: JSON.stringify(validation.data),
     });
 
     if (!response.ok) {
@@ -70,4 +78,4 @@ export async function PUT(request: Request) {
       { status: 502 }
     );
   }
-}
+});

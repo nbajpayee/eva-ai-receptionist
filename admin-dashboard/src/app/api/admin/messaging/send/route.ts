@@ -1,6 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
+import { withCsrfProtection } from "@/lib/csrf";
+import { validateRequestBody, messageSendSchema } from "@/lib/api-validation";
 
-export async function POST(request: Request) {
+export const POST = withCsrfProtection(async (request: NextRequest) => {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   if (!baseUrl) {
@@ -13,13 +16,28 @@ export async function POST(request: Request) {
   const proxyUrl = new URL("/api/admin/messaging/send", baseUrl);
 
   try {
+    // Auth check
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
+    // Validate request body with Zod
+    const body = await request.json();
+    const validation = await validateRequestBody(messageSendSchema, body);
+
+    if (!validation.success) {
+      return validation.response;
+    }
+
     const response = await fetch(proxyUrl.toString(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
       },
       cache: "no-store",
-      body: await request.text(),
+      body: JSON.stringify(validation.data),
     });
 
     if (!response.ok) {
@@ -45,4 +63,4 @@ export async function POST(request: Request) {
       { status: 502 }
     );
   }
-}
+});

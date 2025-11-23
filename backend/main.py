@@ -530,7 +530,9 @@ def _ensure_med_spa_settings(db: Session) -> MedSpaSettings:
 
 
 @app.get("/api/admin/settings", response_model=MedSpaSettingsResponse)
+@limiter.limit(RateLimits.READ)
 def get_admin_settings(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -539,7 +541,9 @@ def get_admin_settings(
 
 
 @app.put("/api/admin/settings", response_model=MedSpaSettingsResponse)
+@limiter.limit(RateLimits.WRITE)
 def update_admin_settings(
+    request: Request,
     payload: MedSpaSettingsUpdateRequest,
     db: Session = Depends(get_db),
     user: User = Depends(require_owner),
@@ -574,7 +578,9 @@ def get_service(
 
 
 @app.post("/api/admin/services", response_model=ServiceResponse, status_code=201)
+@limiter.limit(RateLimits.WRITE)
 def create_service(
+    request: Request,
     payload: ServiceCreateRequest,
     db: Session = Depends(get_db),
     user: User = Depends(require_owner),
@@ -585,7 +591,9 @@ def create_service(
 
 
 @app.put("/api/admin/services/{service_id}", response_model=ServiceResponse)
+@limiter.limit(RateLimits.WRITE)
 def update_service(
+    request: Request,
     service_id: int,
     payload: ServiceUpdateRequest,
     db: Session = Depends(get_db),
@@ -605,7 +613,9 @@ def update_service(
 
 
 @app.delete("/api/admin/services/{service_id}")
+@limiter.limit(RateLimits.WRITE)
 def delete_service(
+    request: Request,
     service_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_owner),
