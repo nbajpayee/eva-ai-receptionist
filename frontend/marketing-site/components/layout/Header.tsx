@@ -36,9 +36,9 @@ export default function Header() {
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-3">
             <div className="relative w-10 h-10 rounded-lg overflow-hidden">
-              <Image 
-                src="/icon-med.png" 
-                alt="Eva AI Logo" 
+              <Image
+                src="/icon-med.png"
+                alt="Eva AI - HIPAA-Compliant AI Receptionist for Medical Spas"
                 fill
                 className="object-cover"
                 priority

@@ -4,6 +4,7 @@ import { SITE_CONFIG } from "@/lib/constants";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import Script from "next/script";
+import GoogleAnalytics from "@/components/analytics/GoogleAnalytics";
 import {
   organizationSchema,
   softwareApplicationSchema,
@@ -132,6 +133,9 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased">
+        {/* Google Analytics 4 - Tracks page views, conversions, and user behavior */}
+        <GoogleAnalytics />
+
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-6 focus:py-3 focus:bg-primary focus:text-white focus:rounded-lg focus:shadow-lg"

@@ -14,7 +14,14 @@ export default function Footer() {
       { title: "Integrations", href: "/integrations" },
     ],
     company: [
+      { title: "Blog", href: "/blog" },
+      { title: "Press Kit", href: "/press" },
       { title: "Book a Demo", href: "/#book-demo" },
+    ],
+    resources: [
+      { title: "HIPAA Compliance", href: "/hipaa" },
+      { title: "Security", href: "/security" },
+      { title: "Contact Us", href: "/contact" },
     ],
     legal: [
       { title: "Privacy Policy", href: "/privacy" },
@@ -31,9 +38,9 @@ export default function Footer() {
             <div className="lg:col-span-2">
               <div className="flex items-center space-x-2 mb-4">
                 <div className="relative w-10 h-10 rounded-lg overflow-hidden">
-                    <Image 
-                        src="/icon-med.png" 
-                        alt="Eva AI Logo" 
+                    <Image
+                        src="/icon-med.png"
+                        alt="Eva AI Logo - HIPAA-Compliant AI Receptionist"
                         fill
                         className="object-cover"
                     />
@@ -70,6 +77,23 @@ export default function Footer() {
               <h3 className="text-sm font-semibold text-white mb-4">Company</h3>
               <ul className="space-y-3">
                 {footerLinks.company.map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className="text-sm hover:text-white transition-colors"
+                    >
+                      {link.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Resources Links */}
+            <div>
+              <h3 className="text-sm font-semibold text-white mb-4">Resources</h3>
+              <ul className="space-y-3">
+                {footerLinks.resources.map((link) => (
                   <li key={link.href}>
                     <Link
                       href={link.href}
