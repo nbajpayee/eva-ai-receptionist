@@ -19,6 +19,8 @@ import pytest
 
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionManager
+from booking.time_utils import EASTERN_TZ, parse_iso_datetime
+from booking_handlers import handle_book_appointment
 from database import Appointment, Conversation, Customer
 from messaging_service import MessagingService
 from tests.conftest import (
@@ -26,6 +28,66 @@ from tests.conftest import (
     build_booking_response,
     mock_ai_response_with_text,
 )
+
+
+class _CrossChannelFakeCalendarService:
+    """Minimal calendar service stub for cross-channel booking tests.
+
+    Provides get_available_slots and book_appointment so we can exercise the
+    full booking handler pipeline without calling Google Calendar.
+    """
+
+    def __init__(self, slots):
+        self._slots = slots
+        self.book_calls = []
+
+    def get_available_slots(self, date, service_type, services_dict=None):  # noqa: ARG002
+        return self._slots
+
+    def book_appointment(
+        self,
+        *,
+        start_time,
+        end_time,
+        customer_name,
+        customer_email,
+        customer_phone,
+        service_type,
+        services_dict=None,  # noqa: ARG002
+        provider=None,
+        notes=None,
+    ):
+        self.book_calls.append(
+            {
+                "start": start_time,
+                "end": end_time,
+                "customer_name": customer_name,
+                "customer_email": customer_email,
+                "customer_phone": customer_phone,
+                "service_type": service_type,
+                "provider": provider,
+                "notes": notes,
+            }
+        )
+        return "evt-cross-channel"
+
+
+def _make_future_slots(base: datetime, *, offsets: tuple[int, ...]) -> list[dict[str, str]]:
+    """Build future-dated slots relative to a base Eastern datetime."""
+    localized_base = base.astimezone(EASTERN_TZ)
+    slots: list[dict[str, str]] = []
+    for offset_minutes in offsets:
+        start_dt = localized_base + timedelta(minutes=offset_minutes)
+        end_dt = start_dt + timedelta(minutes=60)
+        slots.append(
+            {
+                "start": start_dt.isoformat(),
+                "end": end_dt.isoformat(),
+                "start_time": start_dt.strftime("%I:%M %p"),
+                "end_time": end_dt.strftime("%I:%M %p"),
+            }
+        )
+    return slots
 
 
 @pytest.mark.integration
@@ -350,10 +412,6 @@ class TestCrossChannelBooking:
             output=availability,
         )
 
-        # Store pending offers
-        voice_conv.status = "pending"
-        db_session.commit()
-
         # SMS: Select slot
         sms_conv = AnalyticsService.create_conversation(
             db=db_session,
@@ -572,3 +630,213 @@ class TestCrossChannelBooking:
         assert len(voice_content) > 0
         assert len(sms_content) > 0
         assert len(email_content) > 0
+
+    def test_voice_offers_sms_books_single_appointment(self, db_session, customer):
+        """Voice offers slots and SMS completes booking with a single appointment.
+
+        This exercises cross-channel slot metadata, SlotSelectionManager.enforce_booking,
+        and handle_book_appointment end-to-end against a fake calendar.
+        """
+
+        # Voice conversation offers future slots
+        voice_conv = AnalyticsService.create_conversation(
+            db=db_session,
+            customer_id=customer.id,
+            channel="voice",
+            metadata={"session_id": str(uuid.uuid4())},
+        )
+
+        tomorrow_base = datetime.now(EASTERN_TZ).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
+        slots = _make_future_slots(tomorrow_base, offsets=(0, 60, 120))
+
+        SlotSelectionManager.record_offers(
+            db_session,
+            voice_conv,
+            tool_call_id="voice-offer",
+            arguments={"date": tomorrow_base.date().isoformat(), "service_type": "botox"},
+            output={
+                "success": True,
+                "available_slots": slots,
+                "all_slots": slots,
+                "date": tomorrow_base.date().isoformat(),
+                "service": "Botox",
+                "service_type": "botox",
+            },
+        )
+
+        voice_conv.status = "completed"
+        db_session.commit()
+
+        # SMS conversation continues booking using transferred pending offers
+        sms_conv = AnalyticsService.create_conversation(
+            db=db_session,
+            customer_id=customer.id,
+            channel="sms",
+            metadata={"phone_number": customer.phone},
+        )
+
+        db_session.refresh(voice_conv)
+        pending_offers = voice_conv.custom_metadata.get("pending_slot_offers")
+        assert pending_offers is not None
+
+        # Simulate cross-channel transfer and selection: re-use pending offers but mark
+        # a specific slot as selected. Selection capture itself is covered elsewhere.
+        pending_offers["selected_option_index"] = 2
+        slots_payload = pending_offers.get("slots") or []
+        assert len(slots_payload) >= 2
+        pending_offers["selected_slot"] = slots_payload[1]
+
+        sms_metadata = sms_conv.custom_metadata or {}
+        sms_metadata["pending_slot_offers"] = pending_offers
+        SlotSelectionManager.persist_conversation_metadata(
+            db_session, sms_conv, sms_metadata
+        )
+
+        normalized_args, adjustments = SlotSelectionManager.enforce_booking(
+            db_session,
+            sms_conv,
+            {
+                "customer_name": customer.name,
+                "customer_phone": customer.phone,
+                "customer_email": customer.email,
+                "start_time": tomorrow_base.isoformat(),
+                "service_type": "botox",
+            },
+        )
+
+        # Sanity check: normalized start_time should match the selected slot
+        selected_start = normalized_args["start_time"]
+        assert any(slot["start"] == selected_start for slot in slots)
+
+        fake_calendar = _CrossChannelFakeCalendarService(slots)
+
+        # handle_book_appointment only accepts core booking fields; strip helpers like
+        # 'start' and 'date' that enforce_booking adds for internal use.
+        booking_args = {
+            k: v
+            for k, v in normalized_args.items()
+            if k
+            in {
+                "customer_name",
+                "customer_phone",
+                "customer_email",
+                "start_time",
+                "service_type",
+                "provider",
+                "notes",
+                "services_dict",
+            }
+        }
+
+        payload = handle_book_appointment(
+            fake_calendar,
+            **booking_args,
+        )
+
+        assert payload["success"] is True
+        assert len(fake_calendar.book_calls) == 1
+
+        booked_start = fake_calendar.book_calls[0]["start"]
+        requested_dt = parse_iso_datetime(selected_start)
+        assert booked_start.replace(tzinfo=None) == requested_dt.replace(tzinfo=None)
+
+    def test_sms_offers_voice_books_single_appointment(self, db_session, customer):
+        """SMS offers slots and voice completes booking with a single appointment."""
+
+        # SMS conversation offers future slots
+        sms_conv = AnalyticsService.create_conversation(
+            db=db_session,
+            customer_id=customer.id,
+            channel="sms",
+            metadata={"phone_number": customer.phone},
+        )
+
+        tomorrow_base = datetime.now(EASTERN_TZ).replace(
+            hour=11, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
+        slots = _make_future_slots(tomorrow_base, offsets=(0, 60, 120))
+
+        SlotSelectionManager.record_offers(
+            db_session,
+            sms_conv,
+            tool_call_id="sms-offer",
+            arguments={"date": tomorrow_base.date().isoformat(), "service_type": "botox"},
+            output={
+                "success": True,
+                "available_slots": slots,
+                "all_slots": slots,
+                "date": tomorrow_base.date().isoformat(),
+                "service": "Botox",
+                "service_type": "botox",
+            },
+        )
+
+        # Voice conversation resumes booking using transferred pending offers
+        voice_conv = AnalyticsService.create_conversation(
+            db=db_session,
+            customer_id=customer.id,
+            channel="voice",
+            metadata={"session_id": str(uuid.uuid4())},
+        )
+
+        db_session.refresh(sms_conv)
+        pending_offers = sms_conv.custom_metadata.get("pending_slot_offers")
+        assert pending_offers is not None
+
+        pending_offers["selected_option_index"] = 1
+        slots_payload = pending_offers.get("slots") or []
+        assert len(slots_payload) >= 1
+        pending_offers["selected_slot"] = slots_payload[0]
+
+        voice_metadata = voice_conv.custom_metadata or {}
+        voice_metadata["pending_slot_offers"] = pending_offers
+        SlotSelectionManager.persist_conversation_metadata(
+            db_session, voice_conv, voice_metadata
+        )
+
+        normalized_args, adjustments = SlotSelectionManager.enforce_booking(
+            db_session,
+            voice_conv,
+            {
+                "customer_name": customer.name,
+                "customer_phone": customer.phone,
+                "customer_email": customer.email,
+                "start_time": tomorrow_base.isoformat(),
+                "service_type": "botox",
+            },
+        )
+
+        selected_start = normalized_args["start_time"]
+        assert any(slot["start"] == selected_start for slot in slots)
+
+        fake_calendar = _CrossChannelFakeCalendarService(slots)
+
+        booking_args = {
+            k: v
+            for k, v in normalized_args.items()
+            if k
+            in {
+                "customer_name",
+                "customer_phone",
+                "customer_email",
+                "start_time",
+                "service_type",
+                "provider",
+                "notes",
+                "services_dict",
+            }
+        }
+
+        payload = handle_book_appointment(
+            fake_calendar,
+            **booking_args,
+        )
+
+        assert payload["success"] is True
+        assert len(fake_calendar.book_calls) == 1
+
+        booked_start = fake_calendar.book_calls[0]["start"]
+        requested_dt = parse_iso_datetime(selected_start)
+        assert booked_start.replace(tzinfo=None) == requested_dt.replace(tzinfo=None)

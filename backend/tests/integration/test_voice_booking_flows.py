@@ -136,12 +136,45 @@ class TestVoiceBookingFlow:
             "voice",
         )
 
-        # Verify booking was attempted (may or may not happen depending on implementation)
-        # The key is that the system has all the data needed to book
+        # Verify deterministic single booking attempt
+        assert mock_book.call_count == 1
+
         db_session.refresh(voice_conversation)
         final_metadata = voice_conversation.custom_metadata
         assert final_metadata.get("customer_name") == "John Doe"
         assert final_metadata.get("customer_phone") == "+15555551234"
+
+    @patch("messaging_service.handle_check_availability")
+    @patch("messaging_service.openai_client.chat.completions.create")
+    def test_informational_voice_flow_does_not_book(
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        voice_conversation,
+    ):
+        """Pure FAQ-style questions should not trigger booking attempts."""
+        # User asks only for information
+        _ = AnalyticsService.add_message(
+            db=db_session,
+            conversation_id=voice_conversation.id,
+            direction="inbound",
+            content="What services do you offer and what are your hours?",
+            metadata={"source": "voice_transcript"},
+        )
+
+        mock_openai.return_value = mock_ai_response_with_text(
+            "We offer Botox, fillers, Hydrafacial and more. Our hours are 9am-6pm."
+        )
+
+        # Generate AI response – this should *not* preemptively check availability
+        content, message = MessagingService.generate_ai_response(
+            db_session,
+            voice_conversation.id,
+            "voice",
+        )
+
+        assert not mock_check_avail.called
 
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")

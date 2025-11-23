@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ENV: str = "development"
 
+    # SQL logging
+    SQL_ECHO: bool = False
+
     # Database
     DATABASE_URL: str = "postgresql://ava_user:ava_password@localhost:5432/ava_db"
     SUPABASE_URL: Optional[str] = None

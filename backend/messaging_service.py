@@ -472,6 +472,26 @@ class MessagingService:
         return date, service_type
 
     @staticmethod
+    def _is_cancellation_message(text: str) -> bool:
+        normalized = text.strip().lower()
+        phrases = [
+            "never mind",
+            "nevermind",
+            "i'll call back later",
+            "i will call back later",
+            "i'll call later",
+            "i will call later",
+            "don't worry about it",
+            "dont worry about it",
+            "actually never mind",
+            "actually, never mind",
+        ]
+        for phrase in phrases:
+            if phrase in normalized:
+                return True
+        return False
+
+    @staticmethod
     def _requires_availability_enforcement(
         db: Session, conversation: Conversation
     ) -> bool:
@@ -797,11 +817,7 @@ class MessagingService:
 
     @staticmethod
     def _fallback_response(channel: str) -> str:
-        if channel == "sms":
-            return (
-                "Ava (AI assistant) is currently unavailable. We'll follow up shortly."
-            )
-        return "Hello! Ava here — I'm offline at the moment, but we'll reply with more details soon."
+        return "Sorry, we're having some technical issues right now. We'll reach back out to you shortly."
 
     @staticmethod
     def _tool_context_messages(
@@ -1404,6 +1420,26 @@ class MessagingService:
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
+        last_customer = MessagingService._latest_customer_message(conversation)
+        if last_customer and last_customer.content:
+            last_text = last_customer.content.strip().lower()
+            if MessagingService._is_cancellation_message(last_text):
+                metadata = SlotSelectionManager.conversation_metadata(conversation)
+                if isinstance(metadata, dict):
+                    changed = False
+                    if metadata.get("pending_booking_intent"):
+                        metadata["pending_booking_intent"] = False
+                        changed = True
+                    for key in ("pending_booking_date", "pending_booking_service"):
+                        if key in metadata:
+                            metadata.pop(key, None)
+                            changed = True
+                    if changed:
+                        SlotSelectionManager.persist_conversation_metadata(
+                            db, conversation, metadata
+                        )
+                SlotSelectionManager.clear_offers(db, conversation)
+
         history = MessagingService._build_history(conversation, channel)
         max_tokens = 500 if channel == "sms" else 1000
         metadata = SlotSelectionManager.conversation_metadata(conversation)
@@ -1565,13 +1601,19 @@ class MessagingService:
 
         message = ai_response.choices[0].message
         text_content = (message.content or "").strip()
+        tool_calls = getattr(message, "tool_calls", None) or []
+
+        if not tool_calls and not text_content:
+            logger.warning(
+                "AI returned empty response with no tool calls for conversation %s; using fallback.",
+                conversation_id,
+            )
+            text_content = MessagingService._fallback_response(channel)
 
         # If we called check_availability preemptively and AI still tries to call it,
         # that's fine - just let it proceed normally
         trace("Assistant provisional reply: %s", text_content)
         history.append({"role": "assistant", "content": text_content})
-
-        tool_calls = getattr(message, "tool_calls", None) or []
         if tool_calls:
             trace("AI requested %d tool call(s)", len(tool_calls))
             tool_call_results = []

@@ -110,7 +110,9 @@ class TestSMSBookingFlow:
             "sms",
         )
 
-        # Verify multi-message conversation
+        # Verify deterministic single booking attempt and multi-message conversation
+        assert mock_book.call_count == 1
+
         messages = (
             db_session.query(AnalyticsService.CommunicationMessage)
             .filter(
@@ -120,6 +122,39 @@ class TestSMSBookingFlow:
             .count()
         )
         assert messages >= 6  # 3 user + 3 AI messages
+
+    @patch("messaging_service.handle_check_availability")
+    @patch("messaging_service.openai_client.chat.completions.create")
+    def test_sms_informational_flow_does_not_book(
+        self,
+        mock_openai,
+        mock_check_avail,
+        db_session,
+        sms_conversation,
+        customer,
+    ):
+        """Pure informational SMS conversations should not trigger booking attempts."""
+        # User asks only for information
+        _ = AnalyticsService.add_message(
+            db=db_session,
+            conversation_id=sms_conversation.id,
+            direction="inbound",
+            content="What are your hours and where are you located?",
+            metadata={"from": customer.phone},
+        )
+
+        mock_openai.return_value = mock_ai_response_with_text(
+            "We're open 9am-6pm at 123 Main St. How else can I help?"
+        )
+
+        content, ai_msg = MessagingService.generate_ai_response(
+            db_session,
+            sms_conversation.id,
+            "sms",
+        )
+
+        # Availability should not be checked in a pure FAQ flow
+        assert not mock_check_avail.called
 
     @patch("messaging_service.handle_check_availability")
     @patch("messaging_service.openai_client.chat.completions.create")
