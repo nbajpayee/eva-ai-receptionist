@@ -54,14 +54,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
-    console.log('[AuthProvider] mount')
-
     const initAuth = async () => {
       try {
-        console.log('[AuthProvider] initAuth start')
         const { data: { session } } = await supabase.auth.getSession()
-
-        console.log('[AuthProvider] initAuth session', session)
 
         const finalUser = session?.user ?? null
 
@@ -83,7 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('Error initializing auth:', error)
       } finally {
-        console.log('[AuthProvider] initAuth done, setting loading=false')
         setLoading(false)
       }
     }
@@ -94,7 +88,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('[AuthProvider] onAuthStateChange', _event, session)
       setSession(session)
       setUser(session?.user ?? null)
 
@@ -111,12 +104,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(null)
       }
 
-      console.log('[AuthProvider] onAuthStateChange done, setting loading=false')
       setLoading(false)
     })
 
     return () => {
-      console.log('[AuthProvider] unsubscribe auth state')
       subscription.unsubscribe()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

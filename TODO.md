@@ -1,6 +1,6 @@
 # Med Spa Voice AI - Project Tracker
 
-**Last Updated:** November 21, 2025
+**Last Updated:** November 22, 2025
 **Current Phase:** Phase 3 - Production Deployment Complete ✅
 **Status:** LIVE IN PRODUCTION - https://getevaai.com
 
@@ -545,8 +545,8 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 - [ ] **Migrate to Supabase**
   - [x] Create Supabase project + connection strings
   - [x] Migrate database schema to Supabase (SQLAlchemy helper)
-  - [ ] *(Deferred post-MVP)* Set up Supabase authentication
-  - [ ] *(Deferred post-MVP)* Configure Row Level Security (RLS) policies
+  - [x] Set up Supabase authentication for admin dashboard (Completed Nov 22, 2025)
+  - [x] Configure baseline Row Level Security (RLS) policies in Supabase (profiles + roles) (Completed Nov 22, 2025)
   - [x] Update backend to use Supabase Postgres
   - [ ] Test real-time subscriptions
   - [x] Seed sample dashboard data (scripts/seed_supabase.py)
@@ -573,13 +573,13 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 ### Phase 4 - Critical Production Features (Nov 22-29, 2025)
 
 **Priority 1: Authentication & Security** 🔒
-- [ ] Implement Supabase Auth for admin dashboard
-- [ ] Add login/logout UI components
-- [ ] Protect all `/api/admin/*` routes with auth middleware
-- [ ] Add Row Level Security (RLS) policies in Supabase
-- [ ] Implement role-based access control (Owner vs Staff vs Provider)
-- **Estimated:** 1-2 days
-- **Risk:** Dashboard currently has no authentication - anyone can access sensitive data
+- [x] Implement Supabase Auth for admin dashboard (email/password login via Supabase; SSR-safe clients for browser/API/middleware)
+- [x] Add login/logout UI components (`/login` page and `UserNav` avatar menu with logout)
+- [x] Protect all `/api/admin/*` routes with auth middleware and Supabase JWT forwarding from Next.js API routes
+- [x] Add baseline Row Level Security (RLS) policies in Supabase for auth/profiles (fine-grained table-level RLS still TBD)
+- [ ] Implement role-based access control (Owner vs Staff vs Provider) in dashboard UI (backend role support exists)
+- **Estimated:** 1-2 days (actual: completed Nov 22, 2025)
+- **Risk:** Dashboard now requires authentication; remaining risk is around missing granular RLS/roles in some areas
 
 **Priority 2: Silero VAD Integration** 🎤 ✅ **COMPLETE** (Nov 21, 2025)
 - [x] Add VAD mode state management to voice interface
@@ -619,7 +619,18 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 - **Impact:** Unlocks Research Campaigns and SMS appointment confirmations
 - **Status:** Code is 90% ready, just needs API keys
 
-**Priority 4: Monitoring & Error Tracking** 📊
+**Priority 3.5: Live Status Endpoint Alignment** 📡
+- [ ] Implement `/api/admin/live-status` endpoint in FastAPI backend (Next.js proxy exists but backend 404s in production)
+- [ ] Re-enable `LiveStatus` widget on dashboard homepage once backend endpoint is deployed and stable
+
+**Priority 4: Booking Validation & Cross-Channel Reliability** 📅
+- [ ] Implement automated booking tests for voice (`tests/test_voice_booking.py`) covering V1–V8 scenarios from `BOOKING_VALIDATION_PLAN.md`
+- [ ] Implement automated booking tests for messaging/SMS (`tests/test_messaging_booking.py` or extend `test_cross_channel_booking.py`) covering S1–S7 and XS1–XS2
+- [ ] Add failure-path tests for calendar rejections and conflicting bookings across channels (CR1, CR2, CC1 in `BOOKING_VALIDATION_PLAN.md`)
+- [ ] Run full booking-related pytest suite as a pre-flight check before enabling Twilio/real SMS/phone
+- [ ] Perform manual channel-agnostic validation using the voice console (V1–V8) and messaging console (S1–S7, XS1–XS2); log discrepancies
+
+**Priority 5: Monitoring & Error Tracking** 📊
 - [ ] Integrate Sentry for error tracking
 - [ ] Add health check monitoring (UptimeRobot or similar)
 - [ ] Set up log aggregation (Railway logs or Papertrail)
@@ -628,7 +639,7 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 - **Estimated:** 1 day
 - **Impact:** Visibility into production issues
 
-**Priority 5: Customer Detail Page Enhancements** 👥
+**Priority 6: Customer Detail Page Enhancements** 👥
 - [ ] Build full customer profile view
 - [ ] Add inline editing for customer details
 - [ ] Show interaction timeline (all conversations, appointments)

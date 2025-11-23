@@ -138,10 +138,10 @@ Open `frontend/index.html` in a browser to test the legacy voice interface proto
    - Aggregates daily metrics
 
 **Admin Dashboard Flow**:
-1. Next.js frontend calls `/api/admin/*` routes (Next.js API routes)
-2. Next.js proxy routes forward requests to `http://localhost:8000/api/admin/*` (FastAPI)
-3. FastAPI queries Supabase PostgreSQL
-4. Data flows back through proxy to Next.js components
+1. Next.js frontend calls relative `/api/admin/*` routes (Next.js API routes) on the same origin as the dashboard.
+2. Each proxy route uses the Supabase server client to read the current session and, if present, forwards `Authorization: Bearer <access_token>` and JSON payloads to `${NEXT_PUBLIC_API_BASE_URL}/api/admin/*` (FastAPI).
+3. FastAPI decodes the Supabase JWT, attaches current user/role context, and queries Supabase PostgreSQL.
+4. Data flows back through the proxy to Next.js components.
 
 ### Database Schema
 
@@ -236,6 +236,24 @@ The `.env` file must be in the **root directory** (not in `backend/`). FastAPI's
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - `MED_SPA_NAME`, `MED_SPA_PHONE`, `MED_SPA_ADDRESS`, `MED_SPA_HOURS`
 - `AI_ASSISTANT_NAME`: Default is "Ava"
+
+### Admin Dashboard Authentication (Supabase)
+- Admin dashboard uses Supabase Auth (email/password) against the production Supabase project.
+- Frontend:
+  - `admin-dashboard/src/lib/supabase/client.ts` uses `@supabase/ssr` `createBrowserClient`.
+  - `admin-dashboard/src/contexts/auth-context.tsx` manages `user`, `session`, and `profile` (from the `profiles` table).
+  - `admin-dashboard/src/components/layout/app-shell.tsx` plus `admin-dashboard/src/lib/supabase/middleware.ts` gate all routes except `/login`.
+  - `/login` renders only the login module; all other pages show full dashboard chrome with `UserNav` avatar + logout.
+- Server / API routes:
+  - `admin-dashboard/src/lib/supabase/server.ts` wraps `createServerClient` for server components and API routes.
+  - `admin-dashboard/src/app/api/admin/_auth.ts` reads the Supabase session and forwards `Authorization: Bearer <JWT>` to FastAPI.
+  - All `/api/admin/*` Next.js routes that hit the backend now call `getBackendAuthHeaders()` and return `401` if unauthenticated.
+- Backend:
+  - `backend/auth.py` includes a Supabase-compatible JWT decoder (base64 payload parsing, signature verification currently relaxed).
+  - `backend/scripts/create_auth_schema.sql` defines `profiles` and `user_role` plus RLS; recursion bugs in `profiles` policies have been fixed.
+- Local dev:
+  - `admin-dashboard/.env.local` must set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`.
+  - Internal fetches from dashboard pages call relative URLs (e.g. `/api/admin/...`) instead of hardcoding `localhost:3000`, avoiding CORS when dev runs on an alternate port.
 
 ### Persona Identity Enforcement
 The AI assistant **must always identify as Ava**, not ChatGPT. This is enforced via:
@@ -489,8 +507,8 @@ Ava/
 - ✅ Google Calendar credentials stored as Railway secrets
 
 **To Implement:**
-- [ ] Authentication for admin dashboard (Supabase Auth)
-- [ ] Row Level Security (RLS) policies in Supabase
+- [x] Authentication for admin dashboard (Supabase Auth wired into Next.js + Supabase sessions)
+- [x] Baseline Row Level Security (RLS) policies in Supabase (profiles + roles; more granular policies TBD)
 - [ ] Rate limiting for API endpoints
 - [ ] HIPAA compliance for production med spa use (encryption at rest, BAAs, audit logs)
 

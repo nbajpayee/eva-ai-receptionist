@@ -19,20 +19,7 @@ export function AppShell({ children, navItems }: AppShellProps) {
   const { user, loading } = useAuth();
   const isLoginRoute = pathname === "/login";
 
-  console.log("[AppShell] render", {
-    pathname,
-    loading,
-    hasUser: !!user,
-    isLoginRoute,
-  });
-
   useEffect(() => {
-    console.log("[AppShell] effect", {
-      pathname,
-      loading,
-      hasUser: !!user,
-      isLoginRoute,
-    });
     if (!loading && !user && !isLoginRoute) {
       const redirect = pathname || "/";
       router.replace(`/login?redirect=${encodeURIComponent(redirect)}`);

@@ -412,9 +412,9 @@ curl http://localhost:8000/api/admin/calls
 - ✅ WebSocket support enabled
 - ✅ CORS configuration secured
 
-### Phase 4 (Coming Q1 2026)
-- Supabase Auth for admin dashboard
-- Row Level Security (RLS) policies
+### Phase 4 - Auth & Messaging (In Progress - Nov 22, 2025)
+- ✅ Supabase Auth for admin dashboard (email/password login, Supabase session cookies)
+- ✅ Baseline Row Level Security (RLS) policies for Supabase auth/profiles (fine-grained policies TBD)
 - Twilio SMS production integration
 - SendGrid email integration
 - Boulevard scheduling integration
