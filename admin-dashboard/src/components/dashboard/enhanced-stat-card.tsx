@@ -53,10 +53,9 @@ export function EnhancedStatCard({
   
   const count = useMotionValue(0);
   const rounded = useTransform(count, (latest) => {
-    if (!isNumeric) return value;
-    // Format appropriately based on original string (e.g., maintain decimals if needed)
-    // For simplicity, we'll just round to integer for now, or match precision
-    return Math.round(latest).toLocaleString(); 
+    // Always return a string so this is a MotionValue<string>, which
+    // can be safely used inside motion.span
+    return Math.round(latest).toLocaleString();
   });
 
   const [displayValue, setDisplayValue] = useState(isNumeric ? "0" : value);
