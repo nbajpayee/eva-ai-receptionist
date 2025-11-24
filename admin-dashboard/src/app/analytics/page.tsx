@@ -1,131 +1,285 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Download, Share2, Filter, BarChart3 } from "lucide-react";
+import { format } from "date-fns";
+
+import { Button } from "@/components/ui/button";
+import { PeriodSelector } from "@/components/period-selector";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ChartCard } from "@/components/charts/ChartCard";
 import { CallVolumeChart } from "@/components/charts/call-volume-chart";
 import { SatisfactionTrendChart } from "@/components/charts/satisfaction-trend-chart";
-import { ConversionRateChart } from "@/components/charts/conversion-rate-chart";
-import { CallDurationChart } from "@/components/charts/call-duration-chart";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Calendar } from "lucide-react";
+import { FunnelChart } from "@/components/charts/FunnelChart";
+import { Heatmap } from "@/components/charts/Heatmap";
 
-interface DailyMetric {
-  date: string;
-  total_calls: number;
-  appointments_booked: number;
-  avg_satisfaction_score: number;
-  conversion_rate: number;
-  avg_call_duration_minutes: number;
-}
+import { KPIGrid } from "@/components/analytics/kpi-grid";
+import { InsightCards } from "@/components/analytics/insight-cards";
+import { ChannelBreakdown } from "@/components/analytics/channel-breakdown";
+import { OutcomeBreakdown } from "@/components/analytics/outcome-breakdown";
+import { ServicePerformance } from "@/components/analytics/service-performance";
 
-interface AnalyticsResponse {
-  metrics: DailyMetric[];
-}
+import { 
+  DailyMetric, 
+  FunnelData, 
+  HeatmapPoint, 
+  ChannelMetric, 
+  OutcomeMetric,
+  Period
+} from "@/types/analytics-extended";
 
 const DATE_RANGES = [
-  { label: "7 Days", value: "7", days: 7 },
-  { label: "30 Days", value: "30", days: 30 },
-  { label: "90 Days", value: "90", days: 90 },
+  { label: "7 Days", value: "7", period: "week" as Period },
+  { label: "30 Days", value: "30", period: "month" as Period },
+  { label: "90 Days", value: "90", period: "month" as Period }, // Fallback to month for complex charts
 ] as const;
 
 export default function AnalyticsPage() {
-  const [metrics, setMetrics] = useState<DailyMetric[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // State
   const [selectedRange, setSelectedRange] = useState<string>("30");
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Data State
+  const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
+  const [funnelData, setFunnelData] = useState<FunnelData | null>(null);
+  const [heatmapData, setHeatmapData] = useState<HeatmapPoint[]>([]);
+  const [channelData, setChannelData] = useState<ChannelMetric[]>([]);
+  const [outcomeData, setOutcomeData] = useState<OutcomeMetric[]>([]);
 
+  // Derived State
+  const currentRange = DATE_RANGES.find(r => r.value === selectedRange) || DATE_RANGES[1];
+  
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/admin/analytics/daily?days=${selectedRange}`, {
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          console.warn("Failed to fetch daily analytics", response.statusText);
-          setMetrics([]);
-          return;
+        // 1. Fetch Daily Metrics (Source of Truth for Line Charts)
+        const dailyRes = await fetch(`/api/admin/analytics/daily?days=${selectedRange}`);
+        if (dailyRes.ok) {
+          const data = await dailyRes.json();
+          setDailyMetrics(data.metrics || []);
         }
 
-        const data = (await response.json()) as AnalyticsResponse;
-        setMetrics(data.metrics || []);
+        // 2. Fetch specialized data using the mapped 'period'
+        // Note: 90 days maps to 'month' for these charts as backend doesn't support 90d for them yet
+        const period = currentRange.period;
+
+        const [funnelRes, heatmapRes, channelRes, outcomeRes] = await Promise.all([
+          fetch(`/api/admin/analytics/funnel?period=${period}`),
+          fetch(`/api/admin/analytics/peak-hours?period=${period}`),
+          fetch(`/api/admin/analytics/channel-distribution?period=${period}`),
+          fetch(`/api/admin/analytics/outcome-distribution?period=${period}`)
+        ]);
+
+        if (funnelRes.ok) setFunnelData(await funnelRes.json());
+        if (heatmapRes.ok) setHeatmapData(await heatmapRes.json());
+        if (channelRes.ok) setChannelData(await channelRes.json());
+        if (outcomeRes.ok) setOutcomeData(await outcomeRes.json());
+
       } catch (error) {
-        console.error("Error fetching daily analytics", error);
-        setMetrics([]);
+        console.error("Error fetching analytics:", error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchData();
-  }, [selectedRange]);
+    fetchAllData();
+  }, [selectedRange, currentRange.period]);
 
-  const hasData = metrics.length > 0;
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
+  };
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-start justify-between">
+    <div className="min-h-screen space-y-8 bg-zinc-50/50 p-6 sm:p-8 font-sans">
+      {/* Background Ambience */}
+      <div className="fixed inset-0 pointer-events-none -z-10">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px]" />
+        <div className="absolute left-0 top-0 h-[600px] w-[600px] bg-purple-100/30 blur-[120px]" />
+        <div className="absolute right-0 bottom-0 h-[600px] w-[600px] bg-blue-100/30 blur-[120px]" />
+      </div>
+
+      {/* Header */}
+      <motion.header 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
+      >
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-zinc-900">Analytics & Trends</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Analytics & Trends</h1>
           <p className="text-sm text-zinc-500">
-            Visual insights into call performance, customer satisfaction, and booking trends
+            Deep dive into your reception performance and business growth
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-zinc-500" />
-          <ToggleGroup
-            type="single"
-            value={selectedRange}
-            onValueChange={(value) => {
-              if (value) setSelectedRange(value);
-            }}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <PeriodSelector
+            selectedPeriod={selectedRange}
+            onPeriodChange={setSelectedRange}
+            periods={DATE_RANGES}
+          />
+
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="h-10 gap-2 hidden sm:flex">
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+            <Button variant="outline" size="sm" className="h-10 gap-2 hidden sm:flex">
+              <Share2 className="h-4 w-4" />
+              Share
+            </Button>
+          </div>
+        </div>
+      </motion.header>
+
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="space-y-8"
+      >
+        {/* 1. Executive Summary */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-zinc-900">Executive Summary</h2>
+            <span className="text-xs text-zinc-400">Updated {format(new Date(), "h:mm a")}</span>
+          </div>
+          <KPIGrid metrics={dailyMetrics} period={currentRange.period} loading={isLoading} />
+        </section>
+
+        {/* 2. AI Insights */}
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-purple-600">
+              <BarChart3 className="h-3 w-3" />
+            </span>
+            AI Insights
+          </h2>
+          <InsightCards />
+        </section>
+
+        {/* 3. Volume & Engagement */}
+        <section className="grid gap-6 lg:grid-cols-3">
+          <motion.div variants={itemVariants} className="lg:col-span-2">
+            <ChartCard
+              title="Call Volume & Bookings"
+              description="Compare total incoming calls against successful bookings"
+              isLoading={isLoading}
+              className="h-full shadow-sm border-zinc-200/60"
+            >
+              <CallVolumeChart data={dailyMetrics} />
+            </ChartCard>
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="lg:col-span-1">
+            <ChartCard
+              title="Channel Breakdown"
+              description="Distribution of incoming communications"
+              isLoading={isLoading}
+              className="h-full shadow-sm border-zinc-200/60"
+            >
+              {channelData.length > 0 ? (
+                <ChannelBreakdown data={channelData} />
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+                  No channel data available
+                </div>
+              )}
+            </ChartCard>
+          </motion.div>
+        </section>
+
+        {/* 4. Conversion & Outcomes */}
+        <section className="grid gap-6 lg:grid-cols-2">
+          <motion.div variants={itemVariants}>
+            <ChartCard
+              title="Conversion Funnel"
+              description="Drop-off analysis from inquiry to completion"
+              isLoading={isLoading}
+              className="h-full shadow-sm border-zinc-200/60"
+            >
+              {funnelData?.stages ? (
+                <FunnelChart stages={funnelData.stages} />
+              ) : (
+                <div className="flex h-[300px] items-center justify-center text-sm text-zinc-500">
+                  No funnel data available
+                </div>
+              )}
+            </ChartCard>
+          </motion.div>
+
+          <motion.div variants={itemVariants}>
+            <ChartCard
+              title="Outcome Distribution"
+              description="Breakdown of all conversation outcomes"
+              isLoading={isLoading}
+              className="h-full shadow-sm border-zinc-200/60"
+            >
+              {outcomeData.length > 0 ? (
+                <OutcomeBreakdown data={outcomeData} />
+              ) : (
+                <div className="flex h-[300px] items-center justify-center text-sm text-zinc-500">
+                  No outcome data available
+                </div>
+              )}
+            </ChartCard>
+          </motion.div>
+        </section>
+
+        {/* 5. Quality & Performance */}
+        <section className="grid gap-6 lg:grid-cols-3">
+          <motion.div variants={itemVariants} className="lg:col-span-2">
+            <SatisfactionTrendChart data={dailyMetrics} />
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="lg:col-span-1">
+             <ChartCard
+              title="Performance by Service"
+              description="Top converting service categories"
+              isLoading={false} // Mock data is always ready
+              className="h-full shadow-sm border-zinc-200/60"
+            >
+              <ServicePerformance />
+            </ChartCard>
+          </motion.div>
+        </section>
+
+        {/* 6. Time Analysis */}
+        <motion.section variants={itemVariants}>
+          <ChartCard
+            title="Peak Traffic Heatmap"
+            description="Identify high-volume hours to optimize staffing"
+            isLoading={isLoading}
+            className="shadow-sm border-zinc-200/60"
           >
-            {DATE_RANGES.map((range) => (
-              <ToggleGroupItem
-                key={range.value}
-                value={range.value}
-                aria-label={`View ${range.label}`}
-              >
-                {range.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
-      </header>
-
-      {isLoading && (
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
-          <p className="text-sm text-zinc-600">Loading analytics data...</p>
-        </div>
-      )}
-
-      {!isLoading && !hasData && (
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-8 text-center">
-          <p className="text-sm text-zinc-600">
-            No analytics data available for the selected period. Data will appear once calls are recorded.
-          </p>
-        </div>
-      )}
-
-      {!isLoading && hasData && (
-        <div className="grid gap-6">
-          {/* Top Row: Call Volume */}
-          <div className="grid gap-6 md:grid-cols-1">
-            <CallVolumeChart data={metrics} />
-          </div>
-
-          {/* Second Row: Satisfaction and Conversion */}
-          <div className="grid gap-6 md:grid-cols-2">
-            <SatisfactionTrendChart data={metrics} />
-            <ConversionRateChart data={metrics} />
-          </div>
-
-          {/* Third Row: Call Duration */}
-          <div className="grid gap-6 md:grid-cols-1">
-            <CallDurationChart data={metrics} />
-          </div>
-        </div>
-      )}
+            {heatmapData.length > 0 ? (
+              <Heatmap data={heatmapData} />
+            ) : (
+              <div className="flex h-[200px] items-center justify-center text-sm text-zinc-500">
+                No heatmap data available
+              </div>
+            )}
+          </ChartCard>
+        </motion.section>
+      </motion.div>
     </div>
   );
 }

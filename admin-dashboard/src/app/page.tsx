@@ -1,18 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Clock3, MessageSquare, Smile, Users, Download, Calendar } from "lucide-react";
-import { StatCard } from "@/components/stat-card";
-import { SplitStatCard } from "@/components/split-stat-card";
-import {
-  CallLogTable,
-  type CallRecord,
-} from "@/components/call-log-table";
+import { ArrowUpRight, Clock3, MessageSquare, Smile, Users, Download, Calendar as CalendarIcon } from "lucide-react";
+
+import { EnhancedStatCard } from "@/components/dashboard/enhanced-stat-card";
+import { PeriodSelector } from "@/components/period-selector";
 import { Button } from "@/components/ui/button";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CallLogTable, type CallRecord } from "@/components/call-log-table";
 import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
 
+// Types
 type MetricsResponse = {
   period: string;
   total_calls: number;
@@ -43,147 +41,80 @@ const defaultMetrics: MetricsResponse = {
   total_messages_sent: 0,
 };
 
-function getAppOrigin(): string {
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL;
-  }
-
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-
-  return "http://localhost:3000";
-}
-
+// Utils
 function resolveInternalUrl(path: string): string {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-  // Use relative URLs so calls always go to the same origin/port as the app
   return `${basePath}${path}`;
 }
 
-async function fetchCallHistory(): Promise<CallRecord[]> {
-  try {
-    const url = resolveInternalUrl("/api/admin/communications?page_size=20");
+// Mock Data Generators
+const generateSparklineData = (points: number = 7, min: number = 10, max: number = 50) => {
+  return Array.from({ length: points }, () => ({
+    value: Math.floor(Math.random() * (max - min + 1)) + min,
+  }));
+};
 
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) {
-      console.warn("Failed to fetch communications", response.statusText);
-      return [];
-    }
-
-    const { conversations } = (await response.json()) as {
-      conversations: Array<{
-        id: string;
-        initiated_at: string;
-        completed_at: string | null;
-        outcome: string | null;
-        customer_phone?: string | null;
-        satisfaction_score?: number | null;
-        customer_name?: string | null;
-        channel: string;
-        metadata?: { escalated?: boolean; phone_number?: string } | null;
-      }>;
-    };
-
-    const allowedOutcomes: CallRecord["outcome"][] = [
-      "booked",
-      "info_only",
-      "escalated",
-      "abandoned",
-      "rescheduled",
-    ];
-
-    return conversations.map((conversation) => {
-      const normalizedOutcome = (conversation.outcome ?? "info_only").toLowerCase();
-      const isEscalated = conversation.metadata?.escalated ?? false;
-      const outcome = (
-        allowedOutcomes.includes(normalizedOutcome as CallRecord["outcome"])
-          ? normalizedOutcome
-          : isEscalated
-            ? "escalated"
-            : "info_only"
-      ) as CallRecord["outcome"];
-
-      // Calculate duration from initiated_at and completed_at
-      let durationSeconds = 0;
-      if (conversation.completed_at) {
-        const start = new Date(conversation.initiated_at).getTime();
-        const end = new Date(conversation.completed_at).getTime();
-        durationSeconds = Math.floor((end - start) / 1000);
-      }
-
-      return {
-        id: conversation.id,
-        startedAt: conversation.initiated_at,
-        durationSeconds,
-        outcome,
-        phoneNumber: conversation.customer_phone ?? conversation.metadata?.phone_number,
-        satisfactionScore: conversation.satisfaction_score ?? undefined,
-        escalated: isEscalated,
-        customerName: conversation.customer_name ?? undefined,
-        channel: (conversation.channel as CallRecord["channel"]) ?? undefined,
-      } satisfies CallRecord;
-    });
-  } catch (error) {
-    console.error("Error fetching communications", error);
-    return [];
-  }
-}
-
-const numberFormatter = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 1,
-});
-
-const PERIODS = [
-  { label: "Today", value: "today" },
-  { label: "Week", value: "week" },
-  { label: "Month", value: "month" },
-] as const;
 
 export default function Home() {
   const [metrics, setMetrics] = useState<MetricsResponse>(defaultMetrics);
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("today");
-
+  
   // Call log filters
   const [outcomeFilter, setOutcomeFilter] = useState<CallRecord["outcome"] | "all">("all");
   const [channelFilter, setChannelFilter] = useState<CallRecord["channel"] | "all">("all");
   const [satisfactionFilter, setSatisfactionFilter] = useState<"all" | "high" | "medium" | "low">("all");
 
+  // Fetch Data
   useEffect(() => {
-    const loadMetrics = async () => {
+    const loadData = async () => {
       try {
-        const response = await fetch(`/api/admin/metrics/overview?period=${selectedPeriod}`, {
-          cache: "no-store",
-        });
+        // Parallel fetching
+        const [metricsRes, callsRes] = await Promise.all([
+          fetch(`/api/admin/metrics/overview?period=${selectedPeriod}`, { cache: "no-store" }),
+          fetch(resolveInternalUrl("/api/admin/communications?page_size=20"), { cache: "no-store" }),
+        ]);
 
-        if (!response.ok) {
-          console.warn("Failed to fetch metrics", response.statusText);
-          setMetrics(defaultMetrics);
-          return;
+        // Handle Metrics
+        if (metricsRes.ok) {
+          const data = await metricsRes.json();
+          setMetrics(data);
         }
 
-        const data = (await response.json()) as MetricsResponse;
-        setMetrics(data);
+        // Handle Calls
+        if (callsRes.ok) {
+          const data = await callsRes.json();
+          const allowedOutcomes = ["booked", "info_only", "escalated", "abandoned", "rescheduled"];
+          
+          const transformedCalls: CallRecord[] = data.conversations.map((c: any) => {
+             const normalizedOutcome = (c.outcome ?? "").toLowerCase();
+             const outcome = allowedOutcomes.includes(normalizedOutcome) 
+               ? normalizedOutcome as CallRecord["outcome"]
+               : (c.metadata?.escalated ? "escalated" : "info_only");
+
+             return {
+              id: c.id,
+              startedAt: c.initiated_at,
+              durationSeconds: c.completed_at ? Math.floor((new Date(c.completed_at).getTime() - new Date(c.initiated_at).getTime()) / 1000) : 0,
+              outcome,
+              phoneNumber: c.customer_phone,
+              satisfactionScore: c.satisfaction_score,
+              escalated: c.metadata?.escalated ?? false,
+              customerName: c.customer_name,
+              channel: c.channel as CallRecord["channel"],
+            };
+          });
+          setCalls(transformedCalls);
+        }
       } catch (error) {
-        console.error("Error fetching metrics", error);
-        setMetrics(defaultMetrics);
+        console.error("Error loading dashboard data", error);
       }
     };
 
-    loadMetrics();
+    loadData();
   }, [selectedPeriod]);
 
-  useEffect(() => {
-    const loadCalls = async () => {
-      const callsData = await fetchCallHistory();
-      setCalls(callsData);
-    };
-
-    loadCalls();
-  }, []);
-
-  // Filter calls based on selected filters
+  // Filter calls
   const filteredCalls = calls.filter((call) => {
     // Outcome filter
     if (outcomeFilter !== "all" && call.outcome !== outcomeFilter) {
@@ -225,89 +156,54 @@ export default function Home() {
   };
 
   return (
-    <div className="space-y-10">
-      {/* Header with Period Selector */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-8 pb-8">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Dashboard</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Overview of key metrics and recent activity
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Dashboard</h1>
+          <p className="text-zinc-500">Overview of your practice's performance</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-zinc-500" />
-          <ToggleGroup
-            type="single"
-            value={selectedPeriod}
-            onValueChange={(value) => {
-              if (value) setSelectedPeriod(value);
-            }}
-          >
-            {PERIODS.map((period) => (
-              <ToggleGroupItem
-                key={period.value}
-                value={period.value}
-                aria-label={`View ${period.label}`}
-              >
-                {period.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
+        <PeriodSelector
+          selectedPeriod={selectedPeriod}
+          onPeriodChange={setSelectedPeriod}
+        />
       </div>
 
-      <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        {/* Card 1: Appointments Booked */}
-        <StatCard
+      {/* Stats Grid */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <EnhancedStatCard
           title="Appointments Booked"
-          value={metrics.appointments_booked.toString()}
-          description="Bookings directly handled by Eva"
-          icon={<ArrowUpRight className="h-5 w-5" />}
-          trend={
-            <span className="text-xs uppercase tracking-[0.2em] text-emerald-600">
-              {numberFormatter.format(metrics.conversion_rate)}% conversion
-            </span>
-          }
+          value={metrics.appointments_booked}
+          icon={<CalendarIcon className="h-5 w-5 text-violet-600" />}
+          sparklineData={generateSparklineData(7, 2, 15)}
+          color="primary"
+          description={`${metrics.conversion_rate.toFixed(1)}% conversion rate`}
         />
-
-        {/* Card 2: Customers Engaged */}
-        <StatCard
+        <EnhancedStatCard
           title="Customers Engaged"
-          value={metrics.customers_engaged.toString()}
-          description="Unique customers Eva has assisted"
-          icon={<Users className="h-5 w-5" />}
-          trend={
-            <span className="flex items-center gap-1 text-sky-600">
-              <ArrowUpRight className="h-4 w-4" />
-              Building relationships
-            </span>
-          }
+          value={metrics.customers_engaged}
+          icon={<Users className="h-5 w-5 text-emerald-600" />}
+          sparklineData={generateSparklineData(7, 10, 50)}
+          color="success"
+          description="New and returning"
         />
-
-        {/* Card 3: Time Spent + Messages Sent (Split) */}
-        <SplitStatCard
-          title="Communication Activity"
-          leftMetric={{
-            label: "Time Spent",
-            value: `${numberFormatter.format(metrics.total_talk_time_minutes)} min`,
-            icon: <Clock3 className="h-4 w-4" />,
-          }}
-          rightMetric={{
-            label: "Messages",
-            value: metrics.total_messages_sent.toString(),
-            icon: <MessageSquare className="h-4 w-4" />,
-          }}
-          description="Voice minutes and text/email messages sent"
+        <EnhancedStatCard
+          title="Call Minutes"
+          value={metrics.total_talk_time_minutes}
+          icon={<Clock3 className="h-5 w-5 text-amber-600" />}
+          sparklineData={generateSparklineData(7, 20, 80)}
+          color="warning"
+          description="minutes saved"
         />
-
-        {/* Card 4: Satisfaction Score */}
-        <StatCard
-          title="Satisfaction Score"
-          value={`${numberFormatter.format(metrics.avg_satisfaction_score)}/10`}
-          description={`${metrics.calls_escalated} escalations (${numberFormatter.format(metrics.escalation_rate)}%)`}
-          icon={<Smile className="h-5 w-5" />}
+        <EnhancedStatCard
+          title="Messages Sent"
+          value={metrics.total_messages_sent}
+          icon={<MessageSquare className="h-5 w-5 text-sky-600" />}
+          sparklineData={generateSparklineData(7, 8, 10)}
+          color="info"
+          description="SMS and Email"
         />
-      </section>
+      </div>
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
@@ -322,14 +218,11 @@ export default function Home() {
         </div>
 
         {/* Call Log Filters */}
-        <div className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
           <span className="text-sm font-medium text-zinc-700">Filter:</span>
-
           <Select
             value={outcomeFilter}
-            onValueChange={(value: CallRecord["outcome"] | "all") => {
-              setOutcomeFilter(value);
-            }}
+            onValueChange={(value: CallRecord["outcome"] | "all") => setOutcomeFilter(value)}
           >
             <SelectTrigger className="w-[140px] bg-white">
               <SelectValue placeholder="Outcome" />
@@ -346,9 +239,7 @@ export default function Home() {
 
           <Select
             value={channelFilter}
-            onValueChange={(value) => {
-              setChannelFilter(value as CallRecord["channel"] | "all");
-            }}
+            onValueChange={(value) => setChannelFilter(value as CallRecord["channel"] | "all")}
           >
             <SelectTrigger className="w-[130px] bg-white">
               <SelectValue placeholder="Channel" />
@@ -364,9 +255,7 @@ export default function Home() {
 
           <Select
             value={satisfactionFilter}
-            onValueChange={(value: "all" | "high" | "medium" | "low") => {
-              setSatisfactionFilter(value);
-            }}
+            onValueChange={(value: "all" | "high" | "medium" | "low") => setSatisfactionFilter(value)}
           >
             <SelectTrigger className="w-[150px] bg-white">
               <SelectValue placeholder="Satisfaction" />
@@ -393,7 +282,7 @@ export default function Home() {
             </Button>
           )}
 
-          <span className="ml-auto text-sm text-zinc-500">
+          <span className="ml-auto text-sm text-zinc-500 hidden sm:inline-block">
             Showing {filteredCalls.length} of {calls.length} calls
           </span>
         </div>

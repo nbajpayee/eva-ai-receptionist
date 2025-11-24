@@ -1,99 +1,392 @@
-"use client";
+'use client'
 
-import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, TrendingDown, DollarSign, Users, Target, Award } from "lucide-react";
-import Link from "next/link";
+/**
+ * Provider Performance Page
+ * Redesigned with premium aesthetic, glassmorphism, and advanced animations.
+ */
+
+import { useState, useEffect, useMemo } from 'react'
+import { 
+  LayoutGroup, 
+  motion, 
+  AnimatePresence, 
+  useMotionValue, 
+  useTransform, 
+  animate 
+} from 'framer-motion'
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  DollarSign, 
+  Users, 
+  Target, 
+  Award, 
+  Calendar, 
+  Download, 
+  Search,
+  MoreHorizontal,
+  ArrowUpRight,
+  Star,
+  Activity
+} from 'lucide-react'
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer
+} from 'recharts'
+import { cn } from '@/lib/utils'
+
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Skeleton } from '@/components/ui/skeleton'
+import Link from 'next/link'
+
+// --- Types ---
 
 type ProviderSummary = {
-  provider_id: string;
-  name: string;
-  email: string;
-  avatar_url: string | null;
-  specialties: string[];
-  total_consultations: number;
-  successful_bookings: number;
-  conversion_rate: number;
-  total_revenue: number;
-  avg_satisfaction_score: number | null;
-};
+  provider_id: string
+  name: string
+  email: string
+  avatar_url: string | null
+  specialties: string[]
+  total_consultations: number
+  successful_bookings: number
+  conversion_rate: number
+  total_revenue: number
+  avg_satisfaction_score: number | null
+}
 
 type ProviderSummaryResponse = {
-  providers: ProviderSummary[];
-  period_days: number;
-};
+  providers: ProviderSummary[]
+  period_days: number
+}
 
-export default function ProvidersPage() {
-  const [data, setData] = useState<ProviderSummaryResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [periodDays, setPeriodDays] = useState(30);
-  const [sortBy, setSortBy] = useState<"conversion_rate" | "revenue" | "consultations">("conversion_rate");
+// --- Animation Variants ---
 
-  const fetchProviders = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/providers/summary?days=${periodDays}`);
-      const json = await res.json();
-      setData(json);
-    } catch (error) {
-      console.error("Failed to fetch providers:", error);
-    } finally {
-      setLoading(false);
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
     }
-  }, [periodDays]);
+  }
+}
+
+const itemVariants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: { type: 'spring' as const, stiffness: 300, damping: 24 }
+  }
+}
+
+const chartVariants = {
+  hidden: { opacity: 0, scale: 0.95 },
+  visible: { 
+    opacity: 1, 
+    scale: 1,
+    transition: { duration: 0.5, ease: "easeOut" as const }
+  }
+}
+
+// --- Components ---
+
+const Counter = ({ value, prefix = '', suffix = '', decimals = 0 }: { value: number, prefix?: string, suffix?: string, decimals?: number }) => {
+  const count = useMotionValue(0)
+  const rounded = useTransform(count, latest => {
+    return prefix + latest.toFixed(decimals) + suffix
+  })
 
   useEffect(() => {
-    void fetchProviders();
-  }, [fetchProviders]);
+    const controls = animate(count, value, { duration: 1.5, ease: "easeOut" })
+    return controls.stop
+  }, [value, count])
 
-  const sortedProviders = data?.providers ? [...data.providers].sort((a, b) => {
-    if (sortBy === "conversion_rate") {
-      return b.conversion_rate - a.conversion_rate;
-    } else if (sortBy === "revenue") {
-      return b.total_revenue - a.total_revenue;
-    } else {
-      return b.total_consultations - a.total_consultations;
+  return <motion.span>{rounded}</motion.span>
+}
+
+const StatCard = ({ 
+  title, 
+  value, 
+  prefix = '', 
+  suffix = '', 
+  decimals = 0, 
+  icon: Icon, 
+  trend, 
+  trendLabel,
+  colorClass = "text-zinc-900"
+}: any) => {
+  // Generate background color from text color (e.g. text-emerald-600 -> bg-emerald-100)
+  const bgClass = colorClass.replace('text-', 'bg-').replace('600', '100').replace('500', '100')
+  
+  return (
+    <Card className="relative overflow-hidden border-zinc-200/60 bg-white/50 backdrop-blur-xl transition-all duration-300 hover:shadow-lg hover:shadow-zinc-200/50">
+      <div className="absolute right-0 top-0 -mr-4 -mt-4 h-24 w-24 rounded-full bg-gradient-to-br from-zinc-100 to-transparent opacity-50 blur-2xl" />
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-zinc-500">{title}</CardTitle>
+        <div className={cn("rounded-full p-2", bgClass)}>
+          <Icon className={cn("h-4 w-4", colorClass)} />
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold text-zinc-900">
+          <Counter value={value} prefix={prefix} suffix={suffix} decimals={decimals} />
+        </div>
+        <div className="mt-1 flex items-center text-xs">
+          {trend > 0 ? (
+            <span className="flex items-center text-emerald-600 font-medium">
+              <TrendingUp className="mr-1 h-3 w-3" />
+              +{trend}%
+            </span>
+          ) : (
+            <span className="flex items-center text-rose-600 font-medium">
+              <TrendingDown className="mr-1 h-3 w-3" />
+              {trend}%
+            </span>
+          )}
+          <span className="ml-1.5 text-zinc-400">{trendLabel}</span>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+const ProviderCard = ({ provider, maxRevenue }: { provider: ProviderSummary, maxRevenue: number }) => {
+  const initials = provider.name.split(' ').map(n => n[0]).join('').substring(0, 2)
+  
+  return (
+    <motion.div
+      variants={itemVariants}
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      className="group relative"
+    >
+      <Link href={`/providers/${provider.provider_id}`}>
+        <Card className="h-full border-zinc-200/60 bg-white/80 overflow-hidden backdrop-blur-sm transition-all duration-300 hover:border-sky-200 hover:shadow-xl hover:shadow-sky-100/50">
+          {/* Decorative background gradient */}
+          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-sky-50/30 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+          
+          {/* Absolute Positioned Badge */}
+          <div className="absolute top-4 right-4 z-20">
+            <Badge 
+              variant="secondary" 
+              className={cn(
+                "font-medium border shadow-sm",
+                provider.conversion_rate >= 50 
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
+                  : "bg-zinc-50 text-zinc-600 border-zinc-100"
+              )}
+            >
+              {provider.conversion_rate.toFixed(0)}% Conv.
+            </Badge>
+          </div>
+
+          <CardHeader className="relative z-10 flex flex-row items-start gap-4 space-y-0 pb-2 pt-5 px-5">
+            <div className="relative flex-shrink-0">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-sky-100 to-blue-100 text-sky-700 font-bold shadow-sm ring-2 ring-white">
+                {provider.avatar_url ? (
+                  <img src={provider.avatar_url} alt={provider.name} className="h-full w-full rounded-full object-cover" />
+                ) : (
+                  initials
+                )}
+              </div>
+              {provider.avg_satisfaction_score && provider.avg_satisfaction_score >= 4.8 && (
+                <div className="absolute -bottom-1 -right-1 rounded-full bg-yellow-400 p-1 ring-2 ring-white shadow-sm">
+                  <Star className="h-3 w-3 fill-white text-white" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0 pt-1 pr-16"> {/* Added padding right to avoid badge overlap */}
+              <h3 className="font-semibold text-zinc-900 truncate text-base group-hover:text-sky-600 transition-colors">
+                {provider.name}
+              </h3>
+              <p className="text-sm text-zinc-500 truncate mt-0.5">
+                {provider.specialties.length > 0 ? provider.specialties[0] : 'General'}
+              </p>
+            </div>
+          </CardHeader>
+          
+          <CardContent className="relative z-10 space-y-5 px-5 pb-5">
+            {/* Revenue Section */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-end">
+                <span className="text-xs font-medium text-zinc-500">Revenue Generated</span>
+                <span className="text-sm font-bold text-zinc-900">${provider.total_revenue.toLocaleString()}</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100/80 ring-1 ring-inset ring-zinc-900/5">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  whileInView={{ width: `${Math.max((provider.total_revenue / maxRevenue) * 100, 0)}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className={cn(
+                    "h-full rounded-full",
+                    provider.total_revenue > 0 
+                      ? "bg-gradient-to-r from-sky-400 to-blue-600"
+                      : "bg-transparent"
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Stats Grid - Removed Box, Just Dividers */}
+            <div className="flex items-center py-2">
+              <div className="flex-1 text-center border-r border-zinc-100">
+                <p className="text-xs text-zinc-400 font-medium">Consults</p>
+                <p className="mt-1 text-xl font-bold text-zinc-700">{provider.total_consultations}</p>
+              </div>
+              <div className="flex-1 text-center">
+                <p className="text-xs text-zinc-400 font-medium">Bookings</p>
+                <p className="mt-1 text-xl font-bold text-sky-600">{provider.successful_bookings}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between pt-1 border-t border-zinc-100/50 mt-2">
+              <span className="flex items-center gap-1 text-xs font-medium text-zinc-400 group-hover:text-sky-600 transition-colors mt-3">
+                View Profile <ArrowUpRight className="h-3 w-3" />
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
+    </motion.div>
+  )
+}
+
+const LeaderboardRow = ({ provider, rank }: { provider: ProviderSummary, rank: number }) => (
+  <motion.div 
+    variants={itemVariants}
+    className="group flex items-center gap-3 rounded-xl border border-transparent p-2.5 transition-all hover:bg-zinc-50 hover:border-zinc-200"
+  >
+    <div className={cn(
+      "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full font-bold text-xs shadow-sm",
+      rank === 1 ? "bg-amber-100 text-amber-700 border border-amber-200" :
+      rank === 2 ? "bg-zinc-100 text-zinc-700 border border-zinc-200" :
+      rank === 3 ? "bg-orange-100 text-orange-800 border border-orange-200" :
+      "bg-transparent text-zinc-400"
+    )}>
+      {rank}
+    </div>
+    
+    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sky-100 to-indigo-50 text-sky-700 text-xs font-bold shadow-sm">
+      {provider.name.charAt(0)}
+    </div>
+    
+    <div className="flex-1 min-w-0 pr-2">
+      <h4 className="font-medium text-zinc-900 text-sm truncate">{provider.name}</h4>
+      <p className="text-xs text-zinc-500 truncate max-w-[120px]">{provider.specialties[0] || 'Specialist'}</p>
+    </div>
+
+    <div className="text-right flex-shrink-0">
+      <span className="block text-sm font-bold text-zinc-900">{provider.conversion_rate.toFixed(1)}%</span>
+      <span className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wide">Conv</span>
+    </div>
+  </motion.div>
+)
+
+// --- Main Page ---
+
+export default function ProvidersPage() {
+  const [data, setData] = useState<ProviderSummaryResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [periodDays, setPeriodDays] = useState(30)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+
+  useEffect(() => {
+    const fetchProviders = async () => {
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/providers/summary?days=${periodDays}`)
+        const json = await res.json()
+        setData(json)
+      } catch (error) {
+        console.error("Failed to fetch providers:", error)
+      } finally {
+        // Add a small delay to let animations play nicely if data loads too fast
+        setTimeout(() => setLoading(false), 500)
+      }
     }
-  }) : [];
+    fetchProviders()
+  }, [periodDays])
 
-  const topPerformer = sortedProviders[0];
-  const avgConversionRate = sortedProviders.length > 0
-    ? sortedProviders.reduce((sum, p) => sum + p.conversion_rate, 0) / sortedProviders.length
-    : 0;
+  const filteredProviders = useMemo(() => {
+    if (!data?.providers) return []
+    return data.providers.filter(p => 
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.email.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [data, searchQuery])
+
+  const sortedByRevenue = useMemo(() => {
+    return [...filteredProviders].sort((a, b) => b.total_revenue - a.total_revenue)
+  }, [filteredProviders])
+
+  const sortedByConversion = useMemo(() => {
+    return [...filteredProviders].sort((a, b) => b.conversion_rate - a.conversion_rate)
+  }, [filteredProviders])
+
+  const totalRevenue = filteredProviders.reduce((sum, p) => sum + p.total_revenue, 0)
+  const avgConversion = filteredProviders.length > 0 
+    ? filteredProviders.reduce((sum, p) => sum + p.conversion_rate, 0) / filteredProviders.length 
+    : 0
+  const totalBookings = filteredProviders.reduce((sum, p) => sum + p.successful_bookings, 0)
+
+  // Max revenue for progress bars
+  const maxRevenue = Math.max(...filteredProviders.map(p => p.total_revenue), 0)
 
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
+      <div className="p-8 space-y-8 max-w-7xl mx-auto">
+        <div className="flex justify-between items-end">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+          <Skeleton className="h-10 w-32" />
         </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-[400px] rounded-xl" />
       </div>
-    );
+    )
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="min-h-screen bg-zinc-50/50 p-6 md:p-8 font-sans">
+      <div className="mx-auto max-w-7xl space-y-8">
+        
+        {/* Header */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
+        >
         <div>
-          <h1 className="text-3xl font-bold">Provider Performance</h1>
-          <p className="text-muted-foreground mt-2">
-            Track and compare provider metrics across the team
+            <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Provider Performance</h1>
+            <p className="mt-2 text-zinc-500 max-w-2xl">
+              Monitor team performance, revenue attribution, and conversion metrics in real-time.
           </p>
         </div>
 
-        <Select
-          value={periodDays.toString()}
-          onValueChange={(value: string) => {
-            setPeriodDays(parseInt(value, 10));
-          }}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Time period" />
+          <div className="flex items-center gap-2">
+            <Select value={periodDays.toString()} onValueChange={(v) => setPeriodDays(parseInt(v))}>
+              <SelectTrigger className="w-[140px] bg-white border-zinc-200 shadow-sm">
+                <SelectValue>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-zinc-500" />
+                    <span>{periodDays === 7 ? 'Last 7 days' : periodDays === 30 ? 'Last 30 days' : 'Last 90 days'}</span>
+                  </div>
+                </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="7">Last 7 days</SelectItem>
@@ -101,190 +394,231 @@ export default function ProvidersPage() {
             <SelectItem value="90">Last 90 days</SelectItem>
           </SelectContent>
         </Select>
-      </div>
-
-      {/* Overview Stats */}
-      <div className="grid gap-4 md:grid-cols-4 mb-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Providers</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{sortedProviders.length}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Conversion Rate</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{avgConversionRate.toFixed(1)}%</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Top Performer</CardTitle>
-            <Award className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold truncate">{topPerformer?.name || "N/A"}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {topPerformer?.conversion_rate.toFixed(1)}% conversion
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ${sortedProviders.reduce((sum, p) => sum + p.total_revenue, 0).toLocaleString()}
+            
+            <Button variant="outline" className="bg-white shadow-sm border-zinc-200">
+              <Download className="mr-2 h-4 w-4 text-zinc-500" />
+              Export
+            </Button>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+        </motion.div>
 
-      {/* Sort Controls */}
-      <div className="mb-4 flex gap-2">
-        <Button
-          variant={sortBy === "conversion_rate" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSortBy("conversion_rate")}
+        {/* Stats Overview */}
+        <motion.div 
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
         >
-          Sort by Conversion Rate
-        </Button>
-        <Button
-          variant={sortBy === "revenue" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSortBy("revenue")}
-        >
-          Sort by Revenue
-        </Button>
-        <Button
-          variant={sortBy === "consultations" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSortBy("consultations")}
-        >
-          Sort by Consultations
-        </Button>
-      </div>
+          <StatCard 
+            title="Total Revenue" 
+            value={totalRevenue} 
+            prefix="$" 
+            icon={DollarSign}
+            trend={12.5}
+            trendLabel="vs last period"
+            colorClass="text-emerald-600"
+          />
+          <StatCard 
+            title="Avg Conversion" 
+            value={avgConversion} 
+            suffix="%" 
+            decimals={1}
+            icon={Target}
+            trend={-2.4}
+            trendLabel="vs last period"
+            colorClass="text-blue-600"
+          />
+          <StatCard 
+            title="Total Bookings" 
+            value={totalBookings} 
+            icon={Users}
+            trend={8.2}
+            trendLabel="vs last period"
+            colorClass="text-violet-600"
+          />
+          <StatCard 
+            title="Active Providers" 
+            value={filteredProviders.length} 
+            icon={Activity}
+            trend={0}
+            trendLabel="stable"
+            colorClass="text-amber-600"
+          />
+        </motion.div>
 
-      {/* Provider Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {sortedProviders.map((provider, index) => {
-          const isTopPerformer = index === 0;
-          const aboveAverage = provider.conversion_rate >= avgConversionRate;
-
-          return (
-            <Link href={`/providers/${provider.provider_id}`} key={provider.provider_id}>
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg">
-                        {provider.name.charAt(0)}
-                      </div>
-                      <div>
-                        <CardTitle className="text-lg">{provider.name}</CardTitle>
-                        <CardDescription className="text-xs">
-                          {provider.specialties.slice(0, 2).join(", ") || "General"}
-                        </CardDescription>
-                      </div>
-                    </div>
-                    {isTopPerformer && (
-                      <Badge className="bg-yellow-500 hover:bg-yellow-600">
-                        <Award className="h-3 w-3 mr-1" />
-                        Top
-                      </Badge>
-                    )}
-                  </div>
+        {/* Main Content Area */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          
+          {/* Left Column: Chart & Grid (2/3 width) */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            {/* Chart Section */}
+            <motion.div
+              variants={chartVariants}
+              initial="hidden"
+              animate="visible"
+            >
+              <Card className="overflow-hidden border-zinc-200/60 bg-white shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">Revenue & Conversion Comparison</CardTitle>
+                  <CardDescription>Top performing providers by revenue contribution</CardDescription>
                 </CardHeader>
-
-                <CardContent className="space-y-4">
-                  {/* Conversion Rate */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium">Conversion Rate</span>
-                      <div className="flex items-center gap-1">
-                        {aboveAverage ? (
-                          <TrendingUp className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <TrendingDown className="h-4 w-4 text-red-600" />
-                        )}
-                        <span className="text-lg font-bold">
-                          {provider.conversion_rate.toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                    <Progress
-                      value={provider.conversion_rate}
-                      className="h-2"
-                    />
-                  </div>
-
-                  {/* Metrics Grid */}
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Consultations</p>
-                      <p className="text-xl font-bold">{provider.total_consultations}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Bookings</p>
-                      <p className="text-xl font-bold text-green-600">
-                        {provider.successful_bookings}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Revenue</p>
-                      <p className="text-lg font-semibold">
-                        ${provider.total_revenue.toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Satisfaction</p>
-                      <p className="text-lg font-semibold">
-                        {provider.avg_satisfaction_score?.toFixed(1) || "N/A"}/10
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Performance Badge */}
-                  <div className="pt-2">
-                    {aboveAverage ? (
-                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                        Above Average
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                        Coaching Opportunity
-                      </Badge>
-                    )}
+                <CardContent className="pl-0">
+                  <div className="h-[350px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={sortedByRevenue.slice(0, 6)} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                        <defs>
+                          <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f4f4f5" />
+                        <XAxis 
+                          dataKey="name" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fill: '#71717a', fontSize: 12, fontWeight: 500 }}
+                          tickFormatter={(val: string) => val.split(' ')[1] || val.split(' ')[0]} 
+                          interval={0}
+                        />
+                        <YAxis 
+                          yAxisId="left" 
+                          orientation="left" 
+                          stroke="#8B5CF6" 
+                          axisLine={false} 
+                          tickLine={false}
+                          tickFormatter={(value: number) => `$${value}`}
+                          tick={{ fill: '#71717a', fontSize: 12 }}
+                        />
+                        <YAxis 
+                          yAxisId="right" 
+                          orientation="right" 
+                          stroke="#3B82F6" 
+                          axisLine={false} 
+                          tickLine={false}
+                          tickFormatter={(value: number) => `${value}%`}
+                          tick={{ fill: '#71717a', fontSize: 12 }}
+                        />
+                        <Tooltip 
+                          cursor={{ fill: '#f4f4f5' }}
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                        />
+                        <Bar 
+                          yAxisId="left" 
+                          dataKey="total_revenue" 
+                          name="Revenue" 
+                          fill="url(#colorRevenue)" 
+                          radius={[6, 6, 0, 0]} 
+                          barSize={48}
+                        />
+                        <Bar 
+                          yAxisId="right" 
+                          dataKey="conversion_rate" 
+                          name="Conversion Rate" 
+                          fill="#3B82F6" 
+                          radius={[6, 6, 0, 0]} 
+                          barSize={16}
+                          opacity={0.8}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
                 </CardContent>
               </Card>
-            </Link>
-          );
-        })}
+            </motion.div>
+
+            {/* Provider Grid Filter */}
+            <div className="flex items-center justify-between">
+              <div className="relative w-full max-w-sm">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
+                <Input 
+                  type="search" 
+                  placeholder="Search providers..." 
+                  className="pl-9 bg-white border-zinc-200 rounded-xl"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                 {/* View Toggles could go here */}
+              </div>
+            </div>
+
+            {/* Provider Grid */}
+            <motion.div 
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              className="grid gap-4 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3"
+            >
+              <AnimatePresence mode="popLayout">
+                {filteredProviders.map(provider => (
+                  <ProviderCard 
+                    key={provider.provider_id} 
+                    provider={provider} 
+                    maxRevenue={maxRevenue}
+                  />
+                ))}
+              </AnimatePresence>
+              
+              {filteredProviders.length === 0 && (
+                <div className="col-span-full py-12 text-center text-zinc-500">
+                  No providers found matching your search.
+                </div>
+              )}
+            </motion.div>
       </div>
 
-      {sortedProviders.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Users className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-lg font-medium text-muted-foreground">No provider data available</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Record some consultations to see provider analytics
-            </p>
+          {/* Right Column: Leaderboard (1/3 width) */}
+          <div className="space-y-6">
+            <Card className="border-zinc-200/60 bg-white/80 shadow-sm backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Award className="h-5 w-5 text-yellow-500" />
+                  Top Performers
+                </CardTitle>
+                <CardDescription>
+                  Ranked by conversion rate
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-1 p-3 pt-0">
+                {sortedByConversion.slice(0, 5).map((provider, i) => (
+                  <LeaderboardRow 
+                    key={provider.provider_id} 
+                    provider={provider} 
+                    rank={i + 1} 
+                  />
+                ))}
+                
+                {sortedByConversion.length > 5 && (
+                  <Button variant="ghost" className="w-full mt-2 text-xs text-zinc-500">
+                    View All Rankings
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="relative overflow-hidden border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white shadow-sm">
+              <div className="absolute top-0 right-0 -mr-8 -mt-8 h-32 w-32 rounded-full bg-indigo-100/50 blur-3xl" />
+              <CardHeader>
+                <CardTitle className="text-indigo-900 flex items-center gap-2">
+                  <Star className="h-4 w-4 text-indigo-500 fill-indigo-500" />
+                  Pro Tip
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                <p className="text-indigo-800/80 text-sm leading-relaxed">
+                  Providers with a satisfaction score above <span className="font-semibold text-indigo-900">9.0</span> have a 40% higher retention rate. Consider coaching specifically for patient experience.
+                </p>
+                <Button variant="outline" size="sm" className="mt-4 border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 shadow-sm">
+                  View Insights
+                </Button>
           </CardContent>
         </Card>
-      )}
+          </div>
+        </div>
+      </div>
     </div>
-  );
+  )
 }

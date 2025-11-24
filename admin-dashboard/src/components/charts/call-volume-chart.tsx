@@ -1,17 +1,8 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { format, parseISO } from "date-fns";
-
-interface DailyMetric {
-  date: string;
-  total_calls: number;
-  appointments_booked: number;
-  avg_satisfaction_score: number;
-  conversion_rate: number;
-  avg_call_duration_minutes: number;
-}
+import { DailyMetric } from "@/types/analytics-extended";
 
 interface CallVolumeChartProps {
   data: DailyMetric[];
@@ -24,52 +15,78 @@ export function CallVolumeChart({ data }: CallVolumeChartProps) {
     booked: metric.appointments_booked,
   }));
 
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-md">
+          <p className="font-semibold text-zinc-900">{label}</p>
+          <div className="mt-2 space-y-1">
+            {payload.map((entry: any) => (
+              <div key={entry.name} className="flex items-center gap-2 text-sm">
+                <div 
+                  className="h-2 w-2 rounded-full" 
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="text-zinc-500">{entry.name}:</span>
+                <span className="font-medium text-zinc-900">{entry.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Call Volume & Bookings</CardTitle>
-        <CardDescription>Daily call activity and appointments booked over time</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200" />
-            <XAxis
-              dataKey="date"
-              className="text-xs"
-              tick={{ fill: '#71717a' }}
-            />
-            <YAxis
-              className="text-xs"
-              tick={{ fill: '#71717a' }}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: 'white',
-                border: '1px solid #e4e4e7',
-                borderRadius: '6px',
-              }}
-            />
-            <Legend />
-            <Line
-              type="monotone"
-              dataKey="calls"
-              stroke="#3b82f6"
-              strokeWidth={2}
-              name="Total Calls"
-              dot={{ fill: '#3b82f6', r: 4 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="booked"
-              stroke="#10b981"
-              strokeWidth={2}
-              name="Appointments Booked"
-              dot={{ fill: '#10b981', r: 4 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
+    <div className="h-[300px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f4f4f5" />
+          <XAxis
+            dataKey="date"
+            tick={{ fontSize: 12, fill: '#71717a' }}
+            axisLine={false}
+            tickLine={false}
+            dy={10}
+            minTickGap={30}
+          />
+          <YAxis
+            tick={{ fontSize: 12, fill: '#71717a' }}
+            axisLine={false}
+            tickLine={false}
+            dx={-10}
+          />
+          <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#e4e4e7' }} />
+          <Legend 
+            verticalAlign="top" 
+            height={36} 
+            iconType="circle"
+            wrapperStyle={{ fontSize: "12px", paddingBottom: "10px" }}
+          />
+          <Line
+            type="monotone"
+            dataKey="calls"
+            stroke="#3b82f6" // blue-500
+            strokeWidth={3}
+            name="Total Calls"
+            dot={false}
+            activeDot={{ r: 6, fill: "#3b82f6", strokeWidth: 0 }}
+            animationDuration={1500}
+          />
+          <Line
+            type="monotone"
+            dataKey="booked"
+            stroke="#10b981" // emerald-500
+            strokeWidth={3}
+            name="Booked"
+            dot={false}
+            activeDot={{ r: 6, fill: "#10b981", strokeWidth: 0 }}
+            animationDuration={1500}
+            animationBegin={300}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

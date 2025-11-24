@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { ChartCard, TimeSeriesChart } from "./charts";
 import { format, formatDistanceToNow } from "date-fns";
 import { usePolling } from "@/hooks/usePolling";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { PeriodSelector } from "@/components/period-selector";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
@@ -99,17 +99,10 @@ export function TrendsSection() {
             </Link>
           </Button>
         </div>
-        <ToggleGroup
-          type="single"
-          value={period}
-          onValueChange={(value) => {
-            if (value) setPeriod(value as PeriodType);
-          }}
-        >
-          <ToggleGroupItem value="today">Today</ToggleGroupItem>
-          <ToggleGroupItem value="week">Week</ToggleGroupItem>
-          <ToggleGroupItem value="month">Month</ToggleGroupItem>
-        </ToggleGroup>
+        <PeriodSelector
+          selectedPeriod={period}
+          onPeriodChange={(value) => setPeriod(value as PeriodType)}
+        />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
