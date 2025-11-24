@@ -8,9 +8,10 @@ const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params;
     const body = await request.json();
 
     const authHeaders = await getBackendAuthHeaders();
@@ -19,7 +20,7 @@ export async function PATCH(
     }
 
     const response = await fetch(
-      `${baseUrl}/api/admin/appointments/requests/${params.id}`,
+      `${baseUrl}/api/admin/appointments/requests/${id}`,
       {
         method: "PATCH",
         headers: {
