@@ -45,7 +45,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single()
 
     if (error) {
-      console.error('Error fetching profile:', error)
+      // Treat "no rows" as "no profile" without logging an error
+      if (error.code === 'PGRST116') {
+        return null
+      }
+
+      console.error('Error fetching profile from Supabase:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      })
       return null
     }
 

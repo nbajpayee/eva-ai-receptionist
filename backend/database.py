@@ -206,6 +206,52 @@ class Appointment(Base):
     customer = relationship("Customer", back_populates="appointments")
 
 
+class AppointmentRequest(Base):
+    """Appointment request model representing booking intent that has not yet
+    been converted into a confirmed appointment.
+
+    This is used to surface opportunities where Eva (or staff) collected
+    interest in booking but no concrete appointment exists yet.
+    """
+
+    __tablename__ = "appointment_requests"
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
+    conversation_id = Column(
+        GUID(), ForeignKey("conversations.id"), nullable=True, index=True
+    )
+    appointment_id = Column(
+        Integer, ForeignKey("appointments.id"), nullable=True, index=True
+    )
+
+    channel = Column(String(20), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="new", index=True)
+    requested_time_window = Column(Text, nullable=True)
+    service_type = Column(String(100), nullable=True)
+
+    custom_metadata = Column("metadata", JSONBType(), nullable=True, default={})
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Lightweight relationships for convenience
+    customer = relationship("Customer")
+    conversation = relationship("Conversation")
+    appointment = relationship("Appointment")
+
+    __table_args__ = (
+        CheckConstraint(
+            "channel IN ('voice', 'sms', 'email', 'web')",
+            name="check_appointment_request_channel",
+        ),
+        CheckConstraint(
+            "status IN ('new', 'in_progress', 'booked', 'dismissed')",
+            name="check_appointment_request_status",
+        ),
+    )
+
+
 class CallSession(Base):
     """Call session model for tracking voice interactions."""
 

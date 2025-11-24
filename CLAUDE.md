@@ -425,6 +425,12 @@ Per `TODO.md`, the project is in **Production Deployment Phase (Nov 18-21)**:
 - Boulevard scheduling (currently using Google Calendar)
 - Multi-language support
 
+**Recent Backend Debugging (Nov 23, 2025)**
+- Verified FastAPI is using Supabase Postgres as the single source of truth (`DATABASE_URL` confirmed) and reproduced DB reads via `SessionLocal`.
+- Fixed admin customer detail 404s by adding `GET /api/admin/customers/{customer_id}` in `backend/main.py` (returns profile plus related appointments and conversations) and wiring it to the Next.js admin customer detail page.
+- Implemented admin appointment request endpoints (`GET /api/admin/appointments/requests`, `PATCH /api/admin/appointments/requests/{request_id}`) and connected them to the Requests tab on the `/appointments` page via Next.js API proxy routes.
+- Added unauthenticated booking config endpoints (`GET /api/config/services`, `GET /api/config/providers`) used by the Book Appointment dialog to load services/providers from the dynamic settings tables instead of hardcoded config.
+
 ## File Organization
 
 ```

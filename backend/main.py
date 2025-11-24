@@ -36,6 +36,7 @@ from consultation_service import ConsultationService
 from database import (
     AIInsight,
     Appointment,
+    AppointmentRequest,
     BusinessHours,
     CallSession,
     Conversation,
@@ -277,6 +278,33 @@ class ProviderConsultationsResponse(BaseModel):
     consultations: List[ConsultationEntry]
 
 
+class AppointmentRequestCustomer(BaseModel):
+    id: int
+    name: str
+    phone: Optional[str] = None
+
+
+class AppointmentRequestEntry(BaseModel):
+    id: str
+    created_at: Optional[str] = None
+    channel: str
+    status: str
+    requested_time_window: Optional[str] = None
+    service_type: Optional[str] = None
+    customer: Optional[AppointmentRequestCustomer] = None
+    note: Optional[str] = None
+
+
+class AppointmentRequestsResponse(BaseModel):
+    requests: List[AppointmentRequestEntry]
+
+
+class AppointmentRequestUpdateRequest(BaseModel):
+    status: Optional[str] = None
+    appointment_id: Optional[int] = None
+    note: Optional[str] = None
+
+
 class LocationResponse(BaseModel):
     id: int
     name: str
@@ -467,6 +495,32 @@ def _serialize_consultation(consultation: InPersonConsultation) -> Dict[str, Any
     }
 
 
+def _serialize_appointment_request(
+    request_obj: AppointmentRequest, customer: Optional[Customer]
+) -> Dict[str, Any]:
+    metadata = request_obj.custom_metadata or {}
+    return {
+        "id": str(request_obj.id),
+        "created_at": request_obj.created_at.isoformat()
+        if request_obj.created_at
+        else None,
+        "channel": request_obj.channel,
+        "status": request_obj.status,
+        "requested_time_window": request_obj.requested_time_window,
+        "service_type": request_obj.service_type,
+        "note": metadata.get("note"),
+        "customer": (
+            {
+                "id": customer.id,
+                "name": customer.name,
+                "phone": customer.phone,
+            }
+            if customer
+            else None
+        ),
+    }
+
+
 def _serialize_insight(insight: AIInsight) -> Dict[str, Any]:
     return {
         "id": str(insight.id),
@@ -653,6 +707,62 @@ def delete_provider(
             status_code=404, detail="Provider not found or already inactive"
         )
     return {"success": True}
+
+
+@app.get("/api/config/services")
+def get_config_services(db: Session = Depends(get_db)):
+    services = SettingsService.get_all_services(db, active_only=True)
+    result = {}
+    for service in services:
+        if getattr(service, "slug", None):
+            key = service.slug
+        else:
+            key = service.name
+
+        if service.price_display:
+            price_range = service.price_display
+        elif service.price_min is not None and service.price_max is not None:
+            if service.price_min == service.price_max:
+                price_range = f"${float(service.price_min):.0f}"
+            else:
+                price_range = f"${float(service.price_min):.0f}-${float(service.price_max):.0f}"
+        elif service.price_min is not None:
+            price_range = f"from ${float(service.price_min):.0f}"
+        elif service.price_max is not None:
+            price_range = f"up to ${float(service.price_max):.0f}"
+        else:
+            price_range = ""
+
+        result[key] = {
+            "name": service.name,
+            "duration_minutes": service.duration_minutes,
+            "price_range": price_range,
+            "description": service.description or "",
+            "prep_instructions": getattr(service, "prep_instructions", None),
+            "aftercare": getattr(service, "aftercare_instructions", None),
+        }
+
+    return {"services": result}
+
+
+@app.get("/api/config/providers")
+def get_config_providers(db: Session = Depends(get_db)):
+    providers = SettingsService.get_all_providers(db, active_only=True)
+    result = {}
+    for provider in providers:
+        key = str(getattr(provider, "id", provider.name))
+        specialties = provider.specialties or []
+        title = ""
+        if specialties:
+            title = specialties[0]
+
+        result[key] = {
+            "name": provider.name,
+            "title": title,
+            "specialties": specialties,
+        }
+
+    return {"providers": result}
 
 
 @app.get("/api/admin/locations", response_model=List[LocationResponse])
@@ -894,6 +1004,107 @@ def get_provider_consultations(
     )
 
     return {"consultations": [_serialize_consultation(c) for c in consultations]}
+
+
+# ==================== Appointment Requests Endpoints ====================
+
+
+@app.get(
+    "/api/admin/appointments/requests",
+    response_model=AppointmentRequestsResponse,
+)
+def get_appointment_requests(
+    status: Optional[str] = Query(None),
+    channel: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """List appointment requests (booking intent without a confirmed appt)."""
+
+    query = db.query(AppointmentRequest)
+
+    if status:
+        query = query.filter(AppointmentRequest.status == status)
+
+    if channel:
+        query = query.filter(AppointmentRequest.channel == channel)
+
+    requests = (
+        query.order_by(AppointmentRequest.created_at.desc())
+        .limit(200)
+        .all()
+    )
+
+    customer_ids = [r.customer_id for r in requests if r.customer_id is not None]
+    customers_by_id: Dict[int, Customer] = {}
+    if customer_ids:
+        customers = (
+            db.query(Customer)
+            .filter(Customer.id.in_(customer_ids))
+            .all()
+        )
+        customers_by_id = {c.id: c for c in customers}
+
+    return {
+        "requests": [
+            _serialize_appointment_request(r, customers_by_id.get(r.customer_id))
+            for r in requests
+        ]
+    }
+
+
+@app.patch(
+    "/api/admin/appointments/requests/{request_id}",
+    response_model=AppointmentRequestEntry,
+)
+def update_appointment_request(
+    request_id: str,
+    payload: AppointmentRequestUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Update an appointment request's status/metadata."""
+
+    try:
+        request_uuid = uuid.UUID(request_id)
+    except ValueError as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Invalid request_id format") from exc
+
+    request_obj = (
+        db.query(AppointmentRequest)
+        .filter(AppointmentRequest.id == request_uuid)
+        .first()
+    )
+    if not request_obj:
+        raise HTTPException(status_code=404, detail="Appointment request not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+
+    if "status" in update_data and update_data["status"] is not None:
+        request_obj.status = update_data["status"]
+
+    if "appointment_id" in update_data:
+        request_obj.appointment_id = update_data["appointment_id"]
+
+    if "note" in update_data and update_data["note"]:
+        metadata = request_obj.custom_metadata or {}
+        metadata["note"] = update_data["note"]
+        request_obj.custom_metadata = metadata
+
+    request_obj.updated_at = datetime.utcnow()
+    db.add(request_obj)
+    db.commit()
+    db.refresh(request_obj)
+
+    customer = None
+    if request_obj.customer_id:
+        customer = (
+            db.query(Customer)
+            .filter(Customer.id == request_obj.customer_id)
+            .first()
+        )
+
+    return _serialize_appointment_request(request_obj, customer)
 
 
 # CORS middleware
@@ -1657,6 +1868,71 @@ async def get_customers_list(
     }
 
 
+@app.get("/api/admin/customers/{customer_id}")
+async def get_admin_customer_detail(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Get detailed customer information including history for admin dashboard."""
+
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    appointments = (
+        db.query(Appointment)
+        .filter(Appointment.customer_id == customer_id)
+        .order_by(Appointment.appointment_datetime.desc())
+        .all()
+    )
+
+    conversations = (
+        db.query(Conversation)
+        .filter(Conversation.customer_id == customer_id)
+        .order_by(Conversation.initiated_at.desc())
+        .all()
+    )
+
+    return {
+        "id": customer.id,
+        "name": customer.name,
+        "phone": customer.phone,
+        "email": customer.email,
+        "is_new_client": customer.is_new_client,
+        "has_allergies": customer.has_allergies,
+        "is_pregnant": customer.is_pregnant,
+        "notes": customer.notes,
+        "created_at": customer.created_at.isoformat() if customer.created_at else None,
+        "updated_at": customer.updated_at.isoformat() if customer.updated_at else None,
+        "appointments": [
+            {
+                "id": appt.id,
+                "appointment_datetime": (
+                    appt.appointment_datetime.isoformat()
+                    if appt.appointment_datetime
+                    else None
+                ),
+                "service_type": appt.service_type,
+                "status": appt.status,
+            }
+            for appt in appointments
+        ],
+        "conversations": [
+            {
+                "id": conv.id,
+                "channel": conv.channel,
+                "initiated_at": (
+                    conv.initiated_at.isoformat() if conv.initiated_at else None
+                ),
+                "satisfaction_score": conv.satisfaction_score,
+                "outcome": conv.outcome,
+            }
+            for conv in conversations
+        ],
+    }
+
+
 @app.get("/api/admin/customers/{customer_id}/timeline")
 async def get_customer_timeline(
     customer_id: int,
@@ -1703,6 +1979,67 @@ async def get_appointments(
 
     appointments = query.order_by(Appointment.appointment_datetime.desc()).all()
     return {"appointments": appointments}
+
+
+@app.post("/api/admin/appointments")
+async def create_admin_appointment(
+    customer_id: int = Query(...),
+    service_type: str = Query(...),
+    appointment_datetime: str = Query(...),
+    provider: Optional[str] = Query(None),
+    special_requests: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Create a new appointment from the admin dashboard.
+
+    This endpoint is used by the admin booking dialog. It mirrors the
+    Appointment model and expects parameters via query string, as sent
+    by the Next.js admin proxy.
+    """
+
+    # Ensure customer exists
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    # Normalize ISO datetime for Python 3.8 (handle trailing Z)
+    normalized = appointment_datetime.replace("Z", "+00:00")
+    try:
+        apt_dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid appointment_datetime format. Expected ISO 8601 string.",
+        )
+
+    appointment = Appointment(
+        customer_id=customer_id,
+        appointment_datetime=apt_dt,
+        service_type=service_type,
+        provider=provider,
+        special_requests=special_requests,
+        booked_by="admin",
+    )
+
+    db.add(appointment)
+    db.commit()
+    db.refresh(appointment)
+
+    return {
+        "id": appointment.id,
+        "customer_id": appointment.customer_id,
+        "appointment_datetime": appointment.appointment_datetime.isoformat(),
+        "service_type": appointment.service_type,
+        "provider": appointment.provider,
+        "duration_minutes": appointment.duration_minutes,
+        "status": appointment.status,
+        "booked_by": appointment.booked_by,
+        "special_requests": appointment.special_requests,
+        "created_at": appointment.created_at.isoformat()
+        if appointment.created_at
+        else None,
+    }
 
 
 # ==================== Omnichannel Communications Endpoints (Phase 2) ====================

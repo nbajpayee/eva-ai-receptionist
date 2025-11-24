@@ -1,6 +1,6 @@
 # Med Spa Voice AI - Project Tracker
 
-**Last Updated:** November 22, 2025
+**Last Updated:** November 23, 2025
 **Current Phase:** Phase 3 - Production Deployment Complete ✅
 **Status:** LIVE IN PRODUCTION - https://getevaai.com
 
@@ -492,6 +492,18 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 - Nov 19: Marketing site + Backend API initial deployment
 - Nov 20: Fixed Google Calendar credentials, configured Railway
 - Nov 21: Admin dashboard deployment, environment variable fixes
+
+### Phase 4.1 - Admin Booking & Customer Reliability Fixes (Nov 23, 2025) ✅
+- [x] Verified FastAPI `DATABASE_URL` points to Supabase Postgres and confirmed the backend can see customer ID 621 directly via SQLAlchemy (`SessionLocal`).
+- [x] Fixed 404s for admin customer detail by adding `GET /api/admin/customers/{customer_id}` in `backend/main.py` (returns customer profile plus related appointments and conversations).
+- [x] Implemented appointment request admin endpoints and wiring:
+  - [x] `GET /api/admin/appointments/requests` (list booking intents)
+  - [x] `PATCH /api/admin/appointments/requests/{id}` (update status, link appointment, add note)
+  - [x] Connected the Requests tab in the `/appointments` page to these endpoints via Next.js API proxy routes.
+- [x] Added lightweight config endpoints used by the manual Book Appointment dialog:
+  - [x] `GET /api/config/services` (services map with name, duration, price_range, prep/aftercare)
+  - [x] `GET /api/config/providers` (providers map with name, title, specialties)
+- [x] Verified that booking from the customer detail page now uses Supabase-backed data and resolves prior customer 404s.
 
 ---
 

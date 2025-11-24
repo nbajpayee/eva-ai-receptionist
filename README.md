@@ -210,6 +210,9 @@ App will be available at http://localhost:3000 and fetch data from the FastAPI b
 - `POST /api/customers` - Create customer
 - `GET /api/customers/{id}` - Get customer details
 - `GET /api/customers/{id}/history` - Get customer history
+- `GET /api/admin/customers` - Admin customer list with pagination, search, and basic stats
+- `GET /api/admin/customers/{id}` - Admin customer detail (profile plus related appointments and conversations)
+- `GET /api/admin/customers/{id}/timeline` - Admin customer interaction timeline (conversations, calls, appointments)
 
 ### Admin Analytics
 - `GET /api/admin/metrics/overview?period=today|week|month` - Dashboard metrics
@@ -220,6 +223,12 @@ App will be available at http://localhost:3000 and fetch data from the FastAPI b
 
 ### Appointments
 - `GET /api/appointments` - List appointments
+- `GET /api/admin/appointments/requests` - List pending appointment requests/booking intents for review in the admin dashboard
+- `PATCH /api/admin/appointments/requests/{id}` - Update appointment request status, link to an appointment, and attach internal notes
+
+### Booking Config (Admin Dashboard)
+- `GET /api/config/services` - Returns service configuration map (name, duration, price_range, description, prep/aftercare) for booking UI
+- `GET /api/config/providers` - Returns provider configuration map (name, title, specialties) for booking UI
 
 ## Project Structure
 
