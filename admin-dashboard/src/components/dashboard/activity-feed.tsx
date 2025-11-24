@@ -97,11 +97,11 @@ export function ActivityFeed({ activities, className }: ActivityFeedProps) {
                   </div>
 
                   <div className="mt-3 flex gap-2">
-                    <Button variant="ghost" size="xs" className="h-7 text-xs">
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
                       View Details
                     </Button>
                     {item.type === 'call' && (
-                      <Button variant="ghost" size="xs" className="h-7 text-xs">
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
                         Call Back
                       </Button>
                     )}
