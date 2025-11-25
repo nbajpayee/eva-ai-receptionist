@@ -43,7 +43,15 @@ from prompts import get_system_prompt
 from settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    )
+    _handler.setFormatter(_formatter)
+    logger.addHandler(_handler)
 logger.setLevel(logging.INFO)
+logger.propagate = False
 s = get_settings()
 
 
@@ -270,14 +278,6 @@ class MessagingService:
 
         customer = conversation.customer
         if not customer or not customer.name or not customer.phone:
-            return None
-
-        # Don't book with placeholder/guest data - force AI to collect real info
-        if "guest" in customer.name.lower() or "console" in customer.name.lower():
-            return None
-        if customer.phone and (
-            "+15555550100" in customer.phone or "+1234567890" in customer.phone
-        ):
             return None
 
         last_message = MessagingService._latest_customer_message(conversation)
@@ -1112,47 +1112,91 @@ class MessagingService:
                 )
             elif name == "book_appointment":
                 # AI may collect updated customer details mid-conversation; persist them before booking.
-                try:
-                    (
-                        arguments,
-                        selection_adjustments,
-                    ) = SlotSelectionManager.enforce_booking(
-                        db,
-                        conversation,
-                        arguments,
-                    )
-                except SlotSelectionError as exc:
-                    output = {
-                        "success": False,
-                        "error": str(exc),
-                        "code": "slot_selection_mismatch",
-                        "pending_slot_options": SlotSelectionManager.pending_slot_summary(
-                            db, conversation
-                        ),
-                    }
+                # First, detect idempotent re-booking: if there is already a scheduled
+                # appointment in this conversation at the exact requested time, treat
+                # this call as a no-op success instead of raising a slot selection
+                # error. This avoids confusing "technical issue" flows when the
+                # appointment is actually booked.
+                metadata = SlotSelectionManager.conversation_metadata(conversation)
+                last_appt = metadata.get("last_appointment") if isinstance(metadata, dict) else None
+                requested_start = arguments.get("start_time") or arguments.get("start")
+                requested_service = arguments.get("service_type")
+
+                idempotent_output: Optional[Dict[str, Any]] = None
+                if (
+                    isinstance(last_appt, dict)
+                    and last_appt.get("status") == "scheduled"
+                    and last_appt.get("start_time")
+                    and requested_start
+                ):
+                    try:
+                        last_dt = MessagingService._parse_iso_datetime(
+                            str(last_appt["start_time"])
+                        )
+                        req_dt = MessagingService._parse_iso_datetime(str(requested_start))
+                    except ValueError:
+                        last_dt = None
+                        req_dt = None
+
+                    if last_dt and req_dt and last_dt.replace(tzinfo=None) == req_dt.replace(
+                        tzinfo=None
+                    ):
+                        last_service = last_appt.get("service_type")
+                        if not requested_service or not last_service or requested_service == last_service:
+                            idempotent_output = {
+                                "success": True,
+                                "event_id": last_appt.get("calendar_event_id"),
+                                "start_time": last_appt["start_time"],
+                                "service_type": last_service or requested_service,
+                                "provider": last_appt.get("provider"),
+                                "duration_minutes": last_appt.get("duration_minutes"),
+                                "notes": arguments.get("notes"),
+                            }
+
+                if idempotent_output is not None:
+                    output = idempotent_output
                 else:
-                    MessagingService._update_customer_from_arguments(
-                        db, customer, arguments
-                    )
-                    output = handle_book_appointment(
-                        calendar_service,
-                        customer_name=arguments.get("customer_name", customer.name),
-                        customer_phone=arguments.get(
-                            "customer_phone", customer.phone or ""
-                        ),
-                        customer_email=arguments.get("customer_email", customer.email),
-                        start_time=arguments.get("start_time", arguments.get("start")),
-                        service_type=arguments.get("service_type"),
-                        provider=arguments.get("provider"),
-                        notes=arguments.get("notes"),
-                    )
-                    # Clear pending booking intent after successful booking
-                    if output.get("success"):
-                        metadata = conversation.custom_metadata or {}
-                        if metadata.get("pending_booking_intent"):
-                            metadata["pending_booking_intent"] = False
-                            conversation.custom_metadata = metadata
-                            db.commit()
+                    try:
+                        (
+                            arguments,
+                            selection_adjustments,
+                        ) = SlotSelectionManager.enforce_booking(
+                            db,
+                            conversation,
+                            arguments,
+                        )
+                    except SlotSelectionError as exc:
+                        output = {
+                            "success": False,
+                            "error": str(exc),
+                            "code": "slot_selection_mismatch",
+                            "pending_slot_options": SlotSelectionManager.pending_slot_summary(
+                                db, conversation
+                            ),
+                        }
+                    else:
+                        MessagingService._update_customer_from_arguments(
+                            db, customer, arguments
+                        )
+                        output = handle_book_appointment(
+                            calendar_service,
+                            customer_name=arguments.get("customer_name", customer.name),
+                            customer_phone=arguments.get(
+                                "customer_phone", customer.phone or ""
+                            ),
+                            customer_email=arguments.get("customer_email", customer.email),
+                            start_time=arguments.get("start_time", arguments.get("start")),
+                            service_type=arguments.get("service_type"),
+                            provider=arguments.get("provider"),
+                            notes=arguments.get("notes"),
+                        )
+                        # Clear pending booking intent after successful booking
+                        if output.get("success"):
+                            metadata = conversation.custom_metadata or {}
+                            if metadata.get("pending_booking_intent"):
+                                metadata["pending_booking_intent"] = False
+                                conversation.custom_metadata = metadata
+                                db.commit()
                 result["slot_offers"] = SlotSelectionManager.pending_slot_summary(
                     db, conversation
                 )

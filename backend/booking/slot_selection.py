@@ -245,66 +245,122 @@ class SlotSelectionCore:
             return False
 
         slots = pending.get("slots") or []
-        if not slots:
-            return False
+        all_slots = pending.get("all_slots") or []
 
         content = (message.content or "").strip()
         if not content:
             return False
 
-        choice_index = SlotSelectionCore.extract_choice(content, slots)
-        if choice_index is None or not (1 <= choice_index <= len(slots)):
-            return False
+        # First, try to interpret the message as a numbered choice or a time
+        # that corresponds to one of the displayed slots.
+        if slots:
+            choice_index = SlotSelectionCore.extract_choice(content, slots)
+            if choice_index is not None and 1 <= choice_index <= len(slots):
+                metadata = SlotSelectionCore.conversation_metadata(conversation)
+                pending = metadata.get("pending_slot_offers", {})
+                pending["selected_option_index"] = choice_index
+                pending["selected_slot"] = slots[choice_index - 1]
+                pending["selected_by_message_id"] = str(message.id)
+                pending["selected_content_preview"] = content[:120]
+                pending["selected_at"] = datetime.utcnow().replace(tzinfo=UTC).isoformat()
+                metadata["pending_slot_offers"] = pending
 
-        metadata = SlotSelectionCore.conversation_metadata(conversation)
-        pending = metadata.get("pending_slot_offers", {})
-        pending["selected_option_index"] = choice_index
-        pending["selected_slot"] = slots[choice_index - 1]
-        pending["selected_by_message_id"] = str(message.id)
-        pending["selected_content_preview"] = content[:120]
-        pending["selected_at"] = datetime.utcnow().replace(tzinfo=UTC).isoformat()
-        metadata["pending_slot_offers"] = pending
+                logger.info(
+                    "Captured slot selection: conversation_id=%s, choice=%d, slot=%s",
+                    conversation.id,
+                    choice_index,
+                    slots[choice_index - 1].get(
+                        "start_time", slots[choice_index - 1].get("start")
+                    ),
+                )
 
-        logger.info(
-            "Captured slot selection: conversation_id=%s, choice=%d, slot=%s",
-            conversation.id,
-            choice_index,
-            slots[choice_index - 1].get(
-                "start_time", slots[choice_index - 1].get("start")
-            ),
-        )
+                SlotSelectionCore.persist_conversation_metadata(
+                    db, conversation, metadata
+                )
+                return True
 
-        SlotSelectionCore.persist_conversation_metadata(db, conversation, metadata)
-        return True
+        # If no displayed slot was selected, but the guest mentions a concrete
+        # time that exists in the full availability grid (all_slots), capture
+        # that as the selected_slot so deterministic booking can proceed.
+        if all_slots:
+            time_index = SlotSelectionCore.extract_choice(
+                content, all_slots, allow_numeric=False
+            )
+            if time_index is not None and 1 <= time_index <= len(all_slots):
+                metadata = SlotSelectionCore.conversation_metadata(conversation)
+                pending = metadata.get("pending_slot_offers", {})
+                chosen = all_slots[time_index - 1]
+                pending["selected_slot"] = chosen
+                pending["selected_by_message_id"] = str(message.id)
+                pending["selected_content_preview"] = content[:120]
+                pending["selected_at"] = datetime.utcnow().replace(tzinfo=UTC).isoformat()
+                metadata["pending_slot_offers"] = pending
+
+                logger.info(
+                    "Captured slot selection via time in full availability: conversation_id=%s, slot=%s",
+                    conversation.id,
+                    chosen.get("start_time", chosen.get("start")),
+                )
+
+                SlotSelectionCore.persist_conversation_metadata(
+                    db, conversation, metadata
+                )
+                return True
+
+        return False
 
     @staticmethod
-    def extract_choice(message_text: str, slots: List[Dict[str, Any]]) -> Optional[int]:
+    def extract_choice(
+        message_text: str,
+        slots: List[Dict[str, Any]],
+        *,
+        allow_numeric: bool = True,
+    ) -> Optional[int]:
         normalized = (message_text or "").strip().lower()
         if not normalized:
             return None
 
-        for match in re.finditer(r"\b(\d{1,2})\b", normalized):
-            try:
-                choice_idx = int(match.group(1))
-            except ValueError:  # pragma: no cover - defensive
-                continue
+        if allow_numeric:
+            for match in re.finditer(r"\b(\d{1,2})\b", normalized):
+                try:
+                    choice_idx = int(match.group(1))
+                except ValueError:  # pragma: no cover - defensive
+                    continue
 
-            start_idx, end_idx = match.span()
-            prev_char = normalized[start_idx - 1] if start_idx > 0 else ""
-            next_char = normalized[end_idx] if end_idx < len(normalized) else ""
-            remainder = normalized[end_idx:]
-            remainder_stripped = remainder.lstrip()
+                start_idx, end_idx = match.span()
+                prev_char = normalized[start_idx - 1] if start_idx > 0 else ""
+                next_char = normalized[end_idx] if end_idx < len(normalized) else ""
+                remainder = normalized[end_idx:]
+                remainder_stripped = remainder.lstrip()
 
-            looks_like_time = (
-                prev_char == ":"
-                or next_char == ":"
-                or remainder_stripped.startswith(("am", "pm", "a.m", "p.m"))
-            )
-            if looks_like_time:
-                continue
+                looks_like_time = (
+                    prev_char == ":"
+                    or next_char == ":"
+                    or remainder_stripped.startswith(("am", "pm", "a.m", "p.m"))
+                )
+                if looks_like_time:
+                    continue
 
-            if 1 <= choice_idx <= len(slots):
-                return choice_idx
+                if 1 <= choice_idx <= len(slots):
+                    return choice_idx
+
+                if 1 <= choice_idx <= 12:
+                    hour_matches: List[int] = []
+                    for idx, slot in enumerate(slots, start=1):
+                        label = (slot.get("start_time") or "").strip().lower()
+                        if not label:
+                            continue
+                        hour_match = re.match(r"(\d{1,2})", label)
+                        if not hour_match:
+                            continue
+                        try:
+                            label_hour = int(hour_match.group(1))
+                        except ValueError:
+                            continue
+                        if label_hour == choice_idx:
+                            hour_matches.append(idx)
+                    if len(hour_matches) == 1:
+                        return hour_matches[0]
 
         def _canonical_time_token(text: str) -> Optional[str]:
             """Return a normalized time token like '3pm' or '3:30pm' from arbitrary text.

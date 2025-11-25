@@ -17,6 +17,18 @@ from booking.manager import SlotSelectionManager
 from database import Conversation, Customer, get_db
 from messaging_service import MessagingService
 
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+logger.propagate = False
+
 ChannelLiteral = Literal["sms", "email"]
 
 
