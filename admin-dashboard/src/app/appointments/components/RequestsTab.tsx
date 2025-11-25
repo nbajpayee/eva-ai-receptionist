@@ -35,8 +35,8 @@ export function RequestsTab({
   if (isLoading) return <AppointmentCardSkeletonList count={3} />;
 
   return (
-    <div className="h-[calc(100vh-200px)] flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <div className="h-full flex flex-col gap-4">
+      <div className="flex items-center justify-between flex-none">
          <div className="flex items-center gap-3">
              <h3 className="text-lg font-semibold text-zinc-900">Request Board</h3>
              <div className="h-4 w-px bg-zinc-200" />

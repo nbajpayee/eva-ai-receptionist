@@ -6,14 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { addDays, format, parseISO, isFuture, isPast } from "date-fns";
-import { exportToCSV, generateExportFilename } from "@/lib/export-utils";
 import { BookAppointmentDialog } from "@/components/book-appointment-dialog";
 
 // Modular Components
-import { ScheduleTab } from "./components/ScheduleTab";
+import { AppointmentCalendar } from "./components/AppointmentCalendar";
 import { RequestsTab } from "./components/RequestsTab";
-import { HistoryTab } from "./components/HistoryTab";
 import { Appointment, AppointmentRequest } from "./components/types";
 
 interface AppointmentsResponse {
@@ -28,11 +25,6 @@ interface AppointmentRequestsResponse {
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // History Tab Filters
-  const [historyStatusFilter, setHistoryStatusFilter] = useState<string>("all");
-  const [historyTimeFilter, setHistoryFilter] = useState<"all" | "upcoming" | "past">("all");
-  const [historySearchQuery, setHistorySearchQuery] = useState("");
 
   // Requests Tab State
   const [requestItems, setRequestItems] = useState<AppointmentRequest[]>([]);
@@ -40,7 +32,7 @@ export default function AppointmentsPage() {
   const [requestChannelFilter, setRequestChannelFilter] = useState<"all" | "voice" | "sms" | "email" | "web">("all");
   const [requestNotes, setRequestNotes] = useState<Record<string, string>>({});
 
-  const [tab, setTab] = useState<"schedule" | "requests" | "history">("schedule");
+  const [tab, setTab] = useState<"calendar" | "requests">("calendar");
   const [isBookDialogOpen, setIsBookDialogOpen] = useState(false);
   const [dialogInitialCustomer, setDialogInitialCustomer] = useState<{
     id: number;
@@ -54,8 +46,8 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     const viewParam = searchParams.get("view");
-    if (viewParam === "schedule" || viewParam === "requests" || viewParam === "history") {
-      setTab(viewParam);
+    if (viewParam === "calendar" || viewParam === "requests") {
+      setTab(viewParam as "calendar" | "requests");
     }
   }, [searchParams]);
 
@@ -110,46 +102,12 @@ export default function AppointmentsPage() {
     if (action === "new" && customerIdParam) {
       const customerId = Number(customerIdParam);
       if (!isNaN(customerId)) {
-         // Fetch customer details logic would go here
-         // For now simplified
          setDialogInitialCustomer({ id: customerId, name: `Customer #${customerId}` });
          setIsBookDialogOpen(true);
-         setTab("schedule");
+         setTab("calendar");
       }
     }
   }, [searchParams]);
-
-  // Filter logic for History Tab
-  const filteredHistory = appointments.filter((apt) => {
-    if (historyStatusFilter !== "all" && apt.status !== historyStatusFilter) return false;
-    
-    if (historyTimeFilter !== "all") {
-      const aptDate = parseISO(apt.appointment_datetime);
-      if (historyTimeFilter === "upcoming" && !isFuture(aptDate)) return false;
-      if (historyTimeFilter === "past" && !isPast(aptDate)) return false;
-    }
-
-    if (historySearchQuery) {
-      const q = historySearchQuery.toLowerCase();
-      const customerMatch = apt.customer?.name.toLowerCase().includes(q);
-      const providerMatch = apt.provider?.toLowerCase().includes(q);
-      const serviceMatch = apt.service_type.toLowerCase().includes(q);
-      return customerMatch || providerMatch || serviceMatch;
-    }
-
-    return true;
-  });
-
-  const handleExport = () => {
-    const exportData = filteredHistory.map((apt) => ({
-      ID: apt.id,
-      Customer: apt.customer?.name || "N/A",
-      Date: format(parseISO(apt.appointment_datetime), "yyyy-MM-dd HH:mm"),
-      Service: apt.service_type,
-      Status: apt.status,
-    }));
-    exportToCSV(exportData, generateExportFilename("appointments"));
-  };
 
   const handleDismissRequest = async (id: string) => {
     try {
@@ -174,102 +132,70 @@ export default function AppointmentsPage() {
   };
 
   return (
-    <div className="space-y-8 p-6 max-w-[1600px] mx-auto">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6 p-6 max-w-[1800px] mx-auto h-screen flex flex-col overflow-hidden">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between flex-none">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">Appointments</h1>
-          <p className="text-zinc-500 max-w-2xl">
-            Manage your clinic's schedule, review incoming booking requests from Eva, and access historical records.
+          <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Appointments</h1>
+          <p className="text-sm text-zinc-500">
+            Manage your schedule and booking requests.
           </p>
-        </div>
-        <Button 
-            onClick={() => {
-                setDialogInitialCustomer(null);
-                setIsBookDialogOpen(true);
-            }} 
-            className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
-        >
-          <Calendar className="mr-2 h-4 w-4" />
-          New Booking
-        </Button>
       </div>
 
-      <Tabs value={tab} onValueChange={(v: any) => setTab(v)} className="space-y-6">
-          <TabsList className="bg-zinc-100/50 border border-zinc-200 p-1 rounded-xl w-full md:w-auto inline-flex h-11">
+        {/* Tabs Control */}
+        <Tabs value={tab} onValueChange={(v: any) => setTab(v)} className="w-auto">
+          <TabsList className="bg-zinc-100/80 p-1 rounded-lg inline-flex">
             <TabsTrigger 
-              value="schedule" 
-              className="relative rounded-lg data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary transition-all px-6"
+              value="calendar" 
+              className="px-4 py-1.5 text-sm rounded-md data-[state=active]:bg-white data-[state=active]:text-zinc-900 data-[state=active]:shadow-sm transition-all"
             >
-              {tab === "schedule" && (
-                <motion.div
-                  layoutId="active-tab"
-                  className="absolute inset-0 rounded-lg bg-white shadow-sm ring-1 ring-zinc-200/50"
-                  initial={false}
-                  transition={{
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 30,
-                  }}
-                />
-              )}
-              <span className="relative z-10">Schedule</span>
+              Calendar
             </TabsTrigger>
-            
             <TabsTrigger 
               value="requests" 
-              className="relative rounded-lg data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary transition-all px-6"
+              className="px-4 py-1.5 text-sm rounded-md data-[state=active]:bg-white data-[state=active]:text-zinc-900 data-[state=active]:shadow-sm transition-all flex items-center gap-2"
             >
-              {tab === "requests" && (
-                <motion.div
-                  layoutId="active-tab"
-                  className="absolute inset-0 rounded-lg bg-white shadow-sm ring-1 ring-zinc-200/50"
-                  initial={false}
-                  transition={{
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 30,
-                  }}
-                />
-              )}
-              <span className="relative z-10 flex items-center gap-2">
                 Requests
                 {requestItems.filter(r => r.status === 'new').length > 0 && (
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground shadow-sm">
+                  <span className="flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
                       {requestItems.filter(r => r.status === 'new').length}
                   </span>
-                )}
-              </span>
-            </TabsTrigger>
-
-            <TabsTrigger 
-              value="history" 
-              className="relative rounded-lg data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary transition-all px-6"
-            >
-              {tab === "history" && (
-                <motion.div
-                  layoutId="active-tab"
-                  className="absolute inset-0 rounded-lg bg-white shadow-sm ring-1 ring-zinc-200/50"
-                  initial={false}
-                  transition={{
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 30,
-                  }}
-                />
               )}
-              <span className="relative z-10">History</span>
             </TabsTrigger>
           </TabsList>
+        </Tabs>
+      </div>
 
+      <div className="flex-1 overflow-hidden">
           <AnimatePresence mode="wait">
-              {tab === "schedule" && (
-                <TabsContent value="schedule" className="outline-none" forceMount>
-                     <ScheduleTab appointments={appointments} isLoading={isLoading} />
-                </TabsContent>
+              {tab === "calendar" && (
+                <motion.div
+                    key="calendar"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="h-full"
+                >
+                     <AppointmentCalendar 
+                        appointments={appointments} 
+                        isLoading={isLoading} 
+                        onBookNew={() => {
+                            setDialogInitialCustomer(null);
+                            setIsBookDialogOpen(true);
+                        }}
+                     />
+                </motion.div>
               )}
 
               {tab === "requests" && (
-                <TabsContent value="requests" className="outline-none" forceMount>
+                <motion.div
+                    key="requests"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="h-full"
+                >
                      <RequestsTab
                         requests={requestItems}
                         isLoading={requestsLoading}
@@ -284,32 +210,16 @@ export default function AppointmentsPage() {
                             }
                         }}
                         onDismiss={handleDismissRequest}
-                        onStatusChange={() => {}} // Placeholder
+                        onStatusChange={() => {}} 
                         onSaveNote={handleSaveRequestNote}
                         channelFilter={requestChannelFilter}
                         setChannelFilter={setRequestChannelFilter}
                         onRefresh={fetchRequests}
                      />
-                </TabsContent>
-              )}
-
-              {tab === "history" && (
-                <TabsContent value="history" className="outline-none" forceMount>
-                     <HistoryTab 
-                        appointments={filteredHistory} 
-                        isLoading={isLoading}
-                        onExport={handleExport}
-                        searchQuery={historySearchQuery}
-                        setSearchQuery={setHistorySearchQuery}
-                        timeFilter={historyTimeFilter}
-                        setTimeFilter={setHistoryFilter}
-                        statusFilter={historyStatusFilter}
-                        setStatusFilter={setHistoryStatusFilter}
-                     />
-                </TabsContent>
+                </motion.div>
               )}
           </AnimatePresence>
-      </Tabs>
+      </div>
 
       <BookAppointmentDialog
         open={isBookDialogOpen}

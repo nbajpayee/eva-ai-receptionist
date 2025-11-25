@@ -20,6 +20,7 @@ import { SatisfactionTrendChart } from "@/components/charts/satisfaction-trend-c
 import { FunnelChart } from "@/components/charts/FunnelChart";
 import { Heatmap } from "@/components/charts/Heatmap";
 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KPIGrid } from "@/components/analytics/kpi-grid";
 import { InsightCards } from "@/components/analytics/insight-cards";
 import { ChannelBreakdown } from "@/components/analytics/channel-breakdown";
@@ -150,136 +151,155 @@ export default function AnalyticsPage() {
         </div>
       </motion.header>
 
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-8"
-      >
-        {/* 1. Executive Summary */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-foreground">Executive Summary</h2>
-            <span className="text-xs text-muted-foreground">Updated {format(new Date(), "h:mm a")}</span>
-          </div>
-          <KPIGrid metrics={dailyMetrics} period={currentRange.period} loading={isLoading} />
-        </section>
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
+          <TabsTrigger value="traffic">Traffic</TabsTrigger>
+        </TabsList>
 
-        {/* 2. AI Insights */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <BarChart3 className="h-3 w-3" />
-            </span>
-            AI Insights
-          </h2>
-          <InsightCards />
-        </section>
-
-        {/* 3. Volume & Engagement */}
-        <section className="grid gap-6 lg:grid-cols-3">
-          <motion.div variants={itemVariants} className="lg:col-span-2">
-            <ChartCard
-              title="Call Volume & Bookings"
-              description="Compare total incoming calls against successful bookings"
-              isLoading={isLoading}
-              className="h-full shadow-sm border-border bg-card/50 backdrop-blur-sm"
-            >
-              <CallVolumeChart data={dailyMetrics} />
-            </ChartCard>
-          </motion.div>
-
-          <motion.div variants={itemVariants} className="lg:col-span-1">
-            <ChartCard
-              title="Channel Breakdown"
-              description="Distribution of incoming communications"
-              isLoading={isLoading}
-              className="h-full shadow-sm border-border bg-card/50 backdrop-blur-sm"
-            >
-              {channelData.length > 0 ? (
-                <ChannelBreakdown data={channelData} />
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  No channel data available
-                </div>
-              )}
-            </ChartCard>
-          </motion.div>
-        </section>
-
-        {/* 4. Conversion & Outcomes */}
-        <section className="grid gap-6 lg:grid-cols-2">
-          <motion.div variants={itemVariants}>
-            <ChartCard
-              title="Conversion Funnel"
-              description="Drop-off analysis from inquiry to completion"
-              isLoading={isLoading}
-              className="h-full shadow-sm border-border bg-card/50 backdrop-blur-sm"
-            >
-              {funnelData?.stages ? (
-                <FunnelChart stages={funnelData.stages} />
-              ) : (
-                <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
-                  No funnel data available
-                </div>
-              )}
-            </ChartCard>
-          </motion.div>
-
-          <motion.div variants={itemVariants}>
-            <ChartCard
-              title="Outcome Distribution"
-              description="Breakdown of all conversation outcomes"
-              isLoading={isLoading}
-              className="h-full shadow-sm border-border bg-card/50 backdrop-blur-sm"
-            >
-              {outcomeData.length > 0 ? (
-                <OutcomeBreakdown data={outcomeData} />
-              ) : (
-                <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
-                  No outcome data available
-                </div>
-              )}
-            </ChartCard>
-          </motion.div>
-        </section>
-
-        {/* 5. Quality & Performance */}
-        <section className="grid gap-6 lg:grid-cols-3">
-          <motion.div variants={itemVariants} className="lg:col-span-2">
-            <SatisfactionTrendChart data={dailyMetrics} />
-          </motion.div>
-
-          <motion.div variants={itemVariants} className="lg:col-span-1">
-             <ChartCard
-              title="Performance by Service"
-              description="Top converting service categories"
-              isLoading={false} // Mock data is always ready
-              className="h-full shadow-sm border-border bg-card/50 backdrop-blur-sm"
-            >
-              <ServicePerformance />
-            </ChartCard>
-          </motion.div>
-        </section>
-
-        {/* 6. Time Analysis */}
-        <motion.section variants={itemVariants}>
-          <ChartCard
-            title="Peak Traffic Heatmap"
-            description="Identify high-volume hours to optimize staffing"
-            isLoading={isLoading}
-            className="shadow-sm border-border bg-card/50 backdrop-blur-sm"
-          >
-            {heatmapData.length > 0 ? (
-              <Heatmap data={heatmapData} />
-            ) : (
-              <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
-                No heatmap data available
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          {/* TAB 1: OVERVIEW */}
+          <TabsContent value="overview" className="space-y-6">
+            {/* Executive Summary */}
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-foreground">Executive Summary</h2>
+                <span className="text-xs text-muted-foreground">Updated {format(new Date(), "h:mm a")}</span>
               </div>
-            )}
-          </ChartCard>
-        </motion.section>
-      </motion.div>
+              <KPIGrid metrics={dailyMetrics} period={currentRange.period} loading={isLoading} />
+            </section>
+
+            {/* AI Insights */}
+            <section className="space-y-4">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <BarChart3 className="h-3 w-3" />
+                </span>
+                AI Insights
+              </h2>
+              <InsightCards />
+            </section>
+
+            {/* Main Trend Chart */}
+            <motion.div variants={itemVariants}>
+              <ChartCard
+                title="Call Volume & Bookings"
+                description="Compare total incoming calls against successful bookings"
+                isLoading={isLoading}
+                className="h-[400px] shadow-sm border-border bg-card/50 backdrop-blur-sm"
+              >
+                <CallVolumeChart data={dailyMetrics} />
+              </ChartCard>
+            </motion.div>
+          </TabsContent>
+
+          {/* TAB 2: PERFORMANCE (Conversion & Quality) */}
+          <TabsContent value="performance" className="space-y-6">
+            <section className="grid gap-6 lg:grid-cols-3">
+              {/* Funnel - Large */}
+              <motion.div variants={itemVariants} className="lg:col-span-2">
+                <ChartCard
+                  title="Conversion Funnel"
+                  description="Drop-off analysis from inquiry to completion"
+                  isLoading={isLoading}
+                  className="h-full min-h-[400px] shadow-sm border-border bg-card/50 backdrop-blur-sm"
+                >
+                  {funnelData?.stages ? (
+                    <FunnelChart stages={funnelData.stages} />
+                  ) : (
+                    <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
+                      No funnel data available
+                    </div>
+                  )}
+                </ChartCard>
+              </motion.div>
+
+              {/* Outcomes - Side */}
+              <motion.div variants={itemVariants} className="lg:col-span-1">
+                <ChartCard
+                  title="Outcome Distribution"
+                  description="Breakdown of all conversation outcomes"
+                  isLoading={isLoading}
+                  className="h-full min-h-[400px] shadow-sm border-border bg-card/50 backdrop-blur-sm"
+                >
+                  {outcomeData.length > 0 ? (
+                    <OutcomeBreakdown data={outcomeData} />
+                  ) : (
+                    <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
+                      No outcome data available
+                    </div>
+                  )}
+                </ChartCard>
+              </motion.div>
+            </section>
+
+            <section className="grid gap-6 lg:grid-cols-3">
+              {/* Service Performance - Side */}
+              <motion.div variants={itemVariants} className="lg:col-span-1">
+                 <ChartCard
+                  title="Performance by Service"
+                  description="Top converting service categories"
+                  isLoading={false}
+                  className="h-full min-h-[300px] shadow-sm border-border bg-card/50 backdrop-blur-sm"
+                >
+                  <ServicePerformance />
+                </ChartCard>
+              </motion.div>
+
+              {/* Satisfaction - Wide */}
+              <motion.div variants={itemVariants} className="lg:col-span-2">
+                <SatisfactionTrendChart data={dailyMetrics} />
+              </motion.div>
+            </section>
+          </TabsContent>
+
+          {/* TAB 3: TRAFFIC (Time & Channels) */}
+          <TabsContent value="traffic" className="space-y-6">
+            <section className="grid gap-6 lg:grid-cols-3">
+              {/* Heatmap - Main */}
+              <motion.div variants={itemVariants} className="lg:col-span-2">
+                <ChartCard
+                  title="Peak Traffic Heatmap"
+                  description="Identify high-volume hours to optimize staffing"
+                  isLoading={isLoading}
+                  className="h-full min-h-[400px] shadow-sm border-border bg-card/50 backdrop-blur-sm"
+                >
+                  {heatmapData.length > 0 ? (
+                    <Heatmap data={heatmapData} />
+                  ) : (
+                    <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+                      No heatmap data available
+                    </div>
+                  )}
+                </ChartCard>
+              </motion.div>
+
+              {/* Channels - Side */}
+              <motion.div variants={itemVariants} className="lg:col-span-1">
+                <ChartCard
+                  title="Channel Breakdown"
+                  description="Distribution of incoming communications"
+                  isLoading={isLoading}
+                  className="h-full min-h-[400px] shadow-sm border-border bg-card/50 backdrop-blur-sm"
+                >
+                  {channelData.length > 0 ? (
+                    <ChannelBreakdown data={channelData} />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      No channel data available
+                    </div>
+                  )}
+                </ChartCard>
+              </motion.div>
+            </section>
+          </TabsContent>
+        </motion.div>
+      </Tabs>
     </div>
   );
 }
