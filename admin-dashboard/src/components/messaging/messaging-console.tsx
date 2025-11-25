@@ -88,9 +88,19 @@ const QUICK_SCENARIOS = [
   { label: "Cancel", text: "Please cancel my appointment." },
 ];
 
+function parseBackendTimestamp(isoString: string | null | undefined): Date {
+  if (!isoString) return new Date();
+  // If the string already includes timezone info (Z or offset), trust it as-is
+  if (/[zZ]|[+\-]\d{2}:\d{2}$/.test(isoString)) {
+    return new Date(isoString);
+  }
+  // Treat naive timestamps from the backend as UTC by appending Z
+  return new Date(`${isoString}Z`);
+}
+
 function safeFormatDistanceToNow(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
-  const date = new Date(dateStr);
+  const date = parseBackendTimestamp(dateStr);
   
   // If date is invalid, return empty string
   if (isNaN(date.getTime())) return "";

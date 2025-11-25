@@ -7,6 +7,16 @@ import {
   getChannelLabel,
 } from "@/types/communication";
 
+function parseBackendTimestamp(isoString: string | null | undefined): Date {
+  if (!isoString) return new Date();
+  // If the string already includes timezone info (Z or offset), trust it as-is
+  if (/[zZ]|[+\-]\d{2}:\d{2}$/.test(isoString)) {
+    return new Date(isoString);
+  }
+  // Treat naive timestamps from the backend as UTC by appending Z
+  return new Date(`${isoString}Z`);
+}
+
 export function MessageBubble({ message }: { message: CommunicationMessage }) {
   const isAssistant = message.author === "assistant";
   // We'll use custom styling instead of CHANNEL_TONES for the bubble itself to match the new aesthetic
@@ -24,7 +34,7 @@ export function MessageBubble({ message }: { message: CommunicationMessage }) {
       )}>
         <span>{isAssistant ? "Eva" : "Guest"}</span>
         <span className="h-0.5 w-0.5 rounded-full bg-zinc-300" />
-        <span>{format(new Date(message.timestamp), "h:mm a")}</span>
+        <span>{format(parseBackendTimestamp(message.timestamp), "h:mm a")}</span>
       </div>
       <div
         className={cn(

@@ -175,6 +175,15 @@ def send_message(
         metadata={"source": "messaging_console"},
     )
 
+    logger = logging.getLogger(__name__)
+    logger.info(
+        "Messaging inbound: channel=%s conversation_id=%s customer_id=%s content=%s",
+        channel,
+        conversation.id,
+        customer.id,
+        (request.content or "").replace("\n", " ")[:200],
+    )
+
     # Capture slot selections (e.g., "Option 2" or explicit time choices) as soon as the
     # inbound message is stored so deterministic booking can trigger without waiting for
     # the AI to parse the message later.
@@ -209,8 +218,6 @@ def send_message(
     initial_content, assistant_message = MessagingService.generate_ai_response(
         db, conversation.id, channel
     )
-
-    logger = logging.getLogger(__name__)
 
     tool_calls = (
         list(getattr(assistant_message, "tool_calls", []) or [])
@@ -251,6 +258,15 @@ def send_message(
                     and normalized_arguments != parsed_arguments
                 ):
                     function_obj.arguments = json.dumps(normalized_arguments)
+
+                logger.info(
+                    "Messaging tool_call: channel=%s conversation_id=%s customer_id=%s name=%s args=%s",
+                    channel,
+                    conversation.id,
+                    customer.id,
+                    tool_name,
+                    normalized_arguments,
+                )
 
                 result = MessagingService._execute_tool_call(
                     db=db,
@@ -303,6 +319,24 @@ def send_message(
             if selection_adjustments:
                 merged_adjustments.update(selection_adjustments)
             tool_results[-1]["argument_adjustments"] = merged_adjustments
+
+            last_result = tool_results[-1]
+            output_payload = last_result.get("output")
+            success_flag = None
+            if isinstance(output_payload, dict):
+                success_flag = output_payload.get("success")
+
+            logger.info(
+                "Messaging tool_result: channel=%s conversation_id=%s customer_id=%s name=%s success=%s output=%s",
+                channel,
+                conversation.id,
+                customer.id,
+                last_result.get("name"),
+                success_flag,
+                (str(output_payload).replace("\n", " ")[:400]
+                 if output_payload is not None
+                 else None),
+            )
 
         if booking_confirmation_message:
             response_content = booking_confirmation_message
@@ -364,6 +398,16 @@ def send_message(
         conversation=conversation,
         content=response_content,
         metadata=outbound_metadata,
+    )
+
+    logger.info(
+        "Messaging outbound: channel=%s conversation_id=%s customer_id=%s booking_success=%s tool_calls=%d content=%s",
+        channel,
+        conversation.id,
+        customer.id,
+        booking_action_success,
+        len(tool_calls),
+        (response_content or "").replace("\n", " ")[:200],
     )
 
     if channel == "sms":

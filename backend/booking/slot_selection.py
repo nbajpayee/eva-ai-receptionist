@@ -62,10 +62,14 @@ class SlotSelectionCore:
         arguments: Dict[str, Any],
         output: Dict[str, Any],
     ) -> None:
-        slots = output.get("all_slots") or output.get("available_slots") or []
+        full_slots = output.get("all_slots") or output.get("available_slots") or []
+        # Slots shown to the user as numbered options should align with the
+        # subset we actually want them to pick from. Prefer suggested_slots
+        # when available, otherwise fall back to the full list.
+        display_slots = output.get("suggested_slots") or full_slots
         metadata = SlotSelectionCore.conversation_metadata(conversation)
 
-        if not slots:
+        if not full_slots:
             if metadata.pop("pending_slot_offers", None) is not None:
                 SlotSelectionCore.persist_conversation_metadata(
                     db, conversation, metadata
@@ -79,6 +83,7 @@ class SlotSelectionCore:
             "date": output.get("date") or arguments.get("date"),
             "offered_at": offer_timestamp.isoformat(),
             "expires_at": (offer_timestamp + timedelta(hours=4)).isoformat(),
+            # Slots: the subset actually offered as numbered options
             "slots": [
                 {
                     "index": idx + 1,
@@ -87,7 +92,18 @@ class SlotSelectionCore:
                     "end": slot.get("end"),
                     "end_time": slot.get("end_time"),
                 }
-                for idx, slot in enumerate(slots)
+                for idx, slot in enumerate(display_slots)
+            ],
+            # all_slots: the full set of available slots for this date/service,
+            # used when matching free-form time expressions like "3:30pm".
+            "all_slots": [
+                {
+                    "start": slot.get("start"),
+                    "start_time": slot.get("start_time"),
+                    "end": slot.get("end"),
+                    "end_time": slot.get("end_time"),
+                }
+                for slot in full_slots
             ],
         }
 
@@ -103,7 +119,7 @@ class SlotSelectionCore:
                 candidate_start = existing_selected_slot.get("start")
 
             if candidate_start:
-                for idx, slot in enumerate(slots, start=1):
+                for idx, slot in enumerate(display_slots, start=1):
                     if slot.get("start") == candidate_start:
                         matched_slot = slot
                         matched_index = idx
@@ -112,9 +128,9 @@ class SlotSelectionCore:
             if matched_slot is None:
                 existing_index = existing_pending.get("selected_option_index")
                 if isinstance(existing_index, int) and 1 <= existing_index <= len(
-                    slots
+                    display_slots
                 ):
-                    matched_slot = slots[existing_index - 1]
+                    matched_slot = display_slots[existing_index - 1]
                     matched_index = existing_index
 
             if matched_slot is not None and matched_index is not None:
@@ -139,7 +155,9 @@ class SlotSelectionCore:
         metadata["pending_slot_offers"] = offer_payload
         SlotSelectionCore.persist_conversation_metadata(db, conversation, metadata)
 
-        slot_times = [s.get("start_time", s.get("start")) for s in slots[:3]]
+        slot_times = [
+            s.get("start_time", s.get("start")) for s in (display_slots or [])[:3]
+        ]
         if preserved_selection:
             logger.info(
                 "Re-checked availability and preserved user selection: conversation_id=%s, selected_option=%s, new_slots=%s",
@@ -150,7 +168,7 @@ class SlotSelectionCore:
         else:
             logger.info(
                 "Stored %d slot offers for conversation_id=%s, date=%s, slots=%s",
-                len(slots),
+                len(display_slots or []),
                 conversation.id,
                 offer_payload.get("date"),
                 slot_times,
@@ -288,6 +306,39 @@ class SlotSelectionCore:
             if 1 <= choice_idx <= len(slots):
                 return choice_idx
 
+        def _canonical_time_token(text: str) -> Optional[str]:
+            """Return a normalized time token like '3pm' or '3:30pm' from arbitrary text.
+
+            This is intentionally lightweight – it looks for the first HH[:MM] AM/PM
+            style phrase and returns a canonical representation for comparison.
+            """
+            match = re.search(
+                r"(\d{1,2})(?::(\d{2}))?\s*(a\.m\.?|am|p\.m\.?|pm)", text.lower()
+            )
+            if not match:
+                return None
+            hour_str, minute_str, ampm_raw = match.groups()
+            try:
+                hour = int(hour_str)
+            except ValueError:
+                return None
+            ampm = "am" if "a" in ampm_raw else "pm"
+            if minute_str:
+                return f"{hour}:{minute_str}{ampm}"
+            return f"{hour}{ampm}"
+
+        # If the message contains a compact time phrase like "3pm" or "3 pm",
+        # try to match it against the slot labels.
+        message_time_token = _canonical_time_token(normalized)
+        if message_time_token:
+            for idx, slot in enumerate(slots, start=1):
+                label = (slot.get("start_time") or "").strip().lower()
+                if not label:
+                    continue
+                label_time_token = _canonical_time_token(label)
+                if label_time_token and label_time_token == message_time_token:
+                    return idx
+
         condensed_text = normalized.replace(" ", "")
         for idx, slot in enumerate(slots, start=1):
             label = (slot.get("start_time") or "").strip().lower()
@@ -342,7 +393,8 @@ class SlotSelectionCore:
             )
 
         slots = pending.get("slots") or []
-        if not slots:
+        all_slots = pending.get("all_slots") or slots
+        if not slots and not all_slots:
             raise SlotSelectionError("No stored slot offers to validate against.")
 
         choice_index = pending.get("selected_option_index")
@@ -376,6 +428,7 @@ class SlotSelectionCore:
                     candidate_label,
                 )
         elif requested_start:
+            # First, try to match within the displayed options (slots)
             for idx, slot in enumerate(slots, start=1):
                 if SlotSelectionCore.slot_matches_request(slot, requested_start):
                     selected_slot = slot
@@ -392,8 +445,31 @@ class SlotSelectionCore:
                     )
                     break
 
+            # If not found in the limited suggested slots, fall back to the full
+            # availability set so times like "2:30 PM" that are genuinely free
+            # but not in the 1-2 suggested options can still be booked.
+            if not selected_slot and all_slots:
+                for slot in all_slots:
+                    if SlotSelectionCore.slot_matches_request(slot, requested_start):
+                        selected_slot = slot
+                        pending["selected_slot"] = slot
+                        pending.setdefault(
+                            "selected_at",
+                            datetime.utcnow().replace(tzinfo=UTC).isoformat(),
+                        )
+                        logger.info(
+                            "Slot selection via time match in full availability: conversation_id=%s, requested=%s, matched_slot=%s",
+                            conversation.id,
+                            requested_start,
+                            slot.get("start_time", slot.get("start")),
+                        )
+                        break
+
         if not selected_slot:
-            offered_times = [s.get("start_time", s.get("start")) for s in slots[:3]]
+            preview_source = slots or all_slots
+            offered_times = [
+                s.get("start_time", s.get("start")) for s in (preview_source or [])[:3]
+            ]
             logger.warning(
                 "Slot selection mismatch: conversation_id=%s, requested=%s, offered_slots=%s",
                 conversation.id,

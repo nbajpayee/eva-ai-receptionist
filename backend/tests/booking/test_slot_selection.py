@@ -200,6 +200,50 @@ def test_enforce_booking_raises_for_mismatch(db_session):
         )
 
 
+def test_enforce_booking_accepts_time_in_all_slots_not_in_suggested(db_session):
+    conversation = _make_conversation(db_session)
+    base_time = datetime(2025, 11, 16, 10, 0)
+
+    # Build a full availability grid every 30 minutes
+    all_slots = [
+        _sample_slot(idx + 1, base_time + timedelta(minutes=30 * idx))
+        for idx in range(8)
+    ]
+
+    # Only suggest two endpoints (10:00 AM and 1:30 PM), but keep the full grid in all_slots
+    suggested_slots = [all_slots[0], all_slots[-1]]
+
+    SlotSelectionCore.record_offers(
+        db_session,
+        conversation,
+        tool_call_id="tool_full_vs_suggested",
+        arguments={},
+        output={
+            "available_slots": all_slots,
+            "all_slots": all_slots,
+            "suggested_slots": suggested_slots,
+            "service_type": "hydrafacial",
+            "date": "2025-11-16",
+        },
+    )
+
+    # Pick a time in the middle (e.g., 11:30 AM) that is present in all_slots but not in suggested_slots
+    middle_slot = all_slots[3]
+    args = {"start_time": middle_slot["start"], "service_type": "hydrafacial"}
+
+    normalized, adjustments = SlotSelectionCore.enforce_booking(
+        db_session,
+        conversation,
+        args,
+    )
+
+    assert normalized["start_time"] == middle_slot["start"]
+    assert normalized["service_type"] == "hydrafacial"
+    # Since the requested time already matches an available slot, we should not need
+    # to record a normalization adjustment for start_time.
+    assert "start_time" not in adjustments
+
+
 def test_get_pending_slot_offers_expiry(db_session):
     past_ts = (
         datetime.utcnow().replace(tzinfo=pytz.utc) - timedelta(hours=1)
@@ -232,6 +276,15 @@ def test_extract_choice_matches_time_phrase(db_session):
         {"start": "2025-11-16T17:30:00-05:00", "start_time": "5:30 PM"},
     ]
     assert SlotSelectionCore.extract_choice("Let's do 5:30 PM", slots) == 2
+
+
+def test_extract_choice_matches_compact_time_phrase(db_session):
+    slots = [
+        {"start": "2025-11-16T15:00:00-05:00", "start_time": "3 PM"},
+        {"start": "2025-11-16T17:30:00-05:00", "start_time": "5:30 PM"},
+    ]
+    # Compact user input like "3pm" should be matched to the 3 PM slot label.
+    assert SlotSelectionCore.extract_choice("Can we do like 3pm", slots) == 1
 
 
 def test_pending_slot_summary_returns_stripped_fields(db_session):

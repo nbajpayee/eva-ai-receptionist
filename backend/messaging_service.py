@@ -505,11 +505,24 @@ class MessagingService:
         metadata = conversation.custom_metadata or {}
         pending_booking_intent = metadata.get("pending_booking_intent", False)
 
+        # If we already have a scheduled appointment recorded, avoid forcing
+        # additional availability checks unless the user is clearly asking to
+        # change or cancel that booking. This prevents confusing re-checks
+        # where the assistant says a time is "booked" right after it was
+        # successfully reserved for the guest.
+        last_appointment = metadata.get("last_appointment")
+
         last_customer = MessagingService._latest_customer_message(conversation)
         if not last_customer or not last_customer.content:
             return False
 
         text = last_customer.content.lower()
+        if isinstance(last_appointment, dict) and last_appointment.get("status") == "scheduled":
+            reschedule_keywords = ["resched", "move", "change", "different time"]
+            cancel_keywords = ["cancel", "can't make", "cannot make", "won't make"]
+            if not any(keyword in text for keyword in reschedule_keywords + cancel_keywords):
+                return False
+
         booking_keywords = ["book", "schedule", "appointment", "reserve", "slot"]
         current_message_is_booking = any(
             keyword in text for keyword in booking_keywords
@@ -773,17 +786,23 @@ class MessagingService:
             )
             service_type = pending_offers.get("service_type")
             date = pending_offers.get("date")
-            slots = pending_offers.get("slots", [])
+            display_slots = pending_offers.get("slots") or []
+            all_slots = pending_offers.get("all_slots") or display_slots
 
             # Create a synthetic availability output matching what check_availability returns
             availability_output = {
                 "success": True,
                 "date": date,
                 "service_type": service_type,
-                "all_slots": slots,
-                "available_slots": slots,
+                # all_slots should reflect the full availability set for this date/service,
+                # not just the 1-2 options we displayed to the guest.
+                "all_slots": all_slots,
+                "available_slots": all_slots,
                 "availability_summary": f"We have availability on {date}",
-                "suggested_slots": slots[:3] if len(slots) > 3 else slots,
+                # suggested_slots mirrors the compact options that were actually offered.
+                "suggested_slots": display_slots[:3]
+                if len(display_slots) > 3
+                else display_slots,
             }
 
             # Inject tool call and result into history
@@ -812,6 +831,66 @@ class MessagingService:
                     "content": json.dumps(availability_output),
                 }
             )
+
+        last_appointment = (
+            metadata.get("last_appointment") if isinstance(metadata, dict) else None
+        )
+        if (
+            isinstance(last_appointment, dict)
+            and last_appointment.get("status") == "scheduled"
+        ):
+            start_iso = last_appointment.get("start_time")
+            service_type = last_appointment.get("service_type")
+            provider = last_appointment.get("provider")
+            event_id = last_appointment.get("calendar_event_id") or "last_appointment"
+
+            if start_iso and service_type:
+                try:
+                    start_dt = parse_iso_datetime(start_iso)
+                except ValueError:
+                    start_dt = None
+
+                tool_call_id = f"last_booking_{event_id}"
+                tool_arguments = {
+                    "customer_name": conversation.customer.name if conversation.customer else None,
+                    "customer_phone": conversation.customer.phone if conversation.customer else None,
+                    "customer_email": conversation.customer.email if conversation.customer else None,
+                    "start_time": start_iso,
+                    "service_type": service_type,
+                    "provider": provider,
+                }
+
+                history.append(
+                    {
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "id": tool_call_id,
+                                "type": "function",
+                                "function": {
+                                    "name": "book_appointment",
+                                    "arguments": json.dumps(tool_arguments),
+                                },
+                            }
+                        ],
+                    }
+                )
+
+                tool_output = {
+                    "success": True,
+                    "event_id": event_id,
+                    "start_time": start_iso,
+                    "service_type": service_type,
+                    "provider": provider,
+                }
+                history.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": json.dumps(tool_output),
+                    }
+                )
 
         return history
 
@@ -1663,11 +1742,24 @@ class MessagingService:
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
+        trace = MessagingService._make_trace_logger(conversation)
+        trace("=== FOLLOWUP START: channel=%s", channel)
+
         history = MessagingService._build_history(conversation, channel)
         history.extend(
             MessagingService._tool_context_messages(assistant_message, tool_results)
         )
         max_tokens = 500 if channel == "sms" else 1000
+
+        # Quick summary of tool_results for tracing (tool name + success flag)
+        summary_items: List[str] = []
+        for result in tool_results:
+            name = result.get("name")
+            output = result.get("output") or {}
+            success = output.get("success") if isinstance(output, dict) else None
+            summary_items.append(f"{name}:success={success}")
+        if summary_items:
+            trace("Tool results summary: %s", "; ".join(summary_items))
 
         if not s.OPENAI_API_KEY:
             logger.info(
@@ -1689,6 +1781,7 @@ class MessagingService:
 
             # If booking succeeded, force a confirmation message
             if booking_success:
+                trace("Follow-up: successful booking detected; forcing confirmation message")
                 confirmation = MessagingService.build_booking_confirmation_message(
                     channel=channel,
                     tool_output=booking_success,
@@ -1697,16 +1790,19 @@ class MessagingService:
                     # Return confirmation directly, don't let AI generate ambiguous text
                     return confirmation, None
 
-            response = openai_client.chat.completions.create(
-                model=s.OPENAI_MESSAGING_MODEL,
+            ai_response = MessagingService._call_ai(
                 messages=history,
+                db=db,
+                channel=channel,
+                ai_mode="followup",
                 temperature=0.3,
                 max_tokens=max_tokens,
-                tools=get_booking_tools(db),
                 tool_choice="none",
+                trace=trace,
             )
-            message = response.choices[0].message
+            message = ai_response.choices[0].message
             text_content = (message.content or "").strip()
+            trace("Follow-up assistant reply: %s", text_content)
             return text_content, message
         except Exception as exc:  # noqa: BLE001 - fall back gracefully for local dev
             logger.warning("Failed to generate follow-up AI response: %s", exc)
