@@ -45,3 +45,4 @@ export interface TimeSeriesPoint {
 
 export type Period = "today" | "week" | "month";
 
+

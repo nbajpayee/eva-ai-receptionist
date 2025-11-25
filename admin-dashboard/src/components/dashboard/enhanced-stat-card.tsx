@@ -24,10 +24,10 @@ interface EnhancedStatCardProps {
 
 const colorMap = {
   default: "bg-white border-zinc-200",
-  primary: "bg-gradient-to-br from-violet-50 to-white border-violet-100",
-  success: "bg-gradient-to-br from-emerald-50 to-white border-emerald-100",
+  primary: "bg-gradient-to-br from-primary/10 to-white border-primary/20",
+  success: "bg-gradient-to-br from-secondary/10 to-white border-secondary/20",
   warning: "bg-gradient-to-br from-amber-50 to-white border-amber-100",
-  info: "bg-gradient-to-br from-sky-50 to-white border-sky-100",
+  info: "bg-gradient-to-br from-accent/10 to-white border-accent/20",
 };
 
 const trendColorMap = {

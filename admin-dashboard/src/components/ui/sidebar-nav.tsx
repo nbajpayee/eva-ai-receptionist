@@ -13,7 +13,8 @@ import {
   Users,
   type LucideIcon,
   Settings,
-  FlaskConical
+  FlaskConical,
+  Palette,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -28,7 +29,8 @@ const ICONS = {
   voice: Waves,
   reports: FileBarChart2,
   research: FlaskConical,
-  settings: Settings, // Fallback or explicit
+  settings: Settings,
+  components: Palette,
 } satisfies Record<string, LucideIcon>;
 
 export type SidebarNavIconKey = keyof typeof ICONS;

@@ -245,7 +245,10 @@ export function LocationsSettings() {
                 Manage your med spa locations and business hours
               </CardDescription>
             </div>
-            <Button onClick={() => handleEditLocation()}>
+            <Button 
+              onClick={() => handleEditLocation()}
+              className="bg-gradient-to-r from-sky-500 to-teal-500 text-white shadow-md hover:from-sky-600 hover:to-teal-600 transition-all duration-300"
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add Location
             </Button>
@@ -269,8 +272,8 @@ export function LocationsSettings() {
                     <div className="flex items-center gap-2">
                       {location.name}
                       {location.is_primary && (
-                        <Badge variant="secondary" className="ml-2">
-                          <Star className="h-3 w-3 mr-1" />
+                        <Badge variant="secondary" className="ml-2 bg-sky-100 text-sky-700 hover:bg-sky-200 border-sky-200">
+                          <Star className="h-3 w-3 mr-1 text-sky-600" />
                           Primary
                         </Badge>
                       )}
@@ -279,7 +282,7 @@ export function LocationsSettings() {
                   <TableCell>{location.address}</TableCell>
                   <TableCell>{location.phone || "-"}</TableCell>
                   <TableCell>
-                    <Badge variant={location.is_active ? "default" : "secondary"}>
+                    <Badge className={location.is_active ? "bg-teal-500 hover:bg-teal-600" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"}>
                       {location.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>

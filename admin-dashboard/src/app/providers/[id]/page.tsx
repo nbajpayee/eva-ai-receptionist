@@ -83,10 +83,10 @@ type Consultation = {
 };
 
 const COLORS = {
-  booked: "#22c55e",
-  declined: "#ef4444",
-  thinking: "#f59e0b",
-  follow_up_needed: "#3b82f6"
+  booked: "#10B981", // Emerald 500
+  declined: "#EF4444", // Red 500
+  thinking: "#F59E0B", // Amber 500
+  follow_up_needed: "#0EA5E9" // Sky 500 (Primary 1)
 };
 
 export default function ProviderDetailPage() {
@@ -191,7 +191,7 @@ export default function ProviderDetailPage() {
 
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
-            <div className="h-20 w-20 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-3xl">
+            <div className="h-20 w-20 rounded-full bg-gradient-to-br from-sky-500 to-teal-500 flex items-center justify-center text-white font-bold text-3xl">
               {provider.name.charAt(0)}
             </div>
             <div>
@@ -292,7 +292,7 @@ export default function ProviderDetailPage() {
                 {strengths.map((insight) => (
                   <div
                     key={insight.id}
-                    className={`p-4 rounded-lg border ${insight.is_reviewed ? "bg-gray-50" : "bg-green-50 border-green-200"}`}
+                    className={`p-4 rounded-lg border ${insight.is_reviewed ? "bg-muted/50" : "bg-teal-50 border-teal-200"}`}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <h4 className="font-semibold text-sm">{insight.title}</h4>
@@ -304,7 +304,7 @@ export default function ProviderDetailPage() {
                       {insight.insight_text}
                     </p>
                     {insight.supporting_quote && (
-                      <div className="bg-white p-2 rounded border-l-2 border-green-500 mb-2">
+                      <div className="bg-white p-2 rounded border-l-2 border-teal-500 mb-2">
                         <p className="text-xs italic">&ldquo;{insight.supporting_quote}&rdquo;</p>
                       </div>
                     )}
@@ -401,7 +401,7 @@ export default function ProviderDetailPage() {
                     <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                     <YAxis />
                     <Tooltip />
-                    <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} />
+                    <Line type="monotone" dataKey="value" stroke="#0EA5E9" strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -451,7 +451,7 @@ export default function ProviderDetailPage() {
                     <Tooltip />
                     <Legend />
                     <Bar dataKey="total_consultations" fill="#94a3b8" name="Consultations" />
-                    <Bar dataKey="successful_bookings" fill="#22c55e" name="Bookings" />
+                    <Bar dataKey="successful_bookings" fill="#14B8A6" name="Bookings" />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>

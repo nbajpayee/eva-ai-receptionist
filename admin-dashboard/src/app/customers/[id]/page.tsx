@@ -74,7 +74,11 @@ function getStatusBadgeProps(status?: string | null) {
   switch (normalized) {
     case "completed":
     case "success":
-      return { variant: "default" as const };
+    case "confirmed":
+      return { 
+        variant: "outline" as const,
+        className: "border-emerald-200 bg-emerald-100 text-emerald-700"
+      };
     case "cancelled":
     case "canceled":
     case "failed":
@@ -84,10 +88,17 @@ function getStatusBadgeProps(status?: string | null) {
       };
     case "active":
     case "scheduled":
+      return { 
+        variant: "default" as const,
+        className: "bg-primary hover:bg-primary/90"
+      };
     case "pending":
-      return { variant: "secondary" as const };
+      return { 
+        variant: "outline" as const,
+        className: "border-amber-200 bg-amber-100 text-amber-700"
+      };
     default:
-      return { variant: "outline" as const };
+      return { variant: "secondary" as const };
   }
 }
 
@@ -143,8 +154,8 @@ type TimelineItem = {
 const AVG_APPOINTMENT_VALUE = 350; // Average revenue per completed appointment
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
   const router = useRouter();
+  const { id } = use(params);
   const [data, setData] = useState<CustomerHistory | null>(null);
   const [stats, setStats] = useState<CustomerStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -220,7 +231,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
     const fetchData = async () => {
       try {
-        const response = await fetch(`/api/admin/customers/${resolvedParams.id}/timeline`);
+        const response = await fetch(`/api/admin/customers/${id}/timeline`);
 
         if (!response.ok) {
           throw new Error("Failed to fetch customer timeline");
@@ -258,13 +269,13 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     return () => {
       isMounted = false;
     };
-  }, [resolvedParams.id]);
+  }, [id]);
 
   const handleSave = async () => {
     setIsSaving(true);
 
     try {
-      const response = await fetch(`/api/admin/customers/${resolvedParams.id}`, {
+      const response = await fetch(`/api/admin/customers/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -292,7 +303,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     }
 
     try {
-      const response = await fetch(`/api/admin/customers/${resolvedParams.id}`, {
+      const response = await fetch(`/api/admin/customers/${id}`, {
         method: "DELETE",
       });
 
@@ -318,7 +329,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   if (error || !data) {
     return (
       <div className="space-y-6">
-        <p className="text-sm text-red-600">Error: {error || "Customer not found"}</p>
+        <p className="text-sm text-destructive">Error: {error || "Customer not found"}</p>
         <Link href="/customers">
           <Button variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -342,15 +353,15 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-zinc-900">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
               {customer.name}
               {customer.is_new_client && (
-                <Badge variant="secondary" className="ml-2">
+                <Badge variant="secondary" className="ml-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-0">
                   New Client
                 </Badge>
               )}
             </h1>
-            <p className="text-sm text-zinc-500">Customer ID: {customer.id}</p>
+            <p className="text-sm text-muted-foreground">Customer ID: {customer.id}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -375,7 +386,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 <X className="mr-2 h-4 w-4" />
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
+              <Button onClick={handleSave} disabled={isSaving} className="bg-gradient-to-r from-primary to-teal-500 hover:from-primary/90 hover:to-teal-500/90 text-white border-0">
                 <Save className="mr-2 h-4 w-4" />
                 {isSaving ? "Saving..." : "Save"}
               </Button>
@@ -385,14 +396,14 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       </div>
 
       {/* Quick Actions */}
-      <Card>
+      <Card className="border-border/50 shadow-sm">
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
           <CardDescription>Common tasks for this customer</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2">
           <Link href={`/messaging?customer_id=${customer.id}`}>
-            <Button variant="default" aria-label="Send message to customer">
+            <Button className="bg-gradient-to-r from-primary to-teal-500 hover:from-primary/90 hover:to-teal-500/90 text-white border-0" aria-label="Send message to customer">
               <Send className="mr-2 h-4 w-4" />
               Send Message
             </Button>
@@ -428,12 +439,12 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           {[...Array(5)].map((_, i) => (
             <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <div className="h-4 w-24 bg-zinc-200 rounded animate-pulse" />
-                <div className="h-4 w-4 bg-zinc-200 rounded animate-pulse" />
+                <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                <div className="h-4 w-4 bg-muted rounded animate-pulse" />
               </CardHeader>
               <CardContent>
-                <div className="h-8 w-16 bg-zinc-200 rounded animate-pulse mb-2" />
-                <div className="h-3 w-32 bg-zinc-200 rounded animate-pulse" />
+                <div className="h-8 w-16 bg-muted rounded animate-pulse mb-2" />
+                <div className="h-3 w-32 bg-muted rounded animate-pulse" />
               </CardContent>
             </Card>
           ))}
@@ -441,40 +452,40 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       ) : stats ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           {/* Lifetime Value - Calculated from completed appointments */}
-          <Card>
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Lifetime Value</CardTitle>
-              <DollarSign className="h-4 w-4 text-zinc-500" />
+              <DollarSign className="h-4 w-4 text-emerald-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
                 ${(stats.completed_appointments * AVG_APPOINTMENT_VALUE).toLocaleString()}
               </div>
-              <p className="text-xs text-zinc-500 mt-1">
-                Est. from {stats.completed_appointments} completed appointments @ ${AVG_APPOINTMENT_VALUE} avg
+              <p className="text-xs text-muted-foreground mt-1">
+                Est. from {stats.completed_appointments} completed appointments
               </p>
             </CardContent>
           </Card>
 
           {/* Total Appointments */}
-          <Card>
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Appointments</CardTitle>
-              <Calendar className="h-4 w-4 text-zinc-500" />
+              <Calendar className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.total_appointments}</div>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {stats.completed_appointments} completed • {stats.cancelled_appointments} cancelled
               </p>
             </CardContent>
           </Card>
 
           {/* Satisfaction Score */}
-          <Card>
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Satisfaction</CardTitle>
-              <Star className="h-4 w-4 text-zinc-500" />
+              <Star className="h-4 w-4 text-amber-400" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
@@ -482,41 +493,41 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                   ? `${stats.avg_satisfaction_score.toFixed(1)}/10`
                   : "N/A"}
               </div>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 From {stats.total_calls} voice calls
               </p>
             </CardContent>
           </Card>
 
           {/* Total Interactions */}
-          <Card>
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Interactions</CardTitle>
-              <Activity className="h-4 w-4 text-zinc-500" />
+              <Activity className="h-4 w-4 text-sky-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
                 {stats.total_calls + stats.total_conversations}
               </div>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {stats.total_calls} calls • {stats.total_conversations} messages
               </p>
             </CardContent>
           </Card>
 
           {/* No Show Rate */}
-          <Card>
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">No Show Rate</CardTitle>
-              <UserX className="h-4 w-4 text-zinc-500" />
+              <UserX className="h-4 w-4 text-destructive" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
                 {stats.total_appointments > 0 ? `${stats.no_show_rate.toFixed(1)}%` : "N/A"}
               </div>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {stats.total_appointments > 0
-                  ? `${stats.cancelled_appointments} of ${stats.total_appointments} appointments`
+                  ? `${stats.cancelled_appointments} of ${stats.total_appointments} appts`
                   : "No appointments yet"}
               </p>
             </CardContent>
@@ -534,23 +545,23 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             <>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium text-zinc-500">Phone</label>
-                  <p className="flex items-center gap-2 text-zinc-900">
-                    <Phone className="h-4 w-4" />
+                  <label className="text-sm font-medium text-muted-foreground">Phone</label>
+                  <p className="flex items-center gap-2 text-foreground font-medium">
+                    <Phone className="h-4 w-4 text-primary" />
                     {customer.phone}
                   </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-zinc-500">Email</label>
-                  <p className="flex items-center gap-2 text-zinc-900">
-                    <Mail className="h-4 w-4" />
+                  <label className="text-sm font-medium text-muted-foreground">Email</label>
+                  <p className="flex items-center gap-2 text-foreground font-medium">
+                    <Mail className="h-4 w-4 text-primary" />
                     {customer.email || "Not provided"}
                   </p>
                 </div>
               </div>
 
               <div>
-                <label className="text-sm font-medium text-zinc-500">Medical Screening</label>
+                <label className="text-sm font-medium text-muted-foreground">Medical Screening</label>
                 <div className="flex items-center gap-2 mt-1">
                   {customer.has_allergies && (
                     <Badge
@@ -562,25 +573,29 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                     </Badge>
                   )}
                   {customer.is_pregnant && (
-                    <Badge className="bg-pink-600">
+                    <Badge className="bg-pink-100 text-pink-700 border-pink-200 hover:bg-pink-200">
                       <Baby className="mr-1 h-3 w-3" />
                       Pregnant
                     </Badge>
                   )}
                   {!customer.has_allergies && !customer.is_pregnant && (
-                    <span className="text-sm text-zinc-500">No flags</span>
+                    <Badge variant="outline" className="text-muted-foreground bg-muted/50">
+                      No medical flags
+                    </Badge>
                   )}
                 </div>
               </div>
 
               {customer.notes && (
                 <div>
-                  <label className="text-sm font-medium text-zinc-500">Notes</label>
-                  <p className="text-zinc-900 whitespace-pre-wrap">{customer.notes}</p>
+                  <label className="text-sm font-medium text-muted-foreground">Notes</label>
+                  <div className="mt-1 p-3 bg-muted/30 rounded-md border border-border/50">
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{customer.notes}</p>
+                  </div>
                 </div>
               )}
 
-              <div className="text-xs text-zinc-500 pt-2 border-t">
+              <div className="text-xs text-muted-foreground pt-2 border-t">
                 Added {customer.created_at ? format(new Date(customer.created_at), "PPP") : "Unknown"}
               </div>
             </>
@@ -593,7 +608,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                     type="text"
                     value={editForm.name || ""}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                    className="w-full px-3 py-2 border border-input rounded-md bg-background"
                   />
                 </div>
                 <div>
@@ -602,7 +617,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                     type="tel"
                     value={editForm.phone || ""}
                     onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                    className="w-full px-3 py-2 border border-input rounded-md bg-background"
                   />
                 </div>
               </div>
@@ -613,35 +628,35 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                   type="email"
                   value={editForm.email || ""}
                   onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background"
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={editForm.has_allergies || false}
                     onChange={(e) => setEditForm({ ...editForm, has_allergies: e.target.checked })}
-                    className="rounded"
+                    className="rounded border-input text-primary focus:ring-primary"
                   />
                   <span className="text-sm">Has allergies</span>
                 </label>
-                <label className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={editForm.is_pregnant || false}
                     onChange={(e) => setEditForm({ ...editForm, is_pregnant: e.target.checked })}
-                    className="rounded"
+                    className="rounded border-input text-primary focus:ring-primary"
                   />
                   <span className="text-sm">Is pregnant</span>
                 </label>
-                <label className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={editForm.is_new_client !== undefined ? !editForm.is_new_client : false}
                     onChange={(e) => setEditForm({ ...editForm, is_new_client: !e.target.checked })}
-                    className="rounded"
+                    className="rounded border-input text-primary focus:ring-primary"
                   />
                   <span className="text-sm">Mark as existing client</span>
                 </label>
@@ -653,7 +668,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                   value={editForm.notes || ""}
                   onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
                   rows={4}
-                  className="w-full px-3 py-2 border border-zinc-200 rounded-md"
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background"
                   placeholder="Add any notes about this customer..."
                 />
               </div>
@@ -664,31 +679,32 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
       {/* Activity Tabs */}
       <Tabs defaultValue="timeline" className="w-full">
-        <TabsList>
-          <TabsTrigger value="timeline">
+        <TabsList className="bg-muted/50 p-1">
+          <TabsTrigger value="timeline" className="data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <Clock className="mr-2 h-4 w-4" />
             Timeline ({timeline.length})
           </TabsTrigger>
-          <TabsTrigger value="appointments">
+          <TabsTrigger value="appointments" className="data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <Calendar className="mr-2 h-4 w-4" />
             Appointments ({data.appointments.length})
           </TabsTrigger>
-          <TabsTrigger value="calls">
+          <TabsTrigger value="calls" className="data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <Headphones className="mr-2 h-4 w-4" />
             Calls ({data.calls.length})
           </TabsTrigger>
-          <TabsTrigger value="messages">
+          <TabsTrigger value="messages" className="data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <MessageSquare className="mr-2 h-4 w-4" />
             Messages ({data.conversations.length})
           </TabsTrigger>
         </TabsList>
 
         {/* Unified Timeline Tab */}
-        <TabsContent value="timeline" className="space-y-4">
+        <TabsContent value="timeline" className="space-y-4 pt-4">
           {timeline.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center text-sm text-zinc-500">
-                No activity yet
+            <Card className="border-dashed">
+              <CardContent className="py-12 text-center text-sm text-muted-foreground flex flex-col items-center justify-center">
+                <Clock className="h-10 w-10 mb-4 opacity-20" />
+                No activity recorded yet for this customer.
               </CardContent>
             </Card>
           ) : (
@@ -696,16 +712,18 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
               if (isAppointmentItem(item)) {
                 const badgeProps = getStatusBadgeProps(item.data.status);
                 return (
-                  <Card key={`apt-${item.data.id}-${index}`} className="hover:shadow-md transition-shadow">
-                    <CardHeader>
+                  <Card key={`apt-${item.data.id}-${index}`} className="group hover:shadow-md transition-all hover:border-primary/20">
+                    <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
-                          <div className="mt-1 p-2 bg-blue-100 rounded-full">
-                            <Calendar className="h-4 w-4 text-blue-600" />
+                          <div className="mt-1 p-2 bg-primary/10 rounded-full group-hover:bg-primary/20 transition-colors">
+                            <Calendar className="h-4 w-4 text-primary" />
                           </div>
                           <div>
-                            <CardTitle className="text-lg">Appointment: {item.data.service_type}</CardTitle>
-                            <CardDescription>
+                            <CardTitle className="text-base font-semibold text-foreground">
+                              Appointment: {item.data.service_type}
+                            </CardTitle>
+                            <CardDescription className="text-xs mt-1">
                               {format(new Date(item.data.appointment_datetime), "PPP 'at' p")}
                               {" • "}
                               {formatDistanceToNow(new Date(item.data.appointment_datetime), { addSuffix: true })}
@@ -717,10 +735,17 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                         </Badge>
                       </div>
                     </CardHeader>
-                    <CardContent className="text-sm pl-[60px]">
-                      {item.data.provider && <p className="text-zinc-500">Provider: {item.data.provider}</p>}
-                      {item.data.special_requests && <p className="mt-2 text-zinc-700">{item.data.special_requests}</p>}
-                      <p className="text-xs text-zinc-400 mt-2">Booked by {item.data.booked_by}</p>
+                    <CardContent className="text-sm pl-[60px] pb-4">
+                      {item.data.provider && <p className="text-muted-foreground">Provider: <span className="font-medium text-foreground">{item.data.provider}</span></p>}
+                      {item.data.special_requests && (
+                        <div className="mt-2 p-2 bg-amber-50 text-amber-900 text-xs rounded border border-amber-100 flex gap-2 items-start">
+                          <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                          <span>{item.data.special_requests}</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                        Booked by {item.data.booked_by}
+                      </p>
                     </CardContent>
                   </Card>
                 );
@@ -734,17 +759,18 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                     href={`/calls/${item.data.session_id}`}
                     key={`call-${item.data.id}-${index}`}
                     aria-label={`View voice call details from ${callDate}`}
+                    className="block"
                   >
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                      <CardHeader>
+                    <Card className="group hover:shadow-md transition-all hover:border-emerald-200 cursor-pointer">
+                      <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
-                          <div className="mt-1 p-2 bg-green-100 rounded-full">
-                            <Headphones className="h-4 w-4 text-green-600" />
+                          <div className="mt-1 p-2 bg-emerald-100 rounded-full group-hover:bg-emerald-200 transition-colors">
+                            <Headphones className="h-4 w-4 text-emerald-600" />
                           </div>
                           <div>
-                            <CardTitle className="text-lg">Voice Call</CardTitle>
-                            <CardDescription>
+                            <CardTitle className="text-base font-semibold text-foreground">Voice Call</CardTitle>
+                            <CardDescription className="text-xs mt-1">
                               {item.data.started_at ? (
                                 <>
                                   {format(new Date(item.data.started_at), "PPP 'at' p")}
@@ -762,23 +788,31 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                             </Badge>
                           )}
                           {item.data.escalated && (
-                            <Badge variant="outline" className="border-red-200 bg-red-100 text-red-700">
+                            <Badge variant="outline" className="border-red-200 bg-red-100 text-red-700 animate-pulse">
                               Escalated
                             </Badge>
                           )}
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="text-sm space-y-1 pl-[60px]">
+                    <CardContent className="text-sm space-y-1 pl-[60px] pb-4">
                       {item.data.duration_seconds && (
-                        <p className="text-zinc-500">Duration: {Math.floor(item.data.duration_seconds / 60)}m {item.data.duration_seconds % 60}s</p>
+                        <p className="text-muted-foreground">Duration: {Math.floor(item.data.duration_seconds / 60)}m {item.data.duration_seconds % 60}s</p>
                       )}
-                      {item.data.satisfaction_score !== undefined && item.data.satisfaction_score !== null && (
-                        <p className="text-zinc-500">Satisfaction: {item.data.satisfaction_score}/10</p>
-                      )}
-                      {item.data.sentiment && (
-                        <p className="text-zinc-500">Sentiment: {item.data.sentiment}</p>
-                      )}
+                      <div className="flex gap-3 mt-2">
+                        {item.data.satisfaction_score !== undefined && item.data.satisfaction_score !== null && (
+                          <div className="flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-100">
+                            <Star className="h-3 w-3 fill-amber-600" />
+                            {item.data.satisfaction_score}/10
+                          </div>
+                        )}
+                        {item.data.sentiment && (
+                          <div className="flex items-center gap-1 text-xs font-medium text-slate-600 bg-slate-50 px-2 py-1 rounded-full border border-slate-100 capitalize">
+                            <Activity className="h-3 w-3" />
+                            {item.data.sentiment}
+                          </div>
+                        )}
+                      </div>
                     </CardContent>
                     </Card>
                   </Link>
@@ -787,16 +821,16 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 const statusBadgeProps = getStatusBadgeProps(item.data.status);
                 const outcomeBadgeProps = getStatusBadgeProps(item.data.outcome);
                 return (
-                  <Card key={`conv-${item.data.id}-${index}`} className="hover:shadow-md transition-shadow">
-                    <CardHeader>
+                  <Card key={`conv-${item.data.id}-${index}`} className="group hover:shadow-md transition-all hover:border-sky-200">
+                    <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
-                          <div className="mt-1 p-2 bg-purple-100 rounded-full">
-                            <MessageSquare className="h-4 w-4 text-purple-600" />
+                          <div className="mt-1 p-2 bg-sky-100 rounded-full group-hover:bg-sky-200 transition-colors">
+                            <MessageSquare className="h-4 w-4 text-sky-600" />
                           </div>
                           <div>
-                            <CardTitle className="text-lg capitalize">{item.data.channel} Conversation</CardTitle>
-                            <CardDescription>
+                            <CardTitle className="text-base font-semibold text-foreground capitalize">{item.data.channel} Conversation</CardTitle>
+                            <CardDescription className="text-xs mt-1">
                               {item.data.initiated_at ? (
                                 <>
                                   {format(new Date(item.data.initiated_at), "PPP 'at' p")}
@@ -822,8 +856,11 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                       </div>
                     </CardHeader>
                     {item.data.satisfaction_score !== undefined && item.data.satisfaction_score !== null && (
-                      <CardContent className="text-sm pl-[60px]">
-                        <p className="text-zinc-500">Satisfaction: {item.data.satisfaction_score}/10</p>
+                      <CardContent className="text-sm pl-[60px] pb-4">
+                         <div className="flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-100 w-fit">
+                            <Star className="h-3 w-3 fill-amber-600" />
+                            {item.data.satisfaction_score}/10
+                          </div>
                       </CardContent>
                     )}
                   </Card>
@@ -834,20 +871,21 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           )}
         </TabsContent>
 
-        <TabsContent value="appointments" className="space-y-4">
+        <TabsContent value="appointments" className="space-y-4 pt-4">
           {data.appointments.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center text-sm text-zinc-500">
-                No appointments yet
+            <Card className="border-dashed">
+              <CardContent className="py-12 text-center text-sm text-muted-foreground flex flex-col items-center justify-center">
+                <Calendar className="h-10 w-10 mb-4 opacity-20" />
+                No appointments found.
               </CardContent>
             </Card>
           ) : (
             data.appointments.map((apt) => (
-              <Card key={apt.id}>
+              <Card key={apt.id} className="hover:shadow-sm transition-shadow">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle className="text-lg">{apt.service_type}</CardTitle>
+                      <CardTitle className="text-base font-medium">{apt.service_type}</CardTitle>
                       <CardDescription>
                         {format(new Date(apt.appointment_datetime), "PPP 'at' p")}
                       </CardDescription>
@@ -863,29 +901,30 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                   </div>
                 </CardHeader>
                 <CardContent className="text-sm">
-                  {apt.provider && <p className="text-zinc-500">Provider: {apt.provider}</p>}
-                  {apt.special_requests && <p className="mt-2 text-zinc-700">{apt.special_requests}</p>}
-                  <p className="text-xs text-zinc-400 mt-2">Booked by {apt.booked_by}</p>
+                  {apt.provider && <p className="text-muted-foreground">Provider: <span className="text-foreground">{apt.provider}</span></p>}
+                  {apt.special_requests && <p className="mt-2 text-foreground bg-muted/30 p-2 rounded text-xs">{apt.special_requests}</p>}
+                  <p className="text-xs text-muted-foreground mt-2">Booked by {apt.booked_by}</p>
                 </CardContent>
               </Card>
             ))
           )}
         </TabsContent>
 
-        <TabsContent value="calls" className="space-y-4">
+        <TabsContent value="calls" className="space-y-4 pt-4">
           {data.calls.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center text-sm text-zinc-500">
-                No calls yet
+            <Card className="border-dashed">
+              <CardContent className="py-12 text-center text-sm text-muted-foreground flex flex-col items-center justify-center">
+                <Headphones className="h-10 w-10 mb-4 opacity-20" />
+                No voice calls recorded.
               </CardContent>
             </Card>
           ) : (
             data.calls.map((call) => (
-              <Card key={call.id}>
+              <Card key={call.id} className="hover:shadow-sm transition-shadow">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle className="text-lg">Voice Call</CardTitle>
+                      <CardTitle className="text-base font-medium">Voice Call</CardTitle>
                       <CardDescription>
                         {call.started_at ? format(new Date(call.started_at), "PPP 'at' p") : "Unknown"}
                       </CardDescription>
@@ -909,13 +948,13 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 </CardHeader>
                 <CardContent className="text-sm space-y-1">
                   {call.duration_seconds && (
-                    <p className="text-zinc-500">Duration: {Math.floor(call.duration_seconds / 60)}m {call.duration_seconds % 60}s</p>
+                    <p className="text-muted-foreground">Duration: {Math.floor(call.duration_seconds / 60)}m {call.duration_seconds % 60}s</p>
                   )}
                   {call.satisfaction_score !== undefined && call.satisfaction_score !== null && (
-                    <p className="text-zinc-500">Satisfaction: {call.satisfaction_score}/10</p>
+                    <p className="text-muted-foreground">Satisfaction: <span className="font-medium text-foreground">{call.satisfaction_score}/10</span></p>
                   )}
                   {call.sentiment && (
-                    <p className="text-zinc-500">Sentiment: {call.sentiment}</p>
+                    <p className="text-muted-foreground">Sentiment: <span className="capitalize text-foreground">{call.sentiment}</span></p>
                   )}
                 </CardContent>
               </Card>
@@ -923,20 +962,21 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           )}
         </TabsContent>
 
-        <TabsContent value="messages" className="space-y-4">
+        <TabsContent value="messages" className="space-y-4 pt-4">
           {data.conversations.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center text-sm text-zinc-500">
-                No messages yet
+            <Card className="border-dashed">
+              <CardContent className="py-12 text-center text-sm text-muted-foreground flex flex-col items-center justify-center">
+                <MessageSquare className="h-10 w-10 mb-4 opacity-20" />
+                No messages recorded.
               </CardContent>
             </Card>
           ) : (
             data.conversations.map((conv) => (
-              <Card key={conv.id}>
+              <Card key={conv.id} className="hover:shadow-sm transition-shadow">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle className="text-lg capitalize">{conv.channel} Conversation</CardTitle>
+                      <CardTitle className="text-base font-medium capitalize">{conv.channel} Conversation</CardTitle>
                       <CardDescription>
                         {conv.initiated_at ? format(new Date(conv.initiated_at), "PPP 'at' p") : "Unknown"}
                       </CardDescription>
@@ -963,7 +1003,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 </CardHeader>
                 {conv.satisfaction_score !== undefined && conv.satisfaction_score !== null && (
                   <CardContent className="text-sm">
-                    <p className="text-zinc-500">Satisfaction: {conv.satisfaction_score}/10</p>
+                    <p className="text-muted-foreground">Satisfaction: <span className="font-medium text-foreground">{conv.satisfaction_score}/10</span></p>
                   </CardContent>
                 )}
               </Card>

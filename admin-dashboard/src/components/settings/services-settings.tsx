@@ -181,7 +181,10 @@ export function ServicesSettings() {
                 Manage services offered at your med spa
               </CardDescription>
             </div>
-            <Button onClick={() => handleEditService()}>
+            <Button 
+              onClick={() => handleEditService()}
+              className="bg-gradient-to-r from-sky-500 to-teal-500 text-white shadow-md hover:from-sky-600 hover:to-teal-600 transition-all duration-300"
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add Service
             </Button>
@@ -205,7 +208,9 @@ export function ServicesSettings() {
                   <TableCell className="font-medium">{service.name}</TableCell>
                   <TableCell>
                     {service.category && (
-                      <Badge variant="outline">{service.category}</Badge>
+                      <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200">
+                        {service.category}
+                      </Badge>
                     )}
                   </TableCell>
                   <TableCell>{service.duration_minutes} min</TableCell>
@@ -216,7 +221,7 @@ export function ServicesSettings() {
                         : "Contact for pricing")}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={service.is_active ? "default" : "secondary"}>
+                    <Badge className={service.is_active ? "bg-teal-500 hover:bg-teal-600" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"}>
                       {service.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>

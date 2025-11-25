@@ -174,7 +174,7 @@ export default function Home() {
         <EnhancedStatCard
           title="Appointments Booked"
           value={metrics.appointments_booked}
-          icon={<CalendarIcon className="h-5 w-5 text-violet-600" />}
+          icon={<CalendarIcon className="h-5 w-5 text-primary" />}
           sparklineData={generateSparklineData(7, 2, 15)}
           color="primary"
           description={`${metrics.conversion_rate.toFixed(1)}% conversion rate`}
@@ -182,7 +182,7 @@ export default function Home() {
         <EnhancedStatCard
           title="Customers Engaged"
           value={metrics.customers_engaged}
-          icon={<Users className="h-5 w-5 text-emerald-600" />}
+          icon={<Users className="h-5 w-5 text-secondary" />}
           sparklineData={generateSparklineData(7, 10, 50)}
           color="success"
           description="New and returning"
@@ -198,7 +198,7 @@ export default function Home() {
         <EnhancedStatCard
           title="Messages Sent"
           value={metrics.total_messages_sent}
-          icon={<MessageSquare className="h-5 w-5 text-sky-600" />}
+          icon={<MessageSquare className="h-5 w-5 text-accent" />}
           sparklineData={generateSparklineData(7, 8, 10)}
           color="info"
           description="SMS and Email"
@@ -211,20 +211,26 @@ export default function Home() {
             <h2 className="text-lg font-semibold text-zinc-900">Recent Communications</h2>
             <p className="text-sm text-zinc-500">Latest customer interactions across all channels.</p>
           </div>
-          <Button variant="outline" size="sm" onClick={handleExportCalls} disabled={filteredCalls.length === 0}>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleExportCalls} 
+            disabled={filteredCalls.length === 0}
+            className="border-secondary/20 text-secondary hover:bg-secondary/10 hover:text-secondary hover:border-secondary/30 transition-all shadow-sm"
+          >
             <Download className="mr-2 h-4 w-4" />
             Export Calls
           </Button>
         </div>
 
         {/* Call Log Filters */}
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-          <span className="text-sm font-medium text-zinc-700">Filter:</span>
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-white/50 p-4 shadow-sm backdrop-blur-sm">
+          <span className="text-sm font-semibold text-secondary">Filter:</span>
           <Select
             value={outcomeFilter}
             onValueChange={(value: CallRecord["outcome"] | "all") => setOutcomeFilter(value)}
           >
-            <SelectTrigger className="w-[140px] bg-white">
+            <SelectTrigger className="w-[140px] bg-white border-input hover:border-primary/50 focus:ring-primary/20 transition-colors rounded-lg">
               <SelectValue placeholder="Outcome" />
             </SelectTrigger>
             <SelectContent>
@@ -241,7 +247,7 @@ export default function Home() {
             value={channelFilter}
             onValueChange={(value) => setChannelFilter(value as CallRecord["channel"] | "all")}
           >
-            <SelectTrigger className="w-[130px] bg-white">
+            <SelectTrigger className="w-[130px] bg-white border-input hover:border-primary/50 focus:ring-primary/20 transition-colors rounded-lg">
               <SelectValue placeholder="Channel" />
             </SelectTrigger>
             <SelectContent>
@@ -257,7 +263,7 @@ export default function Home() {
             value={satisfactionFilter}
             onValueChange={(value: "all" | "high" | "medium" | "low") => setSatisfactionFilter(value)}
           >
-            <SelectTrigger className="w-[150px] bg-white">
+            <SelectTrigger className="w-[150px] bg-white border-input hover:border-primary/50 focus:ring-primary/20 transition-colors rounded-lg">
               <SelectValue placeholder="Satisfaction" />
             </SelectTrigger>
             <SelectContent>

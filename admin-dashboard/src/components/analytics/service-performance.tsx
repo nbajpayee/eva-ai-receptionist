@@ -1,11 +1,11 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const mockData = [
-  { name: "Botox", bookings: 145, conversion: 85, color: "#8b5cf6" },
-  { name: "Fillers", bookings: 120, conversion: 72, color: "#3b82f6" },
-  { name: "Facials", bookings: 98, conversion: 65, color: "#10b981" },
-  { name: "Consult", bookings: 85, conversion: 90, color: "#f59e0b" },
-  { name: "Laser", bookings: 65, conversion: 55, color: "#ef4444" },
+  { name: "Botox", bookings: 145, conversion: 85, color: "#0EA5E9" }, // Primary (Azure)
+  { name: "Fillers", bookings: 120, conversion: 72, color: "#0369A1" }, // Secondary (Deep Blue)
+  { name: "Facials", bookings: 98, conversion: 65, color: "#14B8A6" }, // Primary 2 (Teal)
+  { name: "Consult", bookings: 85, conversion: 90, color: "#0D9488" }, // Secondary 2 (Emerald)
+  { name: "Laser", bookings: 65, conversion: 55, color: "#38BDF8" }, // Accent 1 (Sky Pulse)
 ];
 
 export function ServicePerformance() {
@@ -58,4 +58,5 @@ export function ServicePerformance() {
     </div>
   );
 }
+
 

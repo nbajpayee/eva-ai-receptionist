@@ -39,18 +39,20 @@ export function PeriodSelector({
           const isActive = selectedPeriod === period.value;
 
           return (
-            <button
+            <motion.button
               key={period.value}
               onClick={() => onPeriodChange(period.value)}
-              className="relative px-3 py-1.5 text-xs md:px-4 md:py-2 md:text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2"
+              className="relative px-3 py-1.5 text-xs md:px-4 md:py-2 md:text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               aria-label={`View ${period.label}`}
               aria-pressed={isActive}
+              initial={false}
+              whileHover={!isActive ? "hover" : undefined}
             >
               {/* Animated glass background (only renders for active item) */}
               {isActive && (
                 <motion.div
                   layoutId="period-selector-active-bg"
-                  className="absolute inset-0 rounded-lg bg-cyan-50/90 border border-cyan-600/20 shadow-lg shadow-cyan-500/15"
+                  className="absolute inset-0 rounded-lg bg-primary/10 border border-primary/20 shadow-lg shadow-primary/5 pointer-events-none"
                   style={{ backdropFilter: "blur(12px)" }}
                   transition={{
                     type: "spring",
@@ -64,29 +66,33 @@ export function PeriodSelector({
               {/* Hover effect (only for inactive items) */}
               {!isActive && (
                 <motion.div
-                  className="absolute inset-0 rounded-lg"
-                  initial={{ opacity: 0 }}
-                  whileHover={{ 
-                    opacity: 1,
-                    backgroundColor: "rgba(244, 244, 245, 0.5)",
-                    backdropFilter: "blur(4px)",
-                    scale: 1.02,
+                  className="absolute inset-0 rounded-lg bg-white/60 border border-white/40 shadow-sm backdrop-blur-md pointer-events-none"
+                  variants={{
+                    hover: {
+                      opacity: 1,
+                      scale: 1,
+                    },
                   }}
-                  transition={{ duration: 0.2 }}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 400,
+                    damping: 30,
+                  }}
                 />
               )}
 
               {/* Text label (relative positioning so it sits above backgrounds) */}
               <span
-                className={`relative z-10 font-medium transition-colors duration-200 ${
-                  isActive 
-                    ? "text-cyan-700 font-semibold" 
-                    : "text-zinc-600"
+                className={`relative z-10 font-medium transition-colors duration-200 pointer-events-none ${
+                  isActive
+                    ? "text-primary font-semibold"
+                    : "text-muted-foreground"
                 }`}
               >
                 {period.label}
               </span>
-            </button>
+            </motion.button>
           );
         })}
       </div>

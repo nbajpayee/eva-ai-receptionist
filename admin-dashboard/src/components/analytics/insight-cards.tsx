@@ -16,17 +16,17 @@ export function InsightCards() {
       title: "Peak Call Times",
       description: "Highest call volume observed between 2 PM - 4 PM on Tuesdays.",
       icon: Clock,
-      color: "text-blue-600",
-      bg: "bg-blue-50",
-      border: "border-blue-100",
+      color: "text-primary",
+      bg: "bg-primary/10",
+      border: "border-primary/20",
     },
     {
       title: "High Conversion Service",
       description: "Botox inquiries are converting at 85%, the highest of all services.",
       icon: Sparkles,
-      color: "text-purple-600",
-      bg: "bg-purple-50",
-      border: "border-purple-100",
+      color: "text-secondary",
+      bg: "bg-secondary/10",
+      border: "border-secondary/20",
     },
   ];
 
@@ -61,4 +61,5 @@ export function InsightCards() {
     </div>
   );
 }
+
 

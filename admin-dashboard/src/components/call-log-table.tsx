@@ -31,7 +31,7 @@ const outcomeTone: Record<CallRecord["outcome"], string> = {
   info_only: "bg-zinc-100 text-zinc-700 border-zinc-200",
   escalated: "bg-amber-50 text-amber-700 border-amber-100",
   abandoned: "bg-rose-50 text-rose-700 border-rose-100",
-  rescheduled: "bg-sky-50 text-sky-700 border-sky-100",
+  rescheduled: "bg-primary/10 text-primary border-primary/20",
 };
 
 const channelCopy: Record<NonNullable<CallRecord["channel"]>, string> = {
@@ -42,10 +42,10 @@ const channelCopy: Record<NonNullable<CallRecord["channel"]>, string> = {
 };
 
 const channelTone: Record<NonNullable<CallRecord["channel"]>, string> = {
-  voice: "bg-sky-50 text-sky-700 border-sky-100",
+  voice: "bg-primary/10 text-primary border-primary/20",
   mobile_text: "bg-emerald-50 text-emerald-700 border-emerald-100",
   sms: "bg-emerald-50 text-emerald-700 border-emerald-100",
-  email: "bg-violet-50 text-violet-700 border-violet-100",
+  email: "bg-accent/10 text-accent-foreground border-accent/20",
 };
 
 function satisfactionTone(score: number): string {

@@ -211,7 +211,11 @@ export function GeneralSettings() {
           </div>
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={saving}>
+            <Button 
+              type="submit" 
+              disabled={saving}
+              className="bg-gradient-to-r from-sky-500 to-teal-500 text-white shadow-md hover:from-sky-600 hover:to-teal-600 transition-all duration-300"
+            >
               {saving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

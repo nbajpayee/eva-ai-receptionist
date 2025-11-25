@@ -187,7 +187,7 @@ export default function AppointmentsPage() {
                 setDialogInitialCustomer(null);
                 setIsBookDialogOpen(true);
             }} 
-            className="bg-[#4BA3E3] hover:bg-[#4BA3E3]/90 text-white shadow-lg shadow-sky-500/20 transition-all hover:scale-105 active:scale-95"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
         >
           <Calendar className="mr-2 h-4 w-4" />
           New Booking
@@ -198,7 +198,7 @@ export default function AppointmentsPage() {
           <TabsList className="bg-zinc-100/50 border border-zinc-200 p-1 rounded-xl w-full md:w-auto inline-flex h-11">
             <TabsTrigger 
               value="schedule" 
-              className="relative rounded-lg data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-[#4BA3E3] transition-all px-6"
+              className="relative rounded-lg data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary transition-all px-6"
             >
               {tab === "schedule" && (
                 <motion.div
@@ -217,7 +217,7 @@ export default function AppointmentsPage() {
             
             <TabsTrigger 
               value="requests" 
-              className="relative rounded-lg data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-[#4BA3E3] transition-all px-6"
+              className="relative rounded-lg data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary transition-all px-6"
             >
               {tab === "requests" && (
                 <motion.div
@@ -234,7 +234,7 @@ export default function AppointmentsPage() {
               <span className="relative z-10 flex items-center gap-2">
                 Requests
                 {requestItems.filter(r => r.status === 'new').length > 0 && (
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-sm">
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground shadow-sm">
                       {requestItems.filter(r => r.status === 'new').length}
                   </span>
                 )}
@@ -243,7 +243,7 @@ export default function AppointmentsPage() {
 
             <TabsTrigger 
               value="history" 
-              className="relative rounded-lg data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-[#4BA3E3] transition-all px-6"
+              className="relative rounded-lg data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary transition-all px-6"
             >
               {tab === "history" && (
                 <motion.div

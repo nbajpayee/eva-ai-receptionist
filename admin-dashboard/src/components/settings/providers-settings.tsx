@@ -190,7 +190,10 @@ export function ProvidersSettings() {
                 Manage your medical providers and staff
               </CardDescription>
             </div>
-            <Button onClick={() => handleEditProvider()}>
+            <Button 
+              onClick={() => handleEditProvider()}
+              className="bg-gradient-to-r from-sky-500 to-teal-500 text-white shadow-md hover:from-sky-600 hover:to-teal-600 transition-all duration-300"
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add Provider
             </Button>
@@ -217,19 +220,19 @@ export function ProvidersSettings() {
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {provider.specialties?.slice(0, 2).map((specialty) => (
-                        <Badge key={specialty} variant="outline" className="text-xs">
+                        <Badge key={specialty} variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">
                           {specialty}
                         </Badge>
                       ))}
                       {provider.specialties && provider.specialties.length > 2 && (
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">
                           +{provider.specialties.length - 2}
                         </Badge>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={provider.is_active ? "default" : "secondary"}>
+                    <Badge className={provider.is_active ? "bg-teal-500 hover:bg-teal-600" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"}>
                       {provider.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>

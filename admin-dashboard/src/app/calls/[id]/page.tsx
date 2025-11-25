@@ -18,6 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 import { MessageTimeline } from "@/components/communication/message-timeline";
 import type { CommunicationChannel, CommunicationMessage } from "@/types/communication";
+import { getBackendAuthHeaders } from "@/app/api/admin/_auth";
 
 type TranscriptEntry = {
   speaker: string;
@@ -110,6 +111,20 @@ type ConversationMessagesResponse = {
 
 type TranscriptSegmentLike = Partial<VoiceTranscriptSegment> & Record<string, unknown>;
 
+// Backend returns ISO timestamps without an explicit timezone (e.g. "2025-11-25T03:47:41.347261").
+// Those should be interpreted as UTC and then displayed in the user's local timezone.
+function parseBackendTimestamp(isoString: string): Date {
+  if (!isoString) return new Date();
+
+  // If the string already includes timezone info (Z or offset), trust it as-is
+  if (/[zZ]|[+\-]\d{2}:\d{2}$/.test(isoString)) {
+    return new Date(isoString);
+  }
+
+  // Treat naive timestamps as UTC by appending Z
+  return new Date(`${isoString}Z`);
+}
+
 function normalizeSegments(raw: unknown): VoiceTranscriptSegment[] {
   if (!raw) {
     return [];
@@ -161,12 +176,35 @@ function resolveInternalUrl(path: string): string {
 
 async function fetchCallDetails(id: string): Promise<CallDetails | null> {
   try {
-    const url = resolveInternalUrl(`/api/admin/communications/${id}`);
-    const response = await fetch(url, { cache: "no-store" });
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!baseUrl) {
+      console.error("NEXT_PUBLIC_API_BASE_URL is not configured");
+      return null;
+    }
+
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      console.error("Unable to resolve backend auth headers for call detail fetch");
+      return null;
+    }
+
+    const backendUrl = new URL(`/api/admin/communications/${id}`, baseUrl);
+    const response = await fetch(backendUrl.toString(), {
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
+      cache: "no-store",
+    });
 
     if (!response.ok) {
       if (response.status === 404) return null;
-      throw new Error(`Failed to fetch conversation details: ${response.statusText}`);
+      console.error(
+        "Failed to fetch conversation details from backend",
+        response.status,
+        await response.text()
+      );
+      return null;
     }
 
     const data = (await response.json()) as ConversationResponse;
@@ -197,7 +235,11 @@ async function fetchCallDetails(id: string): Promise<CallDetails | null> {
 
     // Calculate duration from timestamps
     const duration = conversation.completed_at
-      ? Math.floor((new Date(conversation.completed_at).getTime() - new Date(conversation.initiated_at).getTime()) / 1000)
+      ? Math.floor(
+          (parseBackendTimestamp(conversation.completed_at).getTime() -
+            parseBackendTimestamp(conversation.initiated_at).getTime()) /
+            1000
+        )
       : 0;
 
     const normalizedEvents: CallEvent[] = events.map((event, index) => ({
@@ -266,7 +308,7 @@ function formatDuration(seconds: number): string {
 }
 
 function formatTimestamp(isoString: string): string {
-  const date = new Date(isoString);
+  const date = parseBackendTimestamp(isoString);
   return date.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
@@ -278,7 +320,7 @@ function formatTimestamp(isoString: string): string {
 }
 
 function formatTime(isoString: string): string {
-  const date = new Date(isoString);
+  const date = parseBackendTimestamp(isoString);
   return date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
@@ -327,7 +369,29 @@ export default async function CallDetailPage({
   ]);
 
   if (!data) {
-    notFound();
+    return (
+      <div className="space-y-6">
+        <div>
+          <Button variant="ghost" asChild>
+            <Link href="/" className="gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Dashboard
+            </Link>
+          </Button>
+        </div>
+        <Card className="border-zinc-200">
+          <CardHeader>
+            <CardTitle className="text-lg">Session not found</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-zinc-600">
+              We couldn&apos;t load details for this communication. It may have been deleted or is no
+              longer available.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const { call, customer, transcript, events } = data;

@@ -53,6 +53,11 @@ const NAV_ITEMS: SidebarNavItem[] = [
     icon: "providers",
   },
   {
+    title: "Components",
+    href: "/component-library",
+    icon: "components",
+  },
+  {
     title: "Settings",
     href: "/settings",
     icon: "dashboard",

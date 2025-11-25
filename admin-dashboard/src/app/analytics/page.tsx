@@ -109,12 +109,12 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="min-h-screen space-y-8 bg-zinc-50/50 p-6 sm:p-8 font-sans">
+    <div className="min-h-screen space-y-8 bg-background p-6 sm:p-8 font-sans">
       {/* Background Ambience */}
       <div className="fixed inset-0 pointer-events-none -z-10">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px]" />
-        <div className="absolute left-0 top-0 h-[600px] w-[600px] bg-purple-100/30 blur-[120px]" />
-        <div className="absolute right-0 bottom-0 h-[600px] w-[600px] bg-blue-100/30 blur-[120px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(0,0,0,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.02)_1px,transparent_1px)] bg-[size:24px_24px]" />
+        <div className="absolute left-0 top-0 h-[600px] w-[600px] bg-primary/5 blur-[120px]" />
+        <div className="absolute right-0 bottom-0 h-[600px] w-[600px] bg-accent/5 blur-[120px]" />
       </div>
 
       {/* Header */}
@@ -159,16 +159,16 @@ export default function AnalyticsPage() {
         {/* 1. Executive Summary */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-zinc-900">Executive Summary</h2>
-            <span className="text-xs text-zinc-400">Updated {format(new Date(), "h:mm a")}</span>
+            <h2 className="text-lg font-semibold text-foreground">Executive Summary</h2>
+            <span className="text-xs text-muted-foreground">Updated {format(new Date(), "h:mm a")}</span>
           </div>
           <KPIGrid metrics={dailyMetrics} period={currentRange.period} loading={isLoading} />
         </section>
 
         {/* 2. AI Insights */}
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-purple-600">
+          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
               <BarChart3 className="h-3 w-3" />
             </span>
             AI Insights
@@ -183,7 +183,7 @@ export default function AnalyticsPage() {
               title="Call Volume & Bookings"
               description="Compare total incoming calls against successful bookings"
               isLoading={isLoading}
-              className="h-full shadow-sm border-zinc-200/60"
+              className="h-full shadow-sm border-border bg-card/50 backdrop-blur-sm"
             >
               <CallVolumeChart data={dailyMetrics} />
             </ChartCard>
@@ -194,12 +194,12 @@ export default function AnalyticsPage() {
               title="Channel Breakdown"
               description="Distribution of incoming communications"
               isLoading={isLoading}
-              className="h-full shadow-sm border-zinc-200/60"
+              className="h-full shadow-sm border-border bg-card/50 backdrop-blur-sm"
             >
               {channelData.length > 0 ? (
                 <ChannelBreakdown data={channelData} />
               ) : (
-                <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                   No channel data available
                 </div>
               )}
@@ -214,12 +214,12 @@ export default function AnalyticsPage() {
               title="Conversion Funnel"
               description="Drop-off analysis from inquiry to completion"
               isLoading={isLoading}
-              className="h-full shadow-sm border-zinc-200/60"
+              className="h-full shadow-sm border-border bg-card/50 backdrop-blur-sm"
             >
               {funnelData?.stages ? (
                 <FunnelChart stages={funnelData.stages} />
               ) : (
-                <div className="flex h-[300px] items-center justify-center text-sm text-zinc-500">
+                <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
                   No funnel data available
                 </div>
               )}
@@ -231,12 +231,12 @@ export default function AnalyticsPage() {
               title="Outcome Distribution"
               description="Breakdown of all conversation outcomes"
               isLoading={isLoading}
-              className="h-full shadow-sm border-zinc-200/60"
+              className="h-full shadow-sm border-border bg-card/50 backdrop-blur-sm"
             >
               {outcomeData.length > 0 ? (
                 <OutcomeBreakdown data={outcomeData} />
               ) : (
-                <div className="flex h-[300px] items-center justify-center text-sm text-zinc-500">
+                <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
                   No outcome data available
                 </div>
               )}
@@ -255,7 +255,7 @@ export default function AnalyticsPage() {
               title="Performance by Service"
               description="Top converting service categories"
               isLoading={false} // Mock data is always ready
-              className="h-full shadow-sm border-zinc-200/60"
+              className="h-full shadow-sm border-border bg-card/50 backdrop-blur-sm"
             >
               <ServicePerformance />
             </ChartCard>
@@ -268,12 +268,12 @@ export default function AnalyticsPage() {
             title="Peak Traffic Heatmap"
             description="Identify high-volume hours to optimize staffing"
             isLoading={isLoading}
-            className="shadow-sm border-zinc-200/60"
+            className="shadow-sm border-border bg-card/50 backdrop-blur-sm"
           >
             {heatmapData.length > 0 ? (
               <Heatmap data={heatmapData} />
             ) : (
-              <div className="flex h-[200px] items-center justify-center text-sm text-zinc-500">
+              <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
                 No heatmap data available
               </div>
             )}

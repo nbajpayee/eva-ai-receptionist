@@ -52,16 +52,16 @@ export function HeroSection({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-700 p-8 text-white shadow-2xl"
+      className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-secondary p-8 text-white shadow-2xl"
     >
       {/* Background Decor */}
       <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
-      <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl" />
+      <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
 
       <div className="relative z-10 flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
         {/* Left Content */}
         <div className="space-y-4">
-          <div className="flex items-center gap-2 text-indigo-100">
+          <div className="flex items-center gap-2 text-primary-foreground/90">
             <Icon className="h-5 w-5" />
             <span className="text-sm font-medium uppercase tracking-wider">{format(new Date(), "EEEE, MMMM do")}</span>
           </div>
@@ -70,7 +70,7 @@ export function HeroSection({
             <h1 className="text-4xl font-bold tracking-tight">
               {greeting}, {userName}
             </h1>
-            <p className="max-w-md text-lg text-indigo-100">
+            <p className="max-w-md text-lg text-primary-foreground/90">
               {contextMode === "morning" && `You have ${appointmentsToday} appointments scheduled for today.`}
               {contextMode === "day" && "Eva is handling your communications while you work."}
               {contextMode === "evening" && "Here is how your practice performed today."}
@@ -83,15 +83,15 @@ export function HeroSection({
                 <Calendar className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-xs font-medium text-indigo-200 uppercase tracking-wide">Up Next</p>
+                <p className="text-xs font-medium text-primary-foreground/80 uppercase tracking-wide">Up Next</p>
                 <p className="font-semibold">{nextAppointment.customer} - {nextAppointment.service}</p>
-                <div className="flex items-center gap-1 text-sm text-indigo-100">
+                <div className="flex items-center gap-1 text-sm text-primary-foreground/90">
                   <Clock className="h-3 w-3" />
                   {format(nextAppointment.time, "h:mm a")}
                 </div>
               </div>
               <div className="ml-auto">
-                <Button variant="secondary" size="sm" className="bg-white text-indigo-600 hover:bg-indigo-50">
+                <Button variant="secondary" size="sm" className="bg-white text-primary hover:bg-white/90">
                   View
                 </Button>
               </div>
@@ -111,7 +111,7 @@ export function HeroSection({
             sublabel="of Daily Goal"
           />
           <div className="text-center">
-            <p className="text-sm font-medium text-indigo-100">{dailyGoal.label}</p>
+            <p className="text-sm font-medium text-primary-foreground/90">{dailyGoal.label}</p>
             <p className="text-2xl font-bold">{dailyGoal.current} / {dailyGoal.target}</p>
           </div>
         </div>

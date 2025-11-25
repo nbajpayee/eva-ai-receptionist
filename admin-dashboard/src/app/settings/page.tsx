@@ -20,7 +20,7 @@ export default function SettingsPage() {
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px]" />
           <div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-[30%] -translate-y-[20%] rounded-full bg-sky-200/20 blur-[100px]" />
-          <div className="absolute right-0 bottom-0 h-[500px] w-[500px] translate-x-[20%] translate-y-[20%] rounded-full bg-blue-200/20 blur-[100px]" />
+          <div className="absolute right-0 bottom-0 h-[500px] w-[500px] translate-x-[20%] translate-y-[20%] rounded-full bg-teal-200/20 blur-[100px]" />
         </div>
 
         <div className="mx-auto max-w-5xl space-y-8">
@@ -28,7 +28,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <h2 className="text-3xl font-bold tracking-tight text-zinc-900">
-                <span className="bg-gradient-to-r from-sky-600 to-blue-600 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-sky-500 to-teal-500 bg-clip-text text-transparent">
                   Settings
                 </span>
               </h2>

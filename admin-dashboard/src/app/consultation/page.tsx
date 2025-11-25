@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Mic, Square, Upload, Loader2, CheckCircle } from "lucide-react";
+import { Mic, Square, Upload, Loader2, CheckCircle, FileAudio, User, Calendar, Activity } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 type Provider = {
   id: string;
@@ -240,212 +242,311 @@ export default function ConsultationPage() {
   const canStopRecording = state.status === "recording";
   const canSubmit = state.recording && state.outcome && state.status === "idle";
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.3 } }
+  };
+
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">In-Person Consultation</h1>
-        <p className="text-muted-foreground mt-2">
-          Record and transcribe in-person consultations for AI analysis
-        </p>
+    <div className="min-h-screen space-y-8 pb-8 font-sans">
+      {/* Ambient background */}
+      <div className="fixed inset-0 pointer-events-none -z-10">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px]" />
+        <div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-[30%] -translate-y-[20%] rounded-full bg-sky-200/20 blur-[100px]" />
+        <div className="absolute right-0 bottom-0 h-[500px] w-[500px] translate-x-[20%] translate-y-[20%] rounded-full bg-teal-200/20 blur-[100px]" />
       </div>
 
-      <div className="grid gap-6">
-        {/* Recording Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {state.status === "recording" ? "Recording..." : "Voice Recording"}
-            </CardTitle>
-            <CardDescription>
-              Tap the microphone to start recording the consultation
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col items-center justify-center p-8 space-y-4">
-              {state.status === "recording" && (
-                <div className="text-5xl font-mono font-bold text-red-600 animate-pulse">
-                  {formatTime(recordingTime)}
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="max-w-4xl mx-auto space-y-8"
+      >
+        <motion.header variants={itemVariants} className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-teal-500 text-white shadow-lg shadow-sky-500/20">
+              <Mic className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-zinc-900">In-Person Consultation</h1>
+              <p className="text-sm text-zinc-500">Record and transcribe live consultations for AI analysis</p>
+            </div>
+          </div>
+        </motion.header>
+
+        <motion.div variants={itemVariants} className="grid gap-6">
+          {/* Recording Card */}
+          <Card className="overflow-hidden border-zinc-200 bg-white/80 backdrop-blur-sm shadow-sm transition-all hover:shadow-md hover:border-sky-200">
+            <CardHeader className="bg-zinc-50/30 border-b border-zinc-100 pb-4">
+              <div className="flex items-center gap-2">
+                <FileAudio className="h-5 w-5 text-sky-500" />
+                <CardTitle className="text-lg font-semibold text-zinc-900">
+                  {state.status === "recording" ? "Recording in Progress" : "Voice Recording"}
+                </CardTitle>
+              </div>
+              <CardDescription>
+                {state.status === "recording" 
+                  ? "Ensure clear audio capture. Keep device close to conversation." 
+                  : "Tap the microphone to start recording the consultation"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-8 pb-8">
+              <div className="flex flex-col items-center justify-center space-y-6">
+                <AnimatePresence mode="wait">
+                  {state.status === "recording" && (
+                    <motion.div 
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.9, opacity: 0 }}
+                      className="text-6xl font-mono font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-pink-600 animate-pulse tracking-tighter"
+                    >
+                      {formatTime(recordingTime)}
+                    </motion.div>
+                  )}
+                  
+                  {state.status !== "recording" && state.recording && (
+                     <motion.div
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="text-emerald-600 flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100"
+                     >
+                        <CheckCircle className="h-5 w-5" />
+                        <span className="font-medium">Recording saved ({formatTime(recordingTime)})</span>
+                     </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div className="flex gap-6 items-center">
+                  {!canStopRecording && !state.recording && (
+                    <div className="relative group">
+                      <div className="absolute inset-0 bg-sky-500/20 rounded-full blur-xl group-hover:bg-sky-500/30 transition-all opacity-0 group-hover:opacity-100" />
+                      <Button
+                        size="lg"
+                        onClick={startRecording}
+                        disabled={!canStartRecording || state.status !== "idle"}
+                        className={cn(
+                          "relative h-24 w-24 rounded-full border-4 transition-all duration-300 shadow-xl",
+                          !canStartRecording 
+                             ? "bg-zinc-100 border-zinc-200 text-zinc-300"
+                             : "bg-gradient-to-br from-sky-500 to-teal-500 border-white text-white hover:scale-105 hover:shadow-sky-500/25"
+                        )}
+                      >
+                        <Mic className={cn("h-10 w-10", !canStartRecording && "text-zinc-300")} />
+                      </Button>
+                    </div>
+                  )}
+
+                  {canStopRecording && (
+                    <div className="relative group">
+                      <div className="absolute inset-0 bg-red-500/20 rounded-full blur-xl group-hover:bg-red-500/30 transition-all" />
+                      <Button
+                        size="lg"
+                        variant="destructive"
+                        onClick={stopRecording}
+                        className="relative h-24 w-24 rounded-full border-4 border-white bg-gradient-to-br from-red-500 to-pink-600 shadow-xl hover:scale-105 transition-all duration-300 hover:shadow-red-500/25"
+                      >
+                        <Square className="h-10 w-10 fill-current" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {state.recording && !canStopRecording && (
+                     <Button
+                        variant="outline"
+                        onClick={() => setState(prev => ({ ...prev, recording: null, status: "idle" }))}
+                        className="rounded-full px-6 border-zinc-200 hover:bg-zinc-50 hover:text-red-600 hover:border-red-100"
+                     >
+                        Reset
+                     </Button>
+                  )}
                 </div>
-              )}
+                
+                {!state.providerId && (
+                   <p className="text-sm text-amber-600 bg-amber-50 px-3 py-1 rounded-md border border-amber-100">
+                      Please select a provider to start recording
+                   </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-              {state.recording && state.status === "idle" && (
-                <div className="text-green-600 flex items-center gap-2">
-                  <CheckCircle className="h-6 w-6" />
-                  <span>Recording saved ({formatTime(recordingTime)})</span>
+          {/* Consultation Details */}
+          <Card className="border-zinc-200 bg-white/80 backdrop-blur-sm shadow-sm">
+            <CardHeader className="bg-zinc-50/30 border-b border-zinc-100 pb-4">
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-teal-500" />
+                <CardTitle className="text-lg font-semibold text-zinc-900">Consultation Details</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="provider" className="text-zinc-900 flex items-center gap-2">
+                     <User className="h-3.5 w-3.5 text-zinc-500" />
+                     Provider <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={state.providerId}
+                    onValueChange={(value: string) =>
+                      setState(prev => ({ ...prev, providerId: value }))
+                    }
+                    disabled={state.status === "recording"}
+                  >
+                    <SelectTrigger id="provider" className="bg-white border-zinc-200 focus:ring-sky-500/20 focus:border-sky-500 transition-all">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {providers.map((provider) => (
+                        <SelectItem key={provider.id} value={provider.id}>
+                          {provider.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
 
-              <div className="flex gap-4">
-                {!canStopRecording && !state.recording && (
-                  <Button
-                    size="lg"
-                    onClick={startRecording}
-                    disabled={!canStartRecording || state.status !== "idle"}
-                    className="h-20 w-20 rounded-full"
+                <div className="space-y-2">
+                  <Label htmlFor="customer" className="text-zinc-900 flex items-center gap-2">
+                     <User className="h-3.5 w-3.5 text-zinc-500" />
+                     Customer <span className="text-zinc-400 font-normal">(Optional)</span>
+                  </Label>
+                  <Select
+                    value={state.customerId?.toString() || ""}
+                    onValueChange={(value: string) =>
+                      setState(prev => ({ ...prev, customerId: parseInt(value, 10) || null }))
+                    }
+                    disabled={state.status === "recording"}
                   >
-                    <Mic className="h-8 w-8" />
-                  </Button>
-                )}
+                    <SelectTrigger id="customer" className="bg-white border-zinc-200 focus:ring-sky-500/20 focus:border-sky-500 transition-all">
+                      <SelectValue placeholder="Select customer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers.map((customer) => (
+                        <SelectItem key={customer.id} value={customer.id.toString()}>
+                          {customer.name} - {customer.phone}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                {canStopRecording && (
-                  <Button
-                    size="lg"
-                    variant="destructive"
-                    onClick={stopRecording}
-                    className="h-20 w-20 rounded-full"
+                <div className="space-y-2">
+                  <Label htmlFor="service" className="text-zinc-900 flex items-center gap-2">
+                     <Activity className="h-3.5 w-3.5 text-zinc-500" />
+                     Service Type
+                  </Label>
+                  <Select
+                    value={state.serviceType}
+                    onValueChange={(value: string) =>
+                      setState(prev => ({ ...prev, serviceType: value }))
+                    }
+                    disabled={state.status === "recording"}
                   >
-                    <Square className="h-8 w-8" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                    <SelectTrigger id="service" className="bg-white border-zinc-200 focus:ring-sky-500/20 focus:border-sky-500 transition-all">
+                      <SelectValue placeholder="Select service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SERVICES.map((service) => (
+                        <SelectItem key={service} value={service}>
+                          {service}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-        {/* Consultation Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Consultation Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="outcome" className="text-zinc-900 flex items-center gap-2">
+                     <Calendar className="h-3.5 w-3.5 text-zinc-500" />
+                     Outcome <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={state.outcome}
+                    onValueChange={(value: ConsultationState["outcome"]) =>
+                      setState(prev => ({ ...prev, outcome: value }))
+                    }
+                    disabled={state.status === "recording" || !state.recording}
+                  >
+                    <SelectTrigger id="outcome" className={cn(
+                       "bg-white border-zinc-200 focus:ring-sky-500/20 focus:border-sky-500 transition-all",
+                       !state.recording && "opacity-50 cursor-not-allowed"
+                    )}>
+                      <SelectValue placeholder="Select outcome" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="booked">Booked</SelectItem>
+                      <SelectItem value="declined">Declined</SelectItem>
+                      <SelectItem value="thinking">Thinking</SelectItem>
+                      <SelectItem value="follow_up_needed">Follow-up Needed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="provider">Provider *</Label>
-                <Select
-                  value={state.providerId}
-                  onValueChange={(value: string) =>
-                    setState(prev => ({ ...prev, providerId: value }))
+                <Label htmlFor="notes" className="text-zinc-900">Notes <span className="text-zinc-400 font-normal text-xs ml-1">(Optional)</span></Label>
+                <Textarea
+                  id="notes"
+                  placeholder="Add any additional context or notes about the consultation..."
+                  value={state.notes}
+                  onChange={(e) =>
+                    setState(prev => ({ ...prev, notes: e.target.value }))
                   }
                   disabled={state.status === "recording"}
-                >
-                  <SelectTrigger id="provider">
-                    <SelectValue placeholder="Select provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {providers.map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  rows={4}
+                  className="bg-white border-zinc-200 focus:ring-sky-500/20 focus:border-sky-500 transition-all resize-none"
+                />
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="space-y-2">
-                <Label htmlFor="customer">Customer (Optional)</Label>
-                <Select
-                  value={state.customerId?.toString() || ""}
-                  onValueChange={(value: string) =>
-                    setState(prev => ({ ...prev, customerId: parseInt(value, 10) || null }))
-                  }
-                  disabled={state.status === "recording"}
-                >
-                  <SelectTrigger id="customer">
-                    <SelectValue placeholder="Select customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((customer) => (
-                      <SelectItem key={customer.id} value={customer.id.toString()}>
-                        {customer.name} - {customer.phone}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="service">Service Type</Label>
-                <Select
-                  value={state.serviceType}
-                  onValueChange={(value: string) =>
-                    setState(prev => ({ ...prev, serviceType: value }))
-                  }
-                  disabled={state.status === "recording"}
-                >
-                  <SelectTrigger id="service">
-                    <SelectValue placeholder="Select service" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SERVICES.map((service) => (
-                      <SelectItem key={service} value={service}>
-                        {service}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="outcome">Outcome *</Label>
-                <Select
-                  value={state.outcome}
-                  onValueChange={(value: ConsultationState["outcome"]) =>
-                    setState(prev => ({ ...prev, outcome: value }))
-                  }
-                  disabled={state.status === "recording" || !state.recording}
-                >
-                  <SelectTrigger id="outcome">
-                    <SelectValue placeholder="Select outcome" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="booked">Booked</SelectItem>
-                    <SelectItem value="declined">Declined</SelectItem>
-                    <SelectItem value="thinking">Thinking</SelectItem>
-                    <SelectItem value="follow_up_needed">Follow-up Needed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes (Optional)</Label>
-              <Textarea
-                id="notes"
-                placeholder="Add any notes about the consultation..."
-                value={state.notes}
-                onChange={(e) =>
-                  setState(prev => ({ ...prev, notes: e.target.value }))
-                }
-                disabled={state.status === "recording"}
-                rows={4}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Submit Button */}
-        <Button
-          size="lg"
-          onClick={uploadRecording}
-          disabled={!canSubmit || state.status !== "idle"}
-          className="w-full"
-        >
-          {state.status === "uploading" && (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Uploading Recording...
-            </>
-          )}
-          {state.status === "processing" && (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Analyzing with AI...
-            </>
-          )}
-          {state.status === "completed" && (
-            <>
-              <CheckCircle className="mr-2 h-5 w-5" />
-              Consultation Saved!
-            </>
-          )}
-          {state.status === "idle" && (
-            <>
-              <Upload className="mr-2 h-5 w-5" />
-              Submit Consultation
-            </>
-          )}
-        </Button>
-      </div>
+          {/* Submit Button */}
+          <Button
+            size="lg"
+            onClick={uploadRecording}
+            disabled={!canSubmit || state.status !== "idle"}
+            className={cn(
+               "w-full h-12 text-base font-semibold shadow-lg transition-all",
+               canSubmit 
+                  ? "bg-gradient-to-r from-sky-500 to-teal-500 text-white hover:from-sky-600 hover:to-teal-600 shadow-sky-500/20" 
+                  : "bg-zinc-100 text-zinc-400 shadow-none border border-zinc-200"
+            )}
+          >
+            {state.status === "uploading" && (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Uploading Recording...
+              </>
+            )}
+            {state.status === "processing" && (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Analyzing with AI...
+              </>
+            )}
+            {state.status === "completed" && (
+              <>
+                <CheckCircle className="mr-2 h-5 w-5" />
+                Consultation Saved!
+              </>
+            )}
+            {state.status === "idle" && (
+              <>
+                <Upload className="mr-2 h-5 w-5" />
+                Submit Consultation
+              </>
+            )}
+          </Button>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }
