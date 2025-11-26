@@ -668,6 +668,52 @@ class MessagingService:
             if not any(keyword in text for keyword in reschedule_keywords + cancel_keywords):
                 return False
 
+        # If the latest message mentions "next week" (or similar) without naming
+        # a specific day of the week, we are not ready to enforce availability yet.
+        # The assistant should first clarify which day next week they want before
+        # running check_availability or offering times.
+        next_week_phrases = ["next week", "coming week"]
+        has_next_week = any(phrase in text for phrase in next_week_phrases)
+        day_tokens = [
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+        ]
+        has_explicit_day = any(day in text for day in day_tokens)
+        if has_next_week and not has_explicit_day:
+            return False
+
+        # Similarly, if the latest message uses long-range relative time phrases
+        # like "next month" or "in 3 weeks" without a concrete date, skip
+        # preemptive availability enforcement so the assistant can first ask
+        # which specific date or week the caller prefers.
+        long_range_phrases = [
+            "next month",
+            "coming month",
+            "next year",
+            "coming year",
+            "in a few weeks",
+            "in a few months",
+            "few weeks from now",
+            "few months from now",
+        ]
+        has_long_range_phrase = any(phrase in text for phrase in long_range_phrases)
+
+        long_range_patterns = [
+            r"\bin\s+\d+\s+weeks?\b",
+            r"\bin\s+\d+\s+months?\b",
+            r"\b\d+\s+weeks?\s+from now\b",
+            r"\b\d+\s+months?\s+from now\b",
+        ]
+        has_long_range_pattern = any(re.search(pattern, text) for pattern in long_range_patterns)
+
+        if has_long_range_phrase or has_long_range_pattern:
+            return False
+
         booking_keywords = ["book", "schedule", "appointment", "reserve", "slot"]
         current_message_is_booking = any(
             keyword in text for keyword in booking_keywords
