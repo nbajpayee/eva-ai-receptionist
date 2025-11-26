@@ -194,6 +194,23 @@ class MessagingService:
             content=content,
             metadata=metadata or {},
         )
+
+        # Update booking intent flags based on this inbound message so that
+        # subsequent turns can preemptively enforce availability, even if the
+        # user replies with simple acknowledgements like "ok" or "yes".
+        try:
+            MessagingService._update_booking_intent_from_inbound_message(
+                db=db,
+                conversation=conversation,
+                message=message,
+            )
+        except Exception as exc:  # noqa: BLE001 - intent tracking should never break flows
+            logger.warning(
+                "Failed to update booking intent from inbound message for conversation %s: %s",
+                conversation.id,
+                exc,
+            )
+
         return message
 
     @staticmethod
@@ -244,6 +261,127 @@ class MessagingService:
             or conversation.last_activity_at
             or conversation.initiated_at,
         )
+
+    @staticmethod
+    def _latest_assistant_message(
+        conversation: Conversation,
+    ) -> Optional[CommunicationMessage]:
+        if not conversation.messages:
+            return None
+        outbound_messages = [
+            m for m in conversation.messages if m.direction == "outbound"
+        ]
+        if not outbound_messages:
+            return None
+        return max(
+            outbound_messages,
+            key=lambda m: m.sent_at
+            or conversation.last_activity_at
+            or conversation.initiated_at,
+        )
+
+    @staticmethod
+    def _update_booking_intent_from_inbound_message(
+        *,
+        db: Session,
+        conversation: Conversation,
+        message: CommunicationMessage,
+    ) -> None:
+        """Mark pending booking intent when the user is clearly trying to book.
+
+        This covers two patterns:
+        - Direct booking phrases in the user message ("book", "schedule",
+          "appointment", "reserve", "slot").
+        - Short acknowledgements ("yes", "ok", "yes please", etc.) that
+          immediately follow an assistant prompt like "Would you like to book
+          ..." or "Would you like to schedule one?".
+
+        The flag persists across simple replies so that availability enforcement
+        can still run when the latest user message is just "ok".
+        """
+
+        content = (message.content or "").strip().lower()
+        if not content:
+            return
+
+        metadata = SlotSelectionManager.conversation_metadata(conversation)
+
+        # Respect existing intent; don't thrash the flag once it's set.
+        if metadata.get("pending_booking_intent"):
+            return
+
+        # If we already have a scheduled appointment recorded, avoid forcing
+        # additional availability checks unless the user is clearly asking to
+        # change or cancel that booking. That gating is handled in
+        # _requires_availability_enforcement, so we don't repeat it here.
+        last_appointment = metadata.get("last_appointment")
+        if (
+            isinstance(last_appointment, dict)
+            and last_appointment.get("status") == "scheduled"
+        ):
+            return
+
+        booking_keywords = ["book", "schedule", "appointment", "reserve", "slot"]
+        current_message_is_booking = any(
+            keyword in content for keyword in booking_keywords
+        )
+
+        # Short acknowledgements like "yes", "ok", "yes please", etc. These
+        # only indicate booking intent when the prior assistant message was a
+        # booking/scheduling prompt.
+        ack_phrases = [
+            "yes",
+            "yes please",
+            "yeah",
+            "yep",
+            "sure",
+            "of course",
+            "ok",
+            "okay",
+            "okkk",
+            "okkkk",
+            "okkkkk",
+            "sounds good",
+            "that works",
+            "let's do it",
+        ]
+        is_ack = any(
+            content == phrase or content.startswith(phrase + " ")
+            for phrase in ack_phrases
+        )
+
+        prior_prompt_is_booking = False
+        if is_ack:
+            last_assistant = MessagingService._latest_assistant_message(conversation)
+            if last_assistant and last_assistant.content:
+                assistant_text = last_assistant.content.strip().lower()
+                booking_prompt_phrases = [
+                    "would you like to book",
+                    "would you like me to book",
+                    "would you like to schedule",
+                    "would you like to schedule one",
+                    "do you want to book",
+                    "shall i book",
+                    "should i book",
+                ]
+                if any(phrase in assistant_text for phrase in booking_prompt_phrases):
+                    prior_prompt_is_booking = True
+
+        if not (current_message_is_booking or (is_ack and prior_prompt_is_booking)):
+            return
+
+        # At this point we consider there to be an active booking intent. Try to
+        # capture a hinted date so that _extract_booking_params can resolve
+        # service/date more deterministically on the next turn.
+        try:
+            date, _service = MessagingService._extract_booking_params(db, conversation)
+        except Exception:  # noqa: BLE001 - best-effort only
+            date = None
+
+        if date:
+            metadata["pending_booking_date"] = date
+        metadata["pending_booking_intent"] = True
+        SlotSelectionManager.persist_conversation_metadata(db, conversation, metadata)
 
     @staticmethod
     def _resolve_selected_slot(pending: Dict[str, Any]) -> Optional[Dict[str, Any]]:
