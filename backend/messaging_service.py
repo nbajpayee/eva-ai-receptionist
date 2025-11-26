@@ -608,9 +608,9 @@ class MessagingService:
                     conversation.id,
                 )
             else:
-                service_type = "botox"
-                logger.warning(
-                    "Could not extract service type from conversation %s. Defaulting to 'botox'.",
+                logger.info(
+                    "Could not extract service type from %s conversation %s; skipping preemptive availability.",
+                    channel or "unknown",
                     conversation.id,
                 )
 

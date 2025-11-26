@@ -143,6 +143,70 @@ def _build_availability_windows(
     return raw_windows, serialized_windows
 
 
+def _adjust_windows_to_last_start(
+    slots: List[Dict[str, Any]], windows: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Clamp availability windows to the earliest and latest *start* times.
+
+    For conversational summaries we want to describe when a guest can start
+    an appointment (for example, "12:30 PM to 2:15 PM" for a 45-minute
+    service given a free block until 3 PM), rather than the raw end of the
+    last slot. This helper rewrites each window's end to the latest slot
+    start that falls within that window and updates its labels accordingly.
+    """
+
+    if not slots or not windows:
+        return windows
+
+    # Pre-parse slot start times in Eastern once for reuse.
+    parsed_starts: List[datetime] = []
+    for slot in slots:
+        slot_start = slot.get("start")
+        if not slot_start:
+            continue
+        try:
+            start_dt = to_eastern(parse_iso_datetime(str(slot_start)))
+        except (ValueError, TypeError):  # noqa: PERF203 - defensive parsing
+            continue
+        parsed_starts.append(start_dt)
+
+    if not parsed_starts:
+        return windows
+
+    for window in windows:
+        try:
+            window_start = to_eastern(parse_iso_datetime(str(window["start"])))
+            window_end = to_eastern(parse_iso_datetime(str(window["end"])))
+        except (KeyError, ValueError, TypeError):  # noqa: PERF203 - defensive
+            continue
+
+        last_start_dt: Optional[datetime] = None
+        for start_dt in parsed_starts:
+            if window_start <= start_dt <= window_end:
+                if last_start_dt is None or start_dt > last_start_dt:
+                    last_start_dt = start_dt
+
+        if last_start_dt is None:
+            # No matching slots for this window; leave it as-is.
+            continue
+
+        start_label = window.get("start_time") or _format_time_display(window_start)
+        end_label = _format_time_display(last_start_dt)
+
+        window["start_time"] = start_label
+        window["end_time"] = end_label
+        window["end"] = last_start_dt.isoformat()
+
+        if start_label == end_label:
+            window["label"] = start_label
+            window["spoken_label"] = start_label
+        else:
+            window["label"] = f"{start_label}-{end_label}"
+            window["spoken_label"] = f"{start_label} to {end_label}"
+
+    return windows
+
+
 def _availability_summary_text(windows: List[Dict[str, Any]]) -> str:
     if not windows:
         return "Were fully booked for that day."
@@ -259,6 +323,9 @@ def handle_check_availability(
     )
 
     raw_windows, serialized_windows = _build_availability_windows(future_slots)
+    # Clamp window end-times to the latest valid start time so spoken ranges
+    # reflect when a guest can actually BEGIN an appointment.
+    serialized_windows = _adjust_windows_to_last_start(future_slots, serialized_windows)
     summary_text = _availability_summary_text(serialized_windows)
     suggestions = _suggested_slots(future_slots, raw_windows)
 
@@ -277,6 +344,7 @@ def handle_check_availability(
         "suggested_slots": suggestions,
         "date": date,
         "service": service_config.get("name", service_type),
+        "duration_minutes": service_config.get("duration_minutes"),
     }
 
 
