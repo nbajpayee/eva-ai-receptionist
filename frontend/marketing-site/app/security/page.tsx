@@ -59,8 +59,25 @@ const PRACTICES = [
 ];
 
 export const metadata: Metadata = {
-  title: "Security",
-  description: "Eva AI pairs healthcare-grade encryption with enterprise monitoring, giving med spas confidence to scale.",
+  title: "Security - Enterprise-Grade Protection for Medical Spa Data",
+  description: "Eva AI delivers SOC 2 Type II security with multi-region redundancy, AES-256 encryption, SSO/MFA, continuous monitoring, and 99.9% uptime SLA for your medical spa.",
+  keywords: [
+    "medical spa security",
+    "healthcare AI security",
+    "SOC 2 compliance",
+    "enterprise security medical spa",
+    "data encryption healthcare",
+    "secure medical software",
+    "AI security healthcare",
+  ],
+  openGraph: {
+    title: "Enterprise Security - Eva AI Protects Your Medical Spa Data",
+    description: "SOC 2 Type II certified with enterprise security, encryption, and continuous monitoring for medical spas.",
+    url: "https://getevaai.com/security",
+  },
+  alternates: {
+    canonical: "https://getevaai.com/security",
+  },
 };
 
 function PracticeCard({ title, bullets }: { title: string; bullets: string[] }) {

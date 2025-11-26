@@ -3,9 +3,9 @@ Authentication utilities for FastAPI
 Validates Supabase JWT tokens and provides auth dependencies
 """
 
-from typing import Optional
 import base64
 import json
+from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer

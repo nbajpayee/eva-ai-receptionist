@@ -4,8 +4,8 @@ export const SITE_CONFIG = {
   tagline: "The AI Receptionist That Handles Voice, SMS, & Email",
   description:
     "Eva is the first HIPAA-compliant AI receptionist that manages your entire front desk. She books appointments, answers questions, and follows up via text and email—24/7, without missing a beat.",
-  url: "https://eva-ai.com",
-  ogImage: "https://eva-ai.com/og-image.png",
+  url: "https://getevaai.com",
+  ogImage: "https://getevaai.com/og-image.png",
   contact: {
     email: "hello@getevaai.com",
     phone: "(555) 123-4567",

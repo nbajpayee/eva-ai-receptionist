@@ -7,6 +7,13 @@ const nextConfig = {
         hostname: '**',
       },
     ],
+    formats: ['image/avif', 'image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 60,
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 
   async headers() {
@@ -80,11 +87,11 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://assets.calendly.com", // ⚠️ See security notes above
-              "style-src 'self' 'unsafe-inline' https://assets.calendly.com", // ⚠️ Required for Tailwind/CSS-in-JS
-              "img-src 'self' data: https://calendly.com https://*.calendly.com https://assets.calendly.com", // ⚠️ Overly permissive - restrict in production
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://assets.calendly.com https://www.googletagmanager.com https://www.google-analytics.com https://clarity.microsoft.com https://connect.facebook.net", // Analytics + Calendly
+              "style-src 'self' 'unsafe-inline' https://assets.calendly.com", // Required for Tailwind/CSS-in-JS
+              "img-src 'self' data: https: blob:", // Allow all HTTPS images for analytics pixels, OG images, etc.
               "font-src 'self' data:",
-              "connect-src 'self' https://calendly.com https://*.calendly.com https://assets.calendly.com",
+              "connect-src 'self' https://calendly.com https://*.calendly.com https://assets.calendly.com https://www.google-analytics.com https://analytics.google.com https://clarity.microsoft.com https://www.facebook.com https://region1.google-analytics.com", // Analytics endpoints
               "frame-src 'self' https://calendly.com https://*.calendly.com",
               "frame-ancestors 'self'",
             ].join('; '),

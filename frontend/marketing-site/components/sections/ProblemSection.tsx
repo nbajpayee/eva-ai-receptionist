@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import FadeInUp from "@/components/animations/FadeInUp";
 import { PhoneOff, Clock, UserX, Calculator } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
@@ -46,7 +47,7 @@ export default function ProblemSection() {
                   Every Missed Call is <span className="text-red-600">Lost Revenue</span>
                 </h2>
                 <p className="text-xl text-gray-600 leading-relaxed">
-                  The average medical spa loses <span className="font-bold text-gray-900">$300K to $500K per year per location</span> due to missed calls and inefficient scheduling. Don&apos;t let revenue walk out the door.
+                  The average medical spa loses <span className="font-bold text-gray-900">$300K to $500K per year per location</span> due to missed calls and inefficient scheduling. Don&apos;t let revenue walk out the door. <Link href="/features" className="text-primary-600 hover:text-primary-700 font-semibold underline underline-offset-2">See how Eva solves this</Link>.
                 </p>
               </div>
             </FadeInUp>
@@ -174,7 +175,7 @@ export default function ProblemSection() {
                   </div>
 
                   <p className="text-xs text-center text-gray-400 mt-1">
-                    *Estimates based on 60% booking conversion rate. Industry average missed call rate is 20-30%.
+                    *Estimates based on 60% booking conversion rate. Industry average missed call rate is 20-30%. <Link href="/pricing" className="text-primary-600 hover:text-primary-700 font-medium underline">View pricing</Link> to see your ROI.
                   </p>
                 </div>
               </div>

@@ -53,9 +53,26 @@ const CONTROLS = [
 ];
 
 export const metadata: Metadata = {
-  title: "HIPAA Compliance",
+  title: "HIPAA Compliance - Enterprise Healthcare Security for Medical Spas",
   description:
-    "Understand the administrative, technical, and physical safeguards that keep Eva AI compliant with HIPAA requirements.",
+    "Eva AI is fully HIPAA-compliant with BAA agreements, AES-256 encryption, detailed audit trails, and SOC 2 Type II certification. Built for regulated medical practices from day one.",
+  keywords: [
+    "HIPAA compliant AI receptionist",
+    "medical spa HIPAA compliance",
+    "healthcare AI security",
+    "BAA agreement AI",
+    "HIPAA compliant medical software",
+    "PHI encryption",
+    "healthcare data security",
+  ],
+  openGraph: {
+    title: "HIPAA Compliance - Eva AI Meets Healthcare Security Standards",
+    description: "Enterprise-grade HIPAA compliance with BAA agreements, encryption, and audit trails for your medical spa.",
+    url: "https://getevaai.com/hipaa",
+  },
+  alternates: {
+    canonical: "https://getevaai.com/hipaa",
+  },
 };
 
 function ControlCard({ title, bullets }: { title: string; bullets: string[] }) {

@@ -3,10 +3,21 @@ import Link from "next/link";
 import FadeInUp from "@/components/animations/FadeInUp";
 import CTASection from "@/components/sections/CTASection";
 import { ChevronDown } from "lucide-react";
+import Script from "next/script";
+import { getFAQSchema } from "@/lib/structured-data";
+import { SITE_CONFIG } from "@/lib/constants";
 
 export const metadata: Metadata = {
-  title: "Pricing",
-  description: "Flexible pricing tailored to your practice. Book a demo to discuss how Eva AI can transform your front desk.",
+  title: "Pricing - AI Receptionist for Medical Spas",
+  description: "Flexible AI receptionist pricing for medical spas. Save $30k-$40k annually vs hiring staff. No setup fees, month-to-month terms. HIPAA compliant. Book a free demo today.",
+  openGraph: {
+    title: "Eva AI Pricing - Affordable AI Receptionist for Medical Spas",
+    description: "Flexible pricing tailored to your practice size. Save thousands annually with Eva AI's 24/7 receptionist service.",
+    url: `${SITE_CONFIG.url}/pricing`,
+  },
+  alternates: {
+    canonical: `${SITE_CONFIG.url}/pricing`,
+  },
 };
 
 const FAQ_ITEMS = [
@@ -24,7 +35,7 @@ const FAQ_ITEMS = [
   },
   {
     question: "What's included in the service?",
-    answer: "All plans include: 24/7 AI receptionist, appointment scheduling, Google Calendar integration, SMS confirmations, call analytics, and ongoing support. Advanced features like multi-location support and custom training are available based on your needs."
+    answer: "All plans include: 24/7 AI receptionist, appointment scheduling, Google Calendar integration, SMS confirmations, call analytics, HIPAA compliance with Business Associate Agreement, and ongoing support. Learn more about our HIPAA compliance and security features."
   },
   {
     question: "How long does implementation take?",
@@ -36,9 +47,20 @@ const FAQ_ITEMS = [
   },
 ];
 
+const pricingFaqSchema = getFAQSchema(FAQ_ITEMS);
+
 export default function PricingPage() {
   return (
     <>
+      {/* FAQ Structured Data */}
+      <Script
+        id="pricing-faq-schema"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(pricingFaqSchema),
+        }}
+      />
+
       {/* Hero */}
       <section className="section-spacing bg-gradient-to-b from-gray-50 to-white pt-32">
         <div className="container-wide">
@@ -121,7 +143,7 @@ export default function PricingPage() {
               "AI-powered satisfaction scoring",
               "Customer management & history",
               "Missed call recovery",
-              "HIPAA compliance options",
+              "HIPAA compliance package (BAA included)",
               "Ongoing support & updates",
               "Custom persona training"
             ].map((feature, i) => (

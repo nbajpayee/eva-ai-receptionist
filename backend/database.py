@@ -26,9 +26,9 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.types import CHAR, TypeDecorator
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship, sessionmaker
+from sqlalchemy.types import CHAR, TypeDecorator
 
 try:  # Prefer package-style import when available
     from backend.config import get_settings
@@ -389,9 +389,7 @@ class InPersonConsultation(Base):
     __tablename__ = "in_person_consultations"
 
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
-    provider_id = Column(
-        GUID(), ForeignKey("providers.id"), nullable=False, index=True
-    )
+    provider_id = Column(GUID(), ForeignKey("providers.id"), nullable=False, index=True)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
 
     # Consultation details
@@ -458,9 +456,7 @@ class AIInsight(Base):
     # Types: 'best_practice', 'objection_handling', 'coaching_opportunity', 'comparison', 'strength', 'weakness'
 
     # Associated entities
-    provider_id = Column(
-        GUID(), ForeignKey("providers.id"), nullable=True, index=True
-    )
+    provider_id = Column(GUID(), ForeignKey("providers.id"), nullable=True, index=True)
     consultation_id = Column(
         GUID(),
         ForeignKey("in_person_consultations.id"),
@@ -511,9 +507,7 @@ class ProviderPerformanceMetric(Base):
     __tablename__ = "provider_performance_metrics"
 
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
-    provider_id = Column(
-        GUID(), ForeignKey("providers.id"), nullable=False, index=True
-    )
+    provider_id = Column(GUID(), ForeignKey("providers.id"), nullable=False, index=True)
 
     # Time period
     period_start = Column(DateTime, nullable=False, index=True)
