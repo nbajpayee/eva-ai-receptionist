@@ -244,6 +244,15 @@ class RealtimeClient:
             },
             {
                 "type": "function",
+                "name": "get_current_date",
+                "description": "Retrieve the current Eastern time date context. Call this before referencing relative dates like 'today' or 'tomorrow'.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            {
+                "type": "function",
                 "name": "book_appointment",
                 "description": "Book an appointment for a customer",
                 "parameters": {
@@ -443,6 +452,22 @@ class RealtimeClient:
 
                 return availability
 
+            elif function_name == "get_current_date":
+                eastern = pytz.timezone("America/New_York")
+                now = datetime.now(eastern)
+                tomorrow = now + timedelta(days=1)
+                next_week = now + timedelta(days=7)
+
+                return {
+                    "success": True,
+                    "date": now.strftime("%Y-%m-%d"),
+                    "day_of_week": now.strftime("%A"),
+                    "time": now.strftime("%I:%M %p %Z").lstrip("0"),
+                    "datetime_iso": now.isoformat(),
+                    "tomorrow": tomorrow.strftime("%Y-%m-%d"),
+                    "next_week": next_week.strftime("%Y-%m-%d"),
+                }
+
             elif function_name == "book_appointment":
                 normalization_arguments = dict(arguments)
                 try:
@@ -459,9 +484,13 @@ class RealtimeClient:
                         "user_message": "I'm sorry, I need to check availability first before I can book that time. Let me pull up the available slots for you.",
                     }
 
+                safe_args = dict(normalized_args)
+                safe_args.pop("start", None)
+                safe_args.pop("date", None)
+
                 booking_result = handle_book_appointment(
                     self.calendar_service,
-                    **normalized_args,
+                    **safe_args,
                     services_dict=self._get_services(),
                 )
 
