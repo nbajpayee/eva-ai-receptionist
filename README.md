@@ -324,6 +324,29 @@ Update your med spa information in `.env`:
 
 ## Testing
 
+### Golden Scenario Regression Layer (Nov 26, 2025)
+
+In addition to the main unit/integration suites, there is a thin
+"golden scenario" layer to lock in high-value behavioral invariants for
+the AI assistant:
+
+- **Data fixture:** `backend/tests/fixtures/golden_scenarios.json`
+  - ~30 curated conversation sketches across information, booking,
+    appointment management, operational/account, sales, post-appointment,
+    and admin intents.
+  - Each scenario includes high-level `success_criteria` flags (for
+    example, `no_preemptive_check`, `no_post_booking_recheck`,
+    `escalation_offered`).
+- **Tests:** `backend/tests/test_golden_scenarios.py`
+  - Currently enforces that vague long-range relative dates ("next week",
+    "in 3 weeks", "in a few months") **do not** trigger preemptive
+    availability enforcement, and that once an appointment is recorded as
+    scheduled, neutral acknowledgements like "ok" **do not** cause
+    another forced availability check.
+  - This is the right place to add future behavior-focused regression
+    tests (e.g. Liam 3 PM bug, indecisive service choice, multi-
+    appointment reschedule disambiguation) as the system evolves.
+
 ### Test Voice Conversation
 1. Open `frontend/index.html` in browser
 2. Start a call

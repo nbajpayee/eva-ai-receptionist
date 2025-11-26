@@ -636,6 +636,7 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 - [ ] Re-enable `LiveStatus` widget on dashboard homepage once backend endpoint is deployed and stable
 
 **Priority 4: Booking Validation & Cross-Channel Reliability** 📅
+- [x] Create initial golden scenarios dataset (`backend/tests/fixtures/golden_scenarios.json`) with ~30 canonical conversations across MECE intent buckets, plus `test_golden_scenarios.py` enforcing core relative-date invariants.
 - [ ] Implement automated booking tests for voice (`tests/test_voice_booking.py`) covering V1–V8 scenarios from `BOOKING_VALIDATION_PLAN.md`
 - [ ] Implement automated booking tests for messaging/SMS (`tests/test_messaging_booking.py` or extend `test_cross_channel_booking.py`) covering S1–S7 and XS1–XS2
 - [ ] Add failure-path tests for calendar rejections and conflicting bookings across channels (CR1, CR2, CC1 in `BOOKING_VALIDATION_PLAN.md`)

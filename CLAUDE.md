@@ -326,6 +326,35 @@ When testing voice calls, verify:
 - Check transcript is saved in database after call ends
 - Verify satisfaction score appears in admin dashboard
 
+### Golden Scenarios Regression Layer (Nov 26, 2025)
+
+To keep Ava's behavior stable as prompts and booking logic evolve, there is a small
+"golden scenarios" regression layer:
+
+- **Data fixture:** `backend/tests/fixtures/golden_scenarios.json`
+  - ~30 canonical scenarios across 7 MECE intent buckets (info, booking,
+    management, operational, sales, post-appointment, admin).
+  - Each scenario includes: `id`, description, channel, a short
+    conversation sketch, and high-level `success_criteria` flags
+    (e.g. `no_preemptive_check`, `no_post_booking_recheck`,
+    `escalation_offered`).
+- **Tests:** `backend/tests/test_golden_scenarios.py`
+  - Currently enforces critical invariants for relative-date handling:
+    - Bare "next week" / "coming week" **must not** trigger preemptive
+      availability enforcement; Ava should first ask which day.
+    - Long-range phrases like "in 3 weeks" / "in a few months" **must not**
+      default to tomorrow; Ava should clarify a specific date or week.
+  - This file is the right place to add future behavioral invariants,
+    e.g. Liam 3 PM regression (no post-booking re-check), indecisive
+    service selection (no auto-default to Botox), multi-appointment
+    reschedule disambiguation, etc.
+
+When modifying prompts or `messaging_service.py`, prefer to:
+
+- Add/adjust scenarios in `golden_scenarios.json` for new edge cases.
+- Extend `test_golden_scenarios.py` to assert new invariants, rather than
+  only editing prompts in-place.
+
 ### API Testing
 ```bash
 # Health check

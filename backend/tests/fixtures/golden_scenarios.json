@@ -1,0 +1,648 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "info_botox_price_01",
+      "bucket": "information_seeking",
+      "channel": "sms",
+      "description": "Simple price inquiry for Botox without booking.",
+      "conversation": [
+        { "role": "user", "content": "How much is Botox?" },
+        {
+          "role": "assistant_expected",
+          "content": "States Botox price per unit and typical unit range, then offers to check availability this week.",
+          "expected_behaviors": [
+            "does_not_call_tools",
+            "mentions_price_clearly",
+            "offers_booking_follow_up"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false,
+        "mentions_price": true,
+        "offers_booking": true
+      }
+    },
+    {
+      "id": "info_filler_downtime_02",
+      "bucket": "information_seeking",
+      "channel": "sms",
+      "description": "Guest asks about downtime for dermal fillers.",
+      "conversation": [
+        { "role": "user", "content": "What is the downtime for dermal fillers?" },
+        {
+          "role": "assistant_expected",
+          "content": "Gives a concise downtime window and basic precautions, then optionally offers to check availability for a consultation.",
+          "expected_behaviors": [
+            "no_tool_calls_required",
+            "downtime_window_mentioned",
+            "may_offer_booking_but_not_pushy"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false,
+        "mentions_downtime": true
+      }
+    },
+    {
+      "id": "info_location_hours_03",
+      "bucket": "information_seeking",
+      "channel": "sms",
+      "description": "Guest asks if the spa is open on Sunday and where it is located.",
+      "conversation": [
+        { "role": "user", "content": "Are you open on Sundays and where are you located?" },
+        {
+          "role": "assistant_expected",
+          "content": "Answers Sunday hours plus address in one concise message and does not call tools.",
+          "expected_behaviors": [
+            "does_not_call_tools",
+            "mentions_sunday_hours",
+            "mentions_address"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false,
+        "mentions_hours": true,
+        "mentions_address": true
+      }
+    },
+    {
+      "id": "info_cancellation_policy_04",
+      "bucket": "information_seeking",
+      "channel": "sms",
+      "description": "Guest asks about cancellation policy without changing an appointment.",
+      "conversation": [
+        { "role": "user", "content": "What is your cancellation policy?" },
+        {
+          "role": "assistant_expected",
+          "content": "Clearly states the 24 hour policy and fee range and does not modify any bookings.",
+          "expected_behaviors": [
+            "does_not_call_booking_tools",
+            "mentions_24_hour_policy"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false,
+        "mentions_cancellation_policy": true
+      }
+    },
+    {
+      "id": "info_provider_credentials_05",
+      "bucket": "information_seeking",
+      "channel": "sms",
+      "description": "Guest asks who performs injectables and whether they are medical professionals.",
+      "conversation": [
+        { "role": "user", "content": "Who does the injections there? Are they medical professionals?" },
+        {
+          "role": "assistant_expected",
+          "content": "Explains that only trained licensed providers perform injectables and invites the guest to book a consultation if they like.",
+          "expected_behaviors": [
+            "no_tools_needed",
+            "mentions_licensed_providers",
+            "optionally_offers_consultation"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false
+      }
+    },
+    {
+      "id": "info_service_menu_06",
+      "bucket": "information_seeking",
+      "channel": "sms",
+      "description": "Guest asks what services the spa offers in general.",
+      "conversation": [
+        { "role": "user", "content": "What services do you offer?" },
+        {
+          "role": "assistant_expected",
+          "content": "Lists a short menu of core services like Botox, fillers, facials, laser, and invites the guest to ask about anything specific they are interested in.",
+          "expected_behaviors": [
+            "lists_2_to_5_core_services",
+            "does_not_overwhelm_with_long_menu"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false
+      }
+    },
+
+    {
+      "id": "book_botox_tomorrow_afternoon_07",
+      "bucket": "appointment_booking",
+      "channel": "sms",
+      "description": "Straightforward Botox booking for tomorrow afternoon where Eva preemptively checks availability and then books.",
+      "conversation": [
+        { "role": "user", "content": "I would like to book Botox tomorrow afternoon." },
+        {
+          "role": "assistant_expected",
+          "content": "Calls check availability for Botox tomorrow, offers 2 or 3 specific afternoon times, and does not ask for name or contact yet.",
+          "expected_behaviors": [
+            "preemptive_check_availability",
+            "offers_specific_times",
+            "no_identity_request_before_slot_choice"
+          ]
+        },
+        { "role": "user", "content": "3 pm works." },
+        {
+          "role": "assistant_expected",
+          "content": "Confirms 3 pm is available based on the previous availability, asks for full name and phone number, then books.",
+          "expected_behaviors": [
+            "no_second_availability_check_before_booking",
+            "calls_book_appointment",
+            "collects_name_and_phone"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": true,
+        "no_post_booking_recheck": true
+      }
+    },
+    {
+      "id": "book_lip_filler_specific_date_08",
+      "bucket": "appointment_booking",
+      "channel": "sms",
+      "description": "Guest wants lip filler on a specific date next week.",
+      "conversation": [
+        { "role": "user", "content": "Can I book lip filler on Tuesday next week?" },
+        {
+          "role": "assistant_expected",
+          "content": "Interprets Tuesday next week as a specific date via get current date, runs check availability for lip filler that day, and offers a few times.",
+          "expected_behaviors": [
+            "uses_relative_week_correctly",
+            "offers_times_for_that_tuesday"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": null
+      }
+    },
+    {
+      "id": "book_multi_service_btx_facial_09",
+      "bucket": "appointment_booking",
+      "channel": "sms",
+      "description": "Guest asks to book Botox and a facial in one visit.",
+      "conversation": [
+        { "role": "user", "content": "Can I book Botox and a facial on the same day next week?" },
+        {
+          "role": "assistant_expected",
+          "content": "Clarifies whether they want the same appointment block or back to back, then checks availability for both services on the same day and proposes a combined plan.",
+          "expected_behaviors": [
+            "clarifies_multi_service_request",
+            "uses_check_availability_for_services_on_same_day"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": null
+      }
+    },
+    {
+      "id": "book_indecisive_service_10",
+      "bucket": "appointment_booking",
+      "channel": "sms",
+      "description": "Indecisive guest who is not sure which service they need but wants better skin.",
+      "conversation": [
+        { "role": "user", "content": "I want to do something for my skin but I am not sure what I need." },
+        {
+          "role": "assistant_expected",
+          "content": "Asks 1 or 2 clarifying questions about goals such as fine lines, texture, or acne rather than picking Botox by default, then offers a consultation instead of forcing a specific treatment.",
+          "expected_behaviors": [
+            "does_not_auto_select_service",
+            "offers_consultation_option"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": null,
+        "no_auto_service_selection": true
+      }
+    },
+    {
+      "id": "book_next_week_ambiguous_11",
+      "bucket": "appointment_booking",
+      "channel": "sms",
+      "description": "Guest asks to book next week with no specific day, testing that Eva asks which day without defaulting to tomorrow.",
+      "conversation": [
+        { "role": "user", "content": "Ok let's book an appointment for next week." },
+        {
+          "role": "assistant_expected",
+          "content": "Does not run check availability yet and instead asks which day next week works best, for example Monday or Tuesday.",
+          "expected_behaviors": [
+            "no_preemptive_availability_for_next_week_without_day",
+            "asks_for_specific_day"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": null,
+        "no_preemptive_check": true
+      }
+    },
+    {
+      "id": "book_long_range_relative_12",
+      "bucket": "appointment_booking",
+      "channel": "sms",
+      "description": "Guest says they want to book in 3 weeks, testing clarifying behavior instead of defaulting date.",
+      "conversation": [
+        { "role": "user", "content": "I want to book Botox in 3 weeks." },
+        {
+          "role": "assistant_expected",
+          "content": "Does not immediately check availability and instead asks if they have a specific date or day of the week in mind three weeks from now.",
+          "expected_behaviors": [
+            "no_preemptive_availability_for_long_range_relative",
+            "asks_for_specific_date_or_day"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": null,
+        "no_preemptive_check": true
+      }
+    },
+    {
+      "id": "book_fuzzy_after_work_13",
+      "bucket": "appointment_booking",
+      "channel": "sms",
+      "description": "Guest wants something after work tomorrow, testing fuzzy time clarification.",
+      "conversation": [
+        { "role": "user", "content": "Do you have anything after work tomorrow for fillers?" },
+        {
+          "role": "assistant_expected",
+          "content": "Asks what time after work means, for example around 5 pm or 6 pm, and if there are no evening slots, explains that the latest openings are earlier and offers those or another day.",
+          "expected_behaviors": [
+            "asks_for_after_work_time_range",
+            "acknowledges_if_no_evening_availability_and_offers_alternatives"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": null
+      }
+    },
+    {
+      "id": "book_voice_consultation_14",
+      "bucket": "appointment_booking",
+      "channel": "voice",
+      "description": "Caller asks by phone to book a general consultation next week.",
+      "conversation": [
+        { "role": "user", "content": "I would like to schedule a consultation next week to talk about my skin." },
+        {
+          "role": "assistant_expected",
+          "content": "Clarifies which day next week, confirms daytime or evening preference, then runs check availability and offers 1 or 2 times before collecting name and phone.",
+          "expected_behaviors": [
+            "follows_voice_identity_after_availability_rule",
+            "asks_for_day_and_time_window_before_tools"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": null
+      }
+    },
+
+    {
+      "id": "manage_reschedule_simple_15",
+      "bucket": "appointment_management",
+      "channel": "sms",
+      "description": "Guest clearly references a single appointment and asks to move it to later the same day.",
+      "conversation": [
+        { "role": "user", "content": "Can we move my Botox appointment on Friday at 10 am to later in the afternoon?" },
+        {
+          "role": "assistant_expected",
+          "content": "Identifies the single Botox appointment on Friday, checks later Friday availability, and offers a couple of afternoon times before rescheduling.",
+          "expected_behaviors": [
+            "uses_reschedule_tool",
+            "does_not_treat_as_new_booking"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": true
+      }
+    },
+    {
+      "id": "manage_reschedule_multi_appointments_16",
+      "bucket": "appointment_management",
+      "channel": "sms",
+      "description": "Guest has multiple future appointments and vaguely asks to move my appointment.",
+      "conversation": [
+        { "role": "user", "content": "Can you move my appointment to later in the day?" },
+        {
+          "role": "assistant_expected",
+          "content": "Checks that there are multiple upcoming appointments and asks which one they mean, for example Botox on Friday at 3 pm or Hydrafacial on Monday at 10 am, before rescheduling.",
+          "expected_behaviors": [
+            "clarifies_which_appointment",
+            "does_not_reschedule_without_disambiguation"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": null,
+        "requires_disambiguation": true
+      }
+    },
+    {
+      "id": "manage_cancel_with_policy_17",
+      "bucket": "appointment_management",
+      "channel": "sms",
+      "description": "Guest cancels inside the policy window so Eva must mention the fee.",
+      "conversation": [
+        { "role": "user", "content": "I need to cancel my appointment for tomorrow." },
+        {
+          "role": "assistant_expected",
+          "content": "Confirms which appointment, notes that it is inside the 24 hour window, explains the potential fee in line with policy, then calls cancel appointment and confirms the cancellation.",
+          "expected_behaviors": [
+            "mentions_late_cancel_policy_when_applicable",
+            "uses_cancel_tool"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false,
+        "mentions_potential_fee": true
+      }
+    },
+    {
+      "id": "manage_confirm_existing_18",
+      "bucket": "appointment_management",
+      "channel": "sms",
+      "description": "Guest asks to confirm their upcoming appointment time.",
+      "conversation": [
+        { "role": "user", "content": "Can you confirm what time my appointment is on Friday?" },
+        {
+          "role": "assistant_expected",
+          "content": "Looks up the next upcoming appointment on Friday and replies with service, date, and time in a single concise message without changing anything.",
+          "expected_behaviors": [
+            "no_change_to_appointment",
+            "summarizes_existing_booking"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false
+      }
+    },
+    {
+      "id": "manage_add_on_service_19",
+      "bucket": "appointment_management",
+      "channel": "sms",
+      "description": "Guest wants to add a facial to an existing Botox appointment.",
+      "conversation": [
+        { "role": "user", "content": "I already have Botox booked next week. Can we add a facial to that visit?" },
+        {
+          "role": "assistant_expected",
+          "content": "Finds the existing Botox appointment, checks whether there is enough time to add a facial before or after, and either adds it or proposes a nearby slot.",
+          "expected_behaviors": [
+            "treats_as_modification_not_new_appointment"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": true
+      }
+    },
+    {
+      "id": "manage_liam_post_booking_20",
+      "bucket": "appointment_management",
+      "channel": "sms",
+      "description": "Regression test for Liam bug where Eva must not re check availability or say the chosen time is booked after a successful booking.",
+      "conversation": [
+        { "role": "user", "content": "I would like to book Botox for tomorrow around 3 pm." },
+        {
+          "role": "assistant_expected",
+          "content": "Checks availability, offers a slot at 3 pm or nearby times, and once the guest picks 3 pm, collects name and phone and books.",
+          "expected_behaviors": [
+            "single_pre_booking_availability_check",
+            "collects_identity_after_slot_choice"
+          ]
+        },
+        { "role": "user", "content": "My name is Liam Jackson and my number is 5555550120." },
+        {
+          "role": "assistant_expected",
+          "content": "Calls book appointment for 3 pm, confirms that 3 pm is booked for Liam, and does not say 3 pm is unavailable or re check availability after booking, even if the guest says ok again.",
+          "expected_behaviors": [
+            "no_post_booking_availability_recheck",
+            "no_claim_that_3pm_is_booked_after_booking"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": true,
+        "no_post_booking_recheck": true
+      }
+    },
+
+    {
+      "id": "oper_update_contact_21",
+      "bucket": "operational_account",
+      "channel": "sms",
+      "description": "Guest asks to update their phone number.",
+      "conversation": [
+        { "role": "user", "content": "Can you update my phone number to 5551239999?" },
+        {
+          "role": "assistant_expected",
+          "content": "Confirms identity in a lightweight way if needed and updates the phone number in the profile or tags the team to do so, without changing appointments.",
+          "expected_behaviors": [
+            "updates_contact_info",
+            "does_not_modify_bookings"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false
+      }
+    },
+    {
+      "id": "oper_first_time_vs_returning_22",
+      "bucket": "operational_account",
+      "channel": "sms",
+      "description": "Guest says it is their first time and asks if anything special is needed.",
+      "conversation": [
+        { "role": "user", "content": "This will be my first time at your spa, do I need to do anything before my appointment?" },
+        {
+          "role": "assistant_expected",
+          "content": "Explains briefly what new guests can expect, such as forms or arriving early, and reassures them without changing any bookings.",
+          "expected_behaviors": [
+            "no_tools_required",
+            "mentions_arrival_or_intake_if_relevant"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false
+      }
+    },
+    {
+      "id": "oper_membership_units_23",
+      "bucket": "operational_account",
+      "channel": "sms",
+      "description": "Guest asks how many units remain in their membership or package.",
+      "conversation": [
+        { "role": "user", "content": "How many Botox units do I have left in my membership?" },
+        {
+          "role": "assistant_expected",
+          "content": "If integrated data is available, returns remaining units clearly; otherwise, politely explains that the team will follow up and offers to have someone contact them.",
+          "expected_behaviors": [
+            "does_not_guess_membership_balances",
+            "offers_handoff_if_data_unavailable"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false
+      }
+    },
+
+    {
+      "id": "sales_treatment_recommendation_24",
+      "bucket": "sales_conversion_support",
+      "channel": "sms",
+      "description": "Guest asks what is best for fine lines on the forehead.",
+      "conversation": [
+        { "role": "user", "content": "What is best for fine lines on my forehead?" },
+        {
+          "role": "assistant_expected",
+          "content": "Suggests Botox or neuromodulators as a common option, notes that final recommendations come from the provider, and offers to book a consultation.",
+          "expected_behaviors": [
+            "does_not_give_medical_diagnosis",
+            "positions_consultation_for_personalized_plan"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": null
+      }
+    },
+    {
+      "id": "sales_upsell_facial_addon_25",
+      "bucket": "sales_conversion_support",
+      "channel": "sms",
+      "description": "During a Botox booking flow, Eva suggests adding a facial in a non pushy way.",
+      "conversation": [
+        { "role": "user", "content": "I want to book Botox this Friday." },
+        {
+          "role": "assistant_expected",
+          "content": "After confirming service and time, briefly mentions that many guests like to pair Botox with a facial and offers it as an optional add on, without making the guest feel pressured.",
+          "expected_behaviors": [
+            "optional_upsell_only_after_core_booking_is_clear",
+            "no_pressure_language"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": true
+      }
+    },
+
+    {
+      "id": "post_aftercare_botox_26",
+      "bucket": "post_appointment_support",
+      "channel": "sms",
+      "description": "Guest asks what they should avoid after Botox.",
+      "conversation": [
+        { "role": "user", "content": "I just had Botox today, what should I avoid?" },
+        {
+          "role": "assistant_expected",
+          "content": "Provides standard non medical aftercare guidance such as avoiding rubbing the area or strenuous exercise for a short period and reminds them to contact the clinic for medical concerns.",
+          "expected_behaviors": [
+            "no_medical_diagnosis",
+            "encourages_contact_for_concerns"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false
+      }
+    },
+    {
+      "id": "post_complication_escalation_27",
+      "bucket": "post_appointment_support",
+      "channel": "sms",
+      "description": "Guest reports worrying symptoms after a procedure.",
+      "conversation": [
+        { "role": "user", "content": "My face is very swollen and painful after filler, is this normal?" },
+        {
+          "role": "assistant_expected",
+          "content": "Does not attempt to judge normal versus abnormal, explains that any concerning symptoms should be evaluated by the provider, and offers to contact the clinic urgently or provides the emergency contact instructions per policy.",
+          "expected_behaviors": [
+            "no_reassuring_or_dismissing_diagnosis",
+            "escalates_to_human_provider_or_front_desk"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false,
+        "escalation_offered": true
+      }
+    },
+
+    {
+      "id": "admin_gift_card_purchase_28",
+      "bucket": "administrative_misc",
+      "channel": "sms",
+      "description": "Guest wants to buy a gift card.",
+      "conversation": [
+        { "role": "user", "content": "Can I buy a gift card for my friend?" },
+        {
+          "role": "assistant_expected",
+          "content": "Explains briefly how gift cards can be purchased, such as online or by phone, and provides a link or instructions without booking an appointment.",
+          "expected_behaviors": [
+            "no_booking_tools",
+            "provides_clear_gift_card_instructions"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false
+      }
+    },
+    {
+      "id": "admin_feedback_complaint_29",
+      "bucket": "administrative_misc",
+      "channel": "sms",
+      "description": "Guest has negative feedback about their visit and wants to share it.",
+      "conversation": [
+        { "role": "user", "content": "I was not happy with my last visit and want to file a complaint." },
+        {
+          "role": "assistant_expected",
+          "content": "Thanks them for sharing, apologizes for their experience without assigning blame, and offers to have a manager or team member follow up, collecting contact details if needed.",
+          "expected_behaviors": [
+            "empathetic_tone",
+            "offers_handoff_to_human"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": false
+      }
+    },
+    {
+      "id": "booking_no_availability_alt_day_30",
+      "bucket": "appointment_booking",
+      "channel": "sms",
+      "description": "Guest requests a specific day and time range that is fully booked so Eva must suggest the nearest alternatives.",
+      "conversation": [
+        { "role": "user", "content": "Do you have anything Friday afternoon for dermal fillers?" },
+        {
+          "role": "assistant_expected",
+          "content": "If check availability shows no Friday afternoon openings, clearly states that Friday afternoon is fully booked and proposes the closest alternatives such as Saturday late morning or Monday after 3 pm, then asks which works best.",
+          "expected_behaviors": [
+            "honest_about_no_availability",
+            "proposes_nearest_alternative_slots"
+          ]
+        }
+      ],
+      "success_criteria": {
+        "booking_completed": null
+      }
+    }
+  ]
+}

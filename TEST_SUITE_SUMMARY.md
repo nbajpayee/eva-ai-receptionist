@@ -304,6 +304,27 @@ backend/tests/
     └── test_api_benchmarks.py            [8 benchmarks]
 ```
 
+### Golden Scenario Regression Layer (Nov 26, 2025)
+
+In addition to the structured test directories above, there is a thin
+"golden scenarios" regression layer used to lock in specific behavioral
+invariants for the AI assistant:
+
+- **Data fixture:** `backend/tests/fixtures/golden_scenarios.json`
+  - ~30 curated scenarios spanning information, booking, management,
+    operational/account, sales, post-appointment, and admin intents.
+  - Each scenario includes a short conversation sketch plus
+    `success_criteria` flags (e.g. `no_preemptive_check`,
+    `no_post_booking_recheck`, `escalation_offered`).
+- **Tests:** `backend/tests/test_golden_scenarios.py`
+  - Currently enforces that long-range relative dates (e.g. "next week",
+    "in 3 weeks", "in a few months") do **not** trigger preemptive
+    availability enforcement; the assistant must first clarify a specific
+    day/date before running `check_availability`.
+  - Intended as the home for future high-value behavioral regression
+    assertions (e.g. Liam 3 PM post-booking bug, indecisive service
+    selection, multi-appointment reschedule disambiguation).
+
 ---
 
 ## Success Metrics
