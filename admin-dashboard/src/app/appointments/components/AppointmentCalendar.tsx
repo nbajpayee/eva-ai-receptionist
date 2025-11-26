@@ -292,31 +292,53 @@ function MonthView({ date, appointments, setDate, setView }: any) {
                 mode="single"
                 selected={date}
                 onSelect={(d) => {
-                    if(d) {
+                    if (d) {
                         setDate(d);
-                        setView('day');
+                        setView("day");
                     }
                 }}
                 className="rounded-md border shadow p-6 w-full max-w-2xl bg-white"
                 components={{
-                    DayContent: (props) => {
-                         const dayApts = appointments.filter((a: Appointment) => isSameDay(new Date(a.appointment_datetime), props.date));
-                         return (
-                            <div className="w-full h-full min-h-[60px] flex flex-col items-start justify-start p-1 relative">
-                                <span className="text-sm font-medium mb-1">{props.date.getDate()}</span>
+                    // Custom day button to show appointment density dots in month view.
+                    // Uses react-day-picker's CalendarDay via props.day.date.
+                    DayButton: (props: any) => {
+                        const dateObj: Date | undefined = props.day?.date ?? props.date;
+                        const dayApts = dateObj
+                            ? appointments.filter((a: Appointment) =>
+                                  isSameDay(new Date(a.appointment_datetime), dateObj)
+                              )
+                            : [];
+
+                        return (
+                            <button
+                                {...props}
+                                className={cn(
+                                    "w-full h-full min-h-[60px] flex flex-col items-start justify-start p-1 relative",
+                                    props.className
+                                )}
+                            >
+                                <span className="text-sm font-medium mb-1">
+                                    {dateObj ? dateObj.getDate() : ""}
+                                </span>
                                 <div className="flex flex-col gap-0.5 w-full">
                                     {dayApts.slice(0, 3).map((a: Appointment) => (
-                                        <div key={a.id} className="h-1.5 w-full rounded-full bg-blue-500 opacity-50" title={a.service_type} />
+                                        <div
+                                            key={a.id}
+                                            className="h-1.5 w-full rounded-full bg-blue-500 opacity-50"
+                                            title={a.service_type}
+                                        />
                                     ))}
-                                    {dayApts.length > 3 && <div className="h-1.5 w-1.5 rounded-full bg-zinc-300 self-center" />}
+                                    {dayApts.length > 3 && (
+                                        <div className="h-1.5 w-1.5 rounded-full bg-zinc-300 self-center" />
+                                    )}
                                 </div>
-                            </div>
-                         )
-                    }
+                            </button>
+                        );
+                    },
                 }}
             />
         </div>
-    )
+    );
 }
 
 function ListView({ appointments }: { appointments: Appointment[] }) {
