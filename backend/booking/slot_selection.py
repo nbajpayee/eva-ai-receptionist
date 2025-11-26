@@ -367,6 +367,8 @@ class SlotSelectionCore:
 
             This is intentionally lightweight – it looks for the first HH[:MM] AM/PM
             style phrase and returns a canonical representation for comparison.
+            For labels like "02:00 PM", we normalize to "2pm" so that a guest
+            message like "2pm" matches the 2:00 slot.
             """
             match = re.search(
                 r"(\d{1,2})(?::(\d{2}))?\s*(a\.m\.?|am|p\.m\.?|pm)", text.lower()
@@ -379,7 +381,7 @@ class SlotSelectionCore:
             except ValueError:
                 return None
             ampm = "am" if "a" in ampm_raw else "pm"
-            if minute_str:
+            if minute_str and minute_str != "00":
                 return f"{hour}:{minute_str}{ampm}"
             return f"{hour}{ampm}"
 
@@ -454,6 +456,9 @@ class SlotSelectionCore:
             raise SlotSelectionError("No stored slot offers to validate against.")
 
         choice_index = pending.get("selected_option_index")
+        preselected_slot = (
+            pending.get("selected_slot") if isinstance(pending, dict) else None
+        )
         selected_slot: Optional[Dict[str, Any]] = None
 
         if isinstance(choice_index, int) and 1 <= choice_index <= len(slots):
@@ -482,6 +487,29 @@ class SlotSelectionCore:
                     conversation.id,
                     choice_index,
                     candidate_label,
+                )
+        elif isinstance(preselected_slot, dict) and preselected_slot.get("start"):
+            # If we have a previously captured selection (for example, the guest
+            # said "Let's do 1:30" and capture_selection stored that in
+            # selected_slot), honor that choice even if the AI's requested_start
+            # does not exactly match. This prevents the AI from drifting to a
+            # different time like 1:00 PM when the user clearly chose 1:30 PM.
+            selected_slot = preselected_slot
+            label = preselected_slot.get("start_time", preselected_slot.get("start"))
+            if requested_start and not SlotSelectionCore.slot_matches_request(
+                preselected_slot, requested_start
+            ):
+                logger.info(
+                    "Pre-selected slot takes precedence for conversation_id=%s: selected=%s, AI requested=%s. Using pre-selected slot.",
+                    conversation.id,
+                    label,
+                    requested_start,
+                )
+            else:
+                logger.info(
+                    "Using pre-selected slot for conversation_id=%s: slot=%s",
+                    conversation.id,
+                    label,
                 )
         elif requested_start:
             # First, try to match within the displayed options (slots)

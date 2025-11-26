@@ -416,8 +416,8 @@ class MessagingService:
     @staticmethod
     def _extract_booking_params(
         db: Session, conversation: Conversation
-    ) -> Tuple[str, str]:
-        """Extract date and service type from recent conversation messages."""
+    ) -> Tuple[str, Optional[str]]:
+        """Extract date and (if known) service type from recent conversation messages."""
         metadata = SlotSelectionManager.conversation_metadata(conversation)
         hinted_date = metadata.get("pending_booking_date")
         hinted_service = metadata.get("pending_booking_service")
@@ -463,11 +463,18 @@ class MessagingService:
             _scan(outbound_messages)
 
         if service_type is None:
-            service_type = "botox"
-            logger.warning(
-                "Could not extract service type from conversation %s. Defaulting to 'botox'.",
-                conversation.id,
-            )
+            channel = getattr(conversation, "channel", None)
+            if channel == "sms":
+                logger.info(
+                    "Could not extract service type from SMS conversation %s; skipping preemptive availability.",
+                    conversation.id,
+                )
+            else:
+                service_type = "botox"
+                logger.warning(
+                    "Could not extract service type from conversation %s. Defaulting to 'botox'.",
+                    conversation.id,
+                )
 
         return date, service_type
 
@@ -1118,10 +1125,11 @@ class MessagingService:
                 # error. This avoids confusing "technical issue" flows when the
                 # appointment is actually booked.
                 metadata = SlotSelectionManager.conversation_metadata(conversation)
-                last_appt = metadata.get("last_appointment") if isinstance(metadata, dict) else None
+                last_appt = metadata.get("last_appointment") if isinstance(
+                    metadata, dict
+                ) else None
                 requested_start = arguments.get("start_time") or arguments.get("start")
                 requested_service = arguments.get("service_type")
-
                 idempotent_output: Optional[Dict[str, Any]] = None
                 if (
                     isinstance(last_appt, dict)
@@ -1589,103 +1597,109 @@ class MessagingService:
                 db, conversation
             )
 
-            trace(
-                "Preemptively calling check_availability: date=%s, service=%s",
-                date,
-                service_type,
-            )
-
-            try:
-                output = handle_check_availability(
-                    calendar_service,
-                    date=date,
-                    service_type=service_type,
+            if not service_type:
+                trace(
+                    "Skipping preemptive check_availability for conversation %s because service type is unknown; AI should clarify service first.",
+                    conversation_id,
+                )
+            else:
+                trace(
+                    "Preemptively calling check_availability: date=%s, service=%s",
+                    date,
+                    service_type,
                 )
 
-                if output.get("success"):
-                    # Store the offers
-                    SlotSelectionManager.record_offers(
-                        db,
-                        conversation,
-                        tool_call_id="preemptive_call",
-                        arguments={"date": date, "service_type": service_type},
-                        output=output,
+                try:
+                    output = handle_check_availability(
+                        calendar_service,
+                        date=date,
+                        service_type=service_type,
                     )
-                    db.refresh(conversation)
-                    metadata = SlotSelectionManager.conversation_metadata(conversation)
 
-                    preemptive_availability_result = {
-                        "tool_call_id": "preemptive_call",
-                        "name": "check_availability",
-                        "arguments": {"date": date, "service_type": service_type},
-                        "output": output,
-                    }
+                    if output.get("success"):
+                        # Store the offers
+                        SlotSelectionManager.record_offers(
+                            db,
+                            conversation,
+                            tool_call_id="preemptive_call",
+                            arguments={"date": date, "service_type": service_type},
+                            output=output,
+                        )
+                        db.refresh(conversation)
+                        metadata = SlotSelectionManager.conversation_metadata(conversation)
 
-                    # Add tool result to history so AI knows about the availability
-                    history.append(
-                        {
-                            "role": "assistant",
-                            "content": "",  # Empty string instead of None to avoid trace errors
-                            "tool_calls": [
-                                {
-                                    "id": "preemptive_call",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "check_availability",
-                                        "arguments": json.dumps(
-                                            {"date": date, "service_type": service_type}
-                                        ),
-                                    },
-                                }
-                            ],
-                        }
-                    )
-                    history.append(
-                        {
-                            "role": "tool",
+                        preemptive_availability_result = {
                             "tool_call_id": "preemptive_call",
-                            "content": json.dumps(output),
+                            "name": "check_availability",
+                            "arguments": {"date": date, "service_type": service_type},
+                            "output": output,
                         }
-                    )
 
-                    # Only set booking intent if not already completed
-                    # If last_appointment exists with same slot, don't restart the booking flow
-                    should_set_intent = True
-                    last_appt = metadata.get("last_appointment")
-                    if (
-                        isinstance(last_appt, dict)
-                        and last_appt.get("status") == "scheduled"
-                    ):
-                        should_set_intent = False
-
-                    if should_set_intent:
-                        metadata.update(
+                        # Add tool result to history so AI knows about the availability
+                        history.append(
                             {
-                                "pending_booking_intent": True,
-                                "pending_booking_date": date,
-                                "pending_booking_service": service_type,
+                                "role": "assistant",
+                                "content": "",  # Empty string instead of None to avoid trace errors
+                                "tool_calls": [
+                                    {
+                                        "id": "preemptive_call",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "check_availability",
+                                            "arguments": json.dumps(
+                                                {"date": date, "service_type": service_type}
+                                            ),
+                                        },
+                                    }
+                                ],
                             }
                         )
-                        SlotSelectionManager.persist_conversation_metadata(
-                            db, conversation, metadata
+                        history.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": "preemptive_call",
+                                "content": json.dumps(output),
+                            }
                         )
 
-                    trace(
-                        "Preemptive check_availability succeeded. Injected results into context."
-                    )
-                else:
-                    logger.warning(
-                        "Preemptive check_availability failed for conversation %s: %s",
+                        # Only set booking intent if not already completed
+                        # If last_appointment exists with same slot, don't restart the booking flow
+                        should_set_intent = True
+                        last_appt = metadata.get("last_appointment")
+                        if (
+                            isinstance(last_appt, dict)
+                            and last_appt.get("status") == "scheduled"
+                        ):
+                            should_set_intent = False
+
+                        if should_set_intent:
+                            metadata.update(
+                                {
+                                    "pending_booking_intent": True,
+                                    "pending_booking_date": date,
+                                    "pending_booking_service": service_type,
+                                }
+                            )
+                            SlotSelectionManager.persist_conversation_metadata(
+                                db, conversation, metadata
+                            )
+
+                        trace(
+                            "Preemptive check_availability succeeded. Injected results into context."
+                        )
+                    else:
+                        logger.warning(
+                            "Preemptive check_availability failed for conversation %s: %s",
+                            conversation_id,
+                            output.get("error", "Unknown error"),
+                        )
+                except Exception as exc:
+                    logger.error(
+                        "Exception during preemptive check_availability for conversation %s: %s",
                         conversation_id,
-                        output.get("error", "Unknown error"),
+                        exc,
+                        exc_info=True,
                     )
-            except Exception as exc:
-                logger.error(
-                    "Exception during preemptive check_availability for conversation %s: %s",
-                    conversation_id,
-                    exc,
-                    exc_info=True,
-                )
 
         readiness = MessagingService._should_execute_booking(db, conversation)
         if readiness:
