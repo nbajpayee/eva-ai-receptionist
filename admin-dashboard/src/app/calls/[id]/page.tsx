@@ -275,18 +275,40 @@ async function fetchCallDetails(id: string): Promise<CallDetails | null> {
 
 async function fetchConversationMessages(conversationId: string): Promise<CommunicationMessage[]> {
   try {
-    const response = await fetch(
-      resolveInternalUrl(`/api/admin/messaging/conversations/${conversationId}`),
-      { cache: "no-store" }
-    );
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!baseUrl) {
+      console.error("NEXT_PUBLIC_API_BASE_URL is not configured");
+      return [];
+    }
+
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      console.error("Unable to resolve backend auth headers for conversation messages fetch");
+      return [];
+    }
+
+    const backendUrl = new URL(`/api/admin/messaging/conversations/${conversationId}`, baseUrl);
+    const response = await fetch(backendUrl.toString(), {
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
+      cache: "no-store",
+    });
 
     if (!response.ok) {
+      console.error(
+        "Failed to fetch conversation messages from backend",
+        response.status,
+        await response.text()
+      );
       return [];
     }
 
     const data = (await response.json()) as ConversationMessagesResponse;
+    const messages = data.messages ?? [];
 
-    return data.messages.map((message) => ({
+    return messages.map((message) => ({
       id: message.id,
       channel: message.channel as CommunicationChannel,
       author: message.direction === "outbound" ? "assistant" : "customer",

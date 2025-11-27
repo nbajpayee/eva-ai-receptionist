@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft, Play, Pause, CheckCircle, MessageSquare, TrendingUp, Users, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,8 +47,10 @@ interface Conversation {
   ai_summary: string | null;
 }
 
-export default function CampaignDetailPage({ params }: { params: { id: string } }) {
+export default function CampaignDetailPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
+  const id = params.id;
   const [stats, setStats] = useState<CampaignStats | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +58,14 @@ export default function CampaignDetailPage({ params }: { params: { id: string } 
 
   const fetchCampaignStats = useCallback(async () => {
     try {
-      const response = await fetch(`/api/admin/research/campaigns/${params.id}/stats`);
+      const response = await fetch(`/api/admin/research/campaigns/${id}/stats`);
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("Failed to fetch campaign stats:", response.status, text);
+        return;
+      }
+
       const data = await response.json();
 
       if (data.success) {
@@ -67,20 +76,27 @@ export default function CampaignDetailPage({ params }: { params: { id: string } 
     } finally {
       setLoading(false);
     }
-  }, [params.id]);
+  }, [id]);
 
   const fetchConversations = useCallback(async () => {
     try {
-      const response = await fetch(`/api/admin/research/campaigns/${params.id}/conversations`);
+      const response = await fetch(`/api/admin/research/campaigns/${id}/conversations`);
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("Failed to fetch conversations:", response.status, text);
+        return;
+      }
+
       const data = await response.json();
 
-      if (data.success) {
+      if (data.success && Array.isArray(data.conversations)) {
         setConversations(data.conversations);
       }
     } catch (error) {
       console.error("Failed to fetch conversations:", error);
     }
-  }, [params.id]);
+  }, [id]);
 
   useEffect(() => {
     void fetchCampaignStats();
@@ -90,7 +106,7 @@ export default function CampaignDetailPage({ params }: { params: { id: string } 
   const handleAction = async (action: string) => {
     setActionLoading(true);
     try {
-      const response = await fetch(`/api/admin/research/campaigns/${params.id}/${action}`, {
+      const response = await fetch(`/api/admin/research/campaigns/${id}/${action}`, {
         method: "POST",
       });
 
