@@ -1,0 +1,48 @@
+{
+  "persona_id": "organizer_olivia",
+  "persona_name": "Olivia (Organizer & Advocate)",
+  "persona_goal": "Handle non\u0011clinical admin tasks like gift cards and feedback.",
+  "bucket": "administrative_misc",
+  "timestamp": "2025-11-27T00:08:14.883276",
+  "transcript": [
+    {
+      "role": "customer",
+      "content": "Can I buy a gift card for my friend?"
+    },
+    {
+      "role": "assistant",
+      "content": "We do offer gift cards at Luxury Med Spa! They make a wonderful gift for any occasion. Would you like me to share details on how to purchase one or help you with that now?"
+    },
+    {
+      "role": "customer",
+      "content": "Yes, please! How can I buy one and can I choose the amount?"
+    },
+    {
+      "role": "assistant",
+      "content": "We do offer gift cards that make a wonderful treat for a friend! You can choose the amount you want, usually starting from $50 up to any value you prefer. \n\nI can help you with the purchase process or send you a link to buy online\u2014whichever you prefer. Would you like me to guide you through it now?"
+    },
+    {
+      "role": "customer",
+      "content": "A link to buy online would be great, thanks!"
+    },
+    {
+      "role": "assistant",
+      "content": "We don\u2019t have an online gift card purchase link, but I can help you arrange one here. You can choose any amount you\u2019d like. Would you like me to assist with that now?"
+    }
+  ],
+  "stats": {
+    "total_messages": 6,
+    "customer_messages": 3,
+    "eva_messages": 3,
+    "completed_naturally": true
+  },
+  "review_notes": {
+    "manual_review_required": true,
+    "check_for": {
+      "clear_gift_card_instructions": true,
+      "empathetic_response_to_complaints": true,
+      "handoff_to_manager_or_team_for_issues": true,
+      "no_appointment_booking_unless_explicitly_requested": true
+    }
+  }
+}

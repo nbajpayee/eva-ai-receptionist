@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 import { Appointment } from "./types";
 import { itemVariants } from "./animations";
 
@@ -20,15 +21,26 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string;
 interface AppointmentCardProps {
   appointment: Appointment;
   isUpcoming: boolean;
+  onClick?: (appointment: Appointment) => void;
 }
 
-export function AppointmentCard({ appointment, isUpcoming }: AppointmentCardProps) {
+export function AppointmentCard({ appointment, isUpcoming, onClick }: AppointmentCardProps) {
   const aptDate = parseISO(appointment.appointment_datetime);
   const statusStyle = STATUS_CONFIG[appointment.status] || STATUS_CONFIG.scheduled;
 
+  const clickable = typeof onClick === "function";
+
   return (
     <motion.div variants={itemVariants} layout>
-      <Card className="group relative overflow-hidden border border-zinc-200 bg-white transition-all hover:border-zinc-300 hover:shadow-md">
+      <Card
+        className={cn(
+          "group relative overflow-hidden border border-zinc-200 bg-white transition-all hover:border-zinc-300 hover:shadow-md",
+          clickable && "cursor-pointer"
+        )}
+        onClick={clickable ? () => onClick(appointment) : undefined}
+        role={clickable ? "button" : undefined}
+        tabIndex={clickable ? 0 : undefined}
+      >
         <div className={`absolute left-0 top-0 h-full w-1 ${statusStyle.bg.replace('/10', '')}`} />
         
         <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between">

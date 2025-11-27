@@ -1,0 +1,64 @@
+{
+  "persona_id": "member_morgan",
+  "persona_name": "Morgan (Practical Member)",
+  "persona_goal": "Update profile details or check membership/package info without changing appointments.",
+  "bucket": "operational_account",
+  "timestamp": "2025-11-27T00:00:11.015121",
+  "transcript": [
+    {
+      "role": "customer",
+      "content": "Can you update my phone number to \u001f?"
+    },
+    {
+      "role": "assistant",
+      "content": "Could you please provide your full name and the new phone number you'd like to update? That way, I can assist you better."
+    },
+    {
+      "role": "customer",
+      "content": "Sure, it's Morgan. New number is 555-123-4567."
+    },
+    {
+      "role": "assistant",
+      "content": "Hi Morgan! To update your phone number, could you please confirm the old number currently on file? This helps me find your record accurately."
+    },
+    {
+      "role": "customer",
+      "content": "Old number is 555-987-6543."
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "Thanks, let me know when it's updated."
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "Great, thanks!"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    }
+  ],
+  "stats": {
+    "total_messages": 10,
+    "customer_messages": 5,
+    "eva_messages": 5,
+    "completed_naturally": true
+  },
+  "review_notes": {
+    "manual_review_required": true,
+    "check_for": {
+      "no_appointment_changes": true,
+      "no_guessing_membership_balances": true,
+      "handoff_if_data_unavailable": true,
+      "light_identity_confirmation_only": true
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "persona_id": "juggler_jordan",
+  "persona_name": "Jordan (Schedule Juggler)",
+  "persona_goal": "Reschedule, cancel, confirm, or tweak existing appointments.",
+  "bucket": "appointment_management",
+  "timestamp": "2025-11-27T00:00:01.688470",
+  "transcript": [
+    {
+      "role": "customer",
+      "content": "Can we move my appointment to later in the afternoon?"
+    },
+    {
+      "role": "assistant",
+      "content": "Could you please tell me which appointment you'd like to move? For example, the service and the date or time of your current booking."
+    },
+    {
+      "role": "customer",
+      "content": "Oh, right, the facial I booked. It's supposed to be next Tuesday at 1 PM. Can we push it to later in the afternoon?"
+    },
+    {
+      "role": "assistant",
+      "content": "To help with rescheduling your facial next Tuesday, could you please confirm which Tuesday you mean? Is it next week Tuesday, December 2nd? Also, what time range in the afternoon works best for you?"
+    },
+    {
+      "role": "customer",
+      "content": "Yeah, it's December 2nd. Any time after 3 PM would be great."
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "If there\u2019s a 3 PM or 4 PM slot, that\u2019d be perfect. Can you let me know what\u2019s available?"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "Oops, realized I mixed up the dates. It's actually December 5th. Can we shift it to after 3 PM that day instead?"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "Sorry for the confusion! Yes, December 5th. Any time after 3 PM would be perfect. Let me know what's available, thanks!"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    }
+  ],
+  "stats": {
+    "total_messages": 12,
+    "customer_messages": 6,
+    "eva_messages": 6,
+    "completed_naturally": true
+  },
+  "review_notes": {
+    "manual_review_required": true,
+    "check_for": {
+      "clarification_when_multiple_appointments": true,
+      "late_cancel_policy_if_inside_window": true,
+      "no_new_booking_when_rescheduling": true,
+      "no_post_booking_availability_recheck": true
+    }
+  }
+}

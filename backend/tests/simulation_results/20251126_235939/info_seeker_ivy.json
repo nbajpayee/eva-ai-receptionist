@@ -1,0 +1,35 @@
+{
+  "persona_id": "info_seeker_ivy",
+  "persona_name": "Ivy (Curious First\u0011Timer)",
+  "persona_goal": "Gather information about services, pricing, downtime, hours, policies, and providers before deciding whether to book.",
+  "bucket": "information_seeking",
+  "timestamp": "2025-11-26T23:59:49.077191",
+  "transcript": [
+    {
+      "role": "customer",
+      "content": "How much is Botox?"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "Hi! I'm curious about the price for Botox and any details like how long it lasts or if there's downtime after the treatment. Thanks!"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    }
+  ],
+  "stats": {
+    "total_messages": 4,
+    "customer_messages": 2,
+    "eva_messages": 2,
+    "completed_naturally": true
+  },
+  "review_notes": {
+    "manual_review_required": true,
+    "check_for": {}
+  }
+}

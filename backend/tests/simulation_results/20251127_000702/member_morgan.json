@@ -1,0 +1,72 @@
+{
+  "persona_id": "member_morgan",
+  "persona_name": "Morgan (Practical Member)",
+  "persona_goal": "Update profile details or check membership/package info without changing appointments.",
+  "bucket": "operational_account",
+  "timestamp": "2025-11-27T00:07:48.859759",
+  "transcript": [
+    {
+      "role": "customer",
+      "content": "Can you update my phone number to \u001f?"
+    },
+    {
+      "role": "assistant",
+      "content": "Could you please provide the new phone number you'd like to update to? Also, may I have your full name or the old phone number on file to locate your account?"
+    },
+    {
+      "role": "customer",
+      "content": "The new number is 555-123-4567. My name is Morgan."
+    },
+    {
+      "role": "assistant",
+      "content": "Thanks for the update, Morgan! To make sure I update your phone number correctly, could you please confirm which service or appointment this is for?"
+    },
+    {
+      "role": "customer",
+      "content": "I just need it updated in my profile, no specific appointment."
+    },
+    {
+      "role": "assistant",
+      "content": "Thanks for letting me know, Morgan! To update your phone number in your profile, could you please provide the current phone number we have on file for you? That way, I can locate your profile and update it correctly."
+    },
+    {
+      "role": "customer",
+      "content": "The current number on file is 555-987-6543."
+    },
+    {
+      "role": "assistant",
+      "content": "I couldn't find a profile with the current number 555-987-6543. Could you please confirm if this is the number you used to book with us? If not, can you provide any other details like an email or appointment date?"
+    },
+    {
+      "role": "customer",
+      "content": "I always use that number, but my email is morgan@example.com if that helps."
+    },
+    {
+      "role": "assistant",
+      "content": "I couldn't find a profile with the phone number 555-987-6543. Are you sure this is the number you used with us? If you'd like, I can help create or update your profile with the new number 555-123-4567 and email morgan@example.com."
+    },
+    {
+      "role": "customer",
+      "content": "Alright, please go ahead and update it with the new number and my email. Thanks!"
+    },
+    {
+      "role": "assistant",
+      "content": "I couldn't find a profile with the old number 555-987-6543. Could you please confirm if you have booked with us before or if you'd like me to create a new profile with your new number and email?"
+    }
+  ],
+  "stats": {
+    "total_messages": 12,
+    "customer_messages": 6,
+    "eva_messages": 6,
+    "completed_naturally": true
+  },
+  "review_notes": {
+    "manual_review_required": true,
+    "check_for": {
+      "no_appointment_changes": true,
+      "no_guessing_membership_balances": true,
+      "handoff_if_data_unavailable": true,
+      "light_identity_confirmation_only": true
+    }
+  }
+}

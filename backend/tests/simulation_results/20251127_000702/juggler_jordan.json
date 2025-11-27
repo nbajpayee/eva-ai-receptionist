@@ -1,0 +1,56 @@
+{
+  "persona_id": "juggler_jordan",
+  "persona_name": "Jordan (Schedule Juggler)",
+  "persona_goal": "Reschedule, cancel, confirm, or tweak existing appointments.",
+  "bucket": "appointment_management",
+  "timestamp": "2025-11-27T00:07:34.534000",
+  "transcript": [
+    {
+      "role": "customer",
+      "content": "Can we move my appointment to later in the afternoon?"
+    },
+    {
+      "role": "assistant",
+      "content": "Could you please tell me which appointment you'd like to move later in the afternoon? The service and the current date/time of that appointment will help me assist you best."
+    },
+    {
+      "role": "customer",
+      "content": "Oh right, it's the facial one I have this Thursday at 2 PM. Can we push it to around 4 PM instead?"
+    },
+    {
+      "role": "assistant",
+      "content": "Just to confirm, you want to reschedule your facial appointment this Thursday, November 27, from 2 PM to around 4 PM?"
+    },
+    {
+      "role": "customer",
+      "content": "Yeah, that's right!"
+    },
+    {
+      "role": "assistant",
+      "content": "Thanks for confirming! I'll check availability for a facial appointment this Thursday around 4 PM and see what times we have."
+    },
+    {
+      "role": "customer",
+      "content": "Okay, let me know what you find out. Thanks!"
+    },
+    {
+      "role": "assistant",
+      "content": "Thanks for confirming! I'll check availability for a facial on Thursday, November 27 around 4 PM and get back to you shortly."
+    }
+  ],
+  "stats": {
+    "total_messages": 8,
+    "customer_messages": 4,
+    "eva_messages": 4,
+    "completed_naturally": true
+  },
+  "review_notes": {
+    "manual_review_required": true,
+    "check_for": {
+      "clarification_when_multiple_appointments": true,
+      "late_cancel_policy_if_inside_window": true,
+      "no_new_booking_when_rescheduling": true,
+      "no_post_booking_availability_recheck": true
+    }
+  }
+}

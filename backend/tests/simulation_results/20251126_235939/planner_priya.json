@@ -1,0 +1,55 @@
+{
+  "persona_id": "planner_priya",
+  "persona_name": "Priya (Decisive Planner)",
+  "persona_goal": "Book a Botox, filler, or consultation appointment with clear timing preferences.",
+  "bucket": "appointment_booking",
+  "timestamp": "2025-11-26T23:59:46.618072",
+  "transcript": [
+    {
+      "role": "customer",
+      "content": "I would like to book Botox tomorrow afternoon."
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "What times do you have available tomorrow afternoon?"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "I'll take the 3 PM slot, please. Can you confirm?"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "Great, thanks!"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    }
+  ],
+  "stats": {
+    "total_messages": 8,
+    "customer_messages": 4,
+    "eva_messages": 4,
+    "completed_naturally": true
+  },
+  "review_notes": {
+    "manual_review_required": true,
+    "check_for": {
+      "specific_time_offers": true,
+      "no_preemptive_check_for_vague_relative_time": true,
+      "no_post_booking_recheck": true
+    }
+  }
+}

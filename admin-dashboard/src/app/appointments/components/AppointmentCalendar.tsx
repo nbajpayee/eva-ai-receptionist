@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Appointment } from "./types";
 import { motion, AnimatePresence } from "framer-motion";
 import { AppointmentCard } from "./AppointmentCard";
+import { AppointmentDetailModal } from "./AppointmentDetailCustomerModal";
 
 interface AppointmentCalendarProps {
   appointments: Appointment[];
@@ -21,6 +22,8 @@ type ViewMode = "day" | "week" | "month" | "list";
 export function AppointmentCalendar({ appointments, isLoading, onBookNew }: AppointmentCalendarProps) {
   const [view, setView] = useState<ViewMode>("week");
   const [date, setDate] = useState(new Date());
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   
   // Filters
   const [providerFilter, setProviderFilter] = useState("all");
@@ -57,6 +60,11 @@ export function AppointmentCalendar({ appointments, isLoading, onBookNew }: Appo
         return filteredAppointments;
     }
   }, [view, date, filteredAppointments]);
+
+  const handleAppointmentClick = (apt: Appointment) => {
+    setSelectedAppointment(apt);
+    setDetailOpen(true);
+  };
 
   // Navigation Handlers
   const navigate = (direction: "prev" | "next") => {
@@ -164,18 +172,61 @@ export function AppointmentCalendar({ appointments, isLoading, onBookNew }: Appo
 
       {/* Main Content Area */}
       <div className="flex-1 bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden flex flex-col relative">
-         {view === "week" && <WeekView date={date} appointments={displayedAppointments} />}
-         {view === "day" && <DayView date={date} appointments={displayedAppointments} />}
-         {view === "month" && <MonthView date={date} appointments={displayedAppointments} setDate={setDate} setView={setView} />}
-         {view === "list" && <ListView appointments={displayedAppointments} />}
+         {view === "week" && (
+           <WeekView
+             date={date}
+             appointments={displayedAppointments}
+             onAppointmentClick={handleAppointmentClick}
+           />
+         )}
+         {view === "day" && (
+           <DayView
+             date={date}
+             appointments={displayedAppointments}
+             onAppointmentClick={handleAppointmentClick}
+           />
+         )}
+         {view === "month" && (
+           <MonthView
+             date={date}
+             appointments={displayedAppointments}
+             setDate={setDate}
+             setView={setView}
+           />
+         )}
+         {view === "list" && (
+           <ListView
+             appointments={displayedAppointments}
+             onAppointmentClick={handleAppointmentClick}
+           />
+         )}
       </div>
+
+      <AppointmentDetailModal
+        open={detailOpen && !!selectedAppointment}
+        onOpenChange={(open) => {
+          setDetailOpen(open);
+          if (!open) {
+            setSelectedAppointment(null);
+          }
+        }}
+        appointmentSummary={selectedAppointment}
+      />
     </div>
   );
 }
 
 // --- Sub-Components (Internal for now, can be extracted) ---
 
-function WeekView({ date, appointments }: { date: Date, appointments: Appointment[] }) {
+function WeekView({
+  date,
+  appointments,
+  onAppointmentClick,
+}: {
+  date: Date;
+  appointments: Appointment[];
+  onAppointmentClick?: (appointment: Appointment) => void;
+}) {
     const weekStart = startOfWeek(date, { weekStartsOn: 1 });
     const days = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
     const hours = Array.from({ length: 13 }, (_, i) => i + 7); // 7 AM to 7 PM
@@ -234,6 +285,7 @@ function WeekView({ date, appointments }: { date: Date, appointments: Appointmen
                                                 backgroundColor: getServiceColor(apt.service_type),
                                                 color: 'white'
                                             }}
+                                            onClick={() => onAppointmentClick?.(apt)}
                                         >
                                             <div className="font-semibold truncate">{apt.service_type}</div>
                                             <div className="opacity-90 truncate">{apt.customer?.name}</div>
@@ -249,7 +301,15 @@ function WeekView({ date, appointments }: { date: Date, appointments: Appointmen
     )
 }
 
-function DayView({ date, appointments }: { date: Date, appointments: Appointment[] }) {
+function DayView({
+  date,
+  appointments,
+  onAppointmentClick,
+}: {
+  date: Date;
+  appointments: Appointment[];
+  onAppointmentClick?: (appointment: Appointment) => void;
+}) {
     const hours = Array.from({ length: 13 }, (_, i) => i + 7); // 7 AM to 7 PM
 
     return (
@@ -267,7 +327,11 @@ function DayView({ date, appointments }: { date: Date, appointments: Appointment
                                     const h = new Date(a.appointment_datetime).getHours();
                                     return h === hour;
                                 }).map(apt => (
-                                    <div key={apt.id} className="absolute left-2 right-2 top-1 bottom-1 rounded-lg bg-sky-100 border border-sky-200 p-3 text-sky-900">
+                                    <div
+                                      key={apt.id}
+                                      className="absolute left-2 right-2 top-1 bottom-1 rounded-lg bg-sky-100 border border-sky-200 p-3 text-sky-900 cursor-pointer hover:border-sky-300 hover:bg-sky-100/80"
+                                      onClick={() => onAppointmentClick?.(apt)}
+                                    >
                                         <div className="flex items-center justify-between">
                                             <span className="font-bold">{format(new Date(apt.appointment_datetime), "h:mm a")} - {apt.service_type}</span>
                                             <span className="text-sm bg-white/50 px-2 py-0.5 rounded-full">{apt.provider}</span>
@@ -341,7 +405,13 @@ function MonthView({ date, appointments, setDate, setView }: any) {
     );
 }
 
-function ListView({ appointments }: { appointments: Appointment[] }) {
+function ListView({
+  appointments,
+  onAppointmentClick,
+}: {
+  appointments: Appointment[];
+  onAppointmentClick?: (appointment: Appointment) => void;
+}) {
     if (appointments.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-zinc-400">
@@ -355,7 +425,12 @@ function ListView({ appointments }: { appointments: Appointment[] }) {
         <div className="overflow-y-auto h-full p-4">
              <div className="max-w-4xl mx-auto space-y-3">
                  {appointments.map(apt => (
-                     <AppointmentCard key={apt.id} appointment={apt} isUpcoming={new Date(apt.appointment_datetime) > new Date()} />
+                     <AppointmentCard
+                       key={apt.id}
+                       appointment={apt}
+                       isUpcoming={new Date(apt.appointment_datetime) > new Date()}
+                       onClick={onAppointmentClick}
+                     />
                  ))}
              </div>
         </div>

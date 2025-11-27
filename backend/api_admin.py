@@ -416,7 +416,7 @@ async def get_appointments(
     }
 
 
-@router.get("/appointments/{appointment_id}")
+@router.get("/appointments/detail/{appointment_id}")
 async def get_appointment_detail(
     appointment_id: int,
     db: Session = Depends(get_db),

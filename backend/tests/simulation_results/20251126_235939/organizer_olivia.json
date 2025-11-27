@@ -1,0 +1,48 @@
+{
+  "persona_id": "organizer_olivia",
+  "persona_name": "Olivia (Organizer & Advocate)",
+  "persona_goal": "Handle non\u0011clinical admin tasks like gift cards and feedback.",
+  "bucket": "administrative_misc",
+  "timestamp": "2025-11-27T00:00:53.318401",
+  "transcript": [
+    {
+      "role": "customer",
+      "content": "Can I buy a gift card for my friend?"
+    },
+    {
+      "role": "assistant",
+      "content": "We do offer gift cards at Luxury Med Spa! They make a lovely present. Would you like me to share details on how to purchase one or help you with that now?"
+    },
+    {
+      "role": "customer",
+      "content": "Yes, please! How can I do that?"
+    },
+    {
+      "role": "assistant",
+      "content": "We do offer gift cards that make a lovely present! You can purchase them directly at our spa or I can help you start the process here. Would you like a physical card mailed or an e-gift card sent by email?"
+    },
+    {
+      "role": "customer",
+      "content": "An e-gift card would be perfect!"
+    },
+    {
+      "role": "assistant",
+      "content": "That's a wonderful idea! We do offer e-gift cards that can be sent directly to your friend's email. I can help you with the details or guide you on how to purchase one online. Would you like me to send you the link or assist you with the purchase here?"
+    }
+  ],
+  "stats": {
+    "total_messages": 6,
+    "customer_messages": 3,
+    "eva_messages": 3,
+    "completed_naturally": true
+  },
+  "review_notes": {
+    "manual_review_required": true,
+    "check_for": {
+      "clear_gift_card_instructions": true,
+      "empathetic_response_to_complaints": true,
+      "handoff_to_manager_or_team_for_issues": true,
+      "no_appointment_booking_unless_explicitly_requested": true
+    }
+  }
+}

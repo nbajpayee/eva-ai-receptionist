@@ -1,0 +1,35 @@
+{
+  "persona_id": "info_seeker_ivy",
+  "persona_name": "Ivy (Curious First\u0011Timer)",
+  "persona_goal": "Gather information about services, pricing, downtime, hours, policies, and providers before deciding whether to book.",
+  "bucket": "information_seeking",
+  "timestamp": "2025-11-27T00:07:25.293256",
+  "transcript": [
+    {
+      "role": "customer",
+      "content": "How much is Botox?"
+    },
+    {
+      "role": "assistant",
+      "content": "Botox treatments typically range from $300 to $600 depending on your specific needs. Would you like info on booking a consultation or an appointment?"
+    },
+    {
+      "role": "customer",
+      "content": "Thanks! Is there any downtime after getting Botox?"
+    },
+    {
+      "role": "assistant",
+      "content": "Botox usually has little to no downtime. Most clients can return to their normal activities right after treatment. Some mild redness or swelling might appear but typically fades quickly. Would you like details on how to prepare or aftercare tips?"
+    }
+  ],
+  "stats": {
+    "total_messages": 4,
+    "customer_messages": 2,
+    "eva_messages": 2,
+    "completed_naturally": true
+  },
+  "review_notes": {
+    "manual_review_required": true,
+    "check_for": {}
+  }
+}

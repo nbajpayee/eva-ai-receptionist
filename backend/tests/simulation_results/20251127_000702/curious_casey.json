@@ -1,0 +1,56 @@
+{
+  "persona_id": "curious_casey",
+  "persona_name": "Casey (Curious Optimizer)",
+  "persona_goal": "Understand what treatments might be right and possibly move toward a consult/booking.",
+  "bucket": "sales_conversion_support",
+  "timestamp": "2025-11-27T00:07:57.258890",
+  "transcript": [
+    {
+      "role": "customer",
+      "content": "What is best for fine lines on my forehead?"
+    },
+    {
+      "role": "assistant",
+      "content": "Thanks for reaching out! For fine lines on the forehead, many clients find Botox very effective\u2014it relaxes the muscles that cause those lines. Dermal fillers can also help with deeper lines by adding volume. Would you like me to share more details on these or suggest a consultation to find the best option for you?"
+    },
+    {
+      "role": "customer",
+      "content": "I\u2019ve heard a bit about Botox. How long does it last, and are there any side effects I should know about?"
+    },
+    {
+      "role": "assistant",
+      "content": "Botox is a popular choice for smoothing fine lines on the forehead. It usually lasts about 3 to 4 months. Side effects are generally mild, like slight redness or bruising, and usually go away quickly. Would you like info on booking a consultation or treatment?"
+    },
+    {
+      "role": "customer",
+      "content": "Thanks for the info! I might be interested in a consultation. What\u2019s the cost for that, and how do I book?"
+    },
+    {
+      "role": "assistant",
+      "content": "I'm glad the info was helpful! Our consultation is complimentary\u2014there's no cost to meet with a provider and discuss your goals. Would you like me to help you schedule a consultation? If so, when might you be available?"
+    },
+    {
+      "role": "customer",
+      "content": "That sounds good! I'm free next week on Tuesday or Thursday. Could you let me know what times are available?"
+    },
+    {
+      "role": "assistant",
+      "content": "A consultation is a great way to start! Let me check availability for next week Tuesday (December 2) and Thursday (December 4)."
+    }
+  ],
+  "stats": {
+    "total_messages": 8,
+    "customer_messages": 4,
+    "eva_messages": 4,
+    "completed_naturally": true
+  },
+  "review_notes": {
+    "manual_review_required": true,
+    "check_for": {
+      "no_medical_diagnosis": true,
+      "consultation_positioned_for_personalized_plan": true,
+      "upsell_only_after_core_booking_is_clear": true,
+      "no_pressure_language": true
+    }
+  }
+}

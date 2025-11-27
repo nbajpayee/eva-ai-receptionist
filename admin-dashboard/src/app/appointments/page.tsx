@@ -70,7 +70,17 @@ export default function AppointmentsPage() {
     setRequestsLoading(true);
     try {
       const response = await fetch("/api/admin/appointments/requests");
-      if (!response.ok) throw new Error("Failed to fetch requests");
+      if (!response.ok) {
+        const text = await response.text();
+        console.error(
+          "Failed to fetch appointment requests:",
+          response.status,
+          text,
+        );
+        setRequestItems([]);
+        setRequestNotes({});
+        return;
+      }
       const data = (await response.json()) as AppointmentRequestsResponse;
       const requests = data.requests || [];
       setRequestItems(requests);
@@ -84,6 +94,7 @@ export default function AppointmentsPage() {
     } catch (error) {
       console.error("Error fetching requests", error);
       setRequestItems([]);
+      setRequestNotes({});
     } finally {
       setRequestsLoading(false);
     }

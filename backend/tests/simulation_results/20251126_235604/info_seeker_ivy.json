@@ -1,0 +1,75 @@
+{
+  "persona_id": "info_seeker_ivy",
+  "persona_name": "Ivy (Curious First\u0011Timer)",
+  "persona_goal": "Gather information about services, pricing, downtime, hours, policies, and providers before deciding whether to book.",
+  "bucket": "information_seeking",
+  "timestamp": "2025-11-26T23:56:28.378700",
+  "transcript": [
+    {
+      "role": "customer",
+      "content": "How much is Botox?"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "Hi! I'm curious about the cost of Botox and if there's any downtime associated with it?"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "Also, what are your hours and do you offer consultations before treatment?"
+    },
+    {
+      "role": "assistant",
+      "content": "Hi! Botox typically ranges from $12 to $15 per unit, depending on your specific needs. Most clients experience little to no downtime\u2014just some mild redness or swelling that usually fades quickly. \n\nOur hours are Monday to Friday, 9am to 7pm, and Saturday from 10am to 5pm. We do offer consultations before treatment, which is a great way to discuss your goals and get comfortable with the process. Would you like me to help you schedule one?"
+    },
+    {
+      "role": "customer",
+      "content": "Thanks for the info! I'm just researching for now, but I'll keep that in mind. Can you tell me about the qualifications of your providers?"
+    },
+    {
+      "role": "assistant",
+      "content": "Hi! Botox typically ranges from $12 to $15 per unit, depending on your specific needs. Most clients experience little to no downtime\u2014just some mild redness or swelling that usually fades within a day.\n\nOur hours are Monday to Friday, 9am to 7pm, and Saturday from 10am to 5pm. We do offer complimentary consultations so you can meet our providers, discuss your goals, and get personalized recommendations before any treatment.\n\nOur providers are highly trained medical professionals with extensive experience in aesthetic treatments. They stay updated on the latest techniques to ensure safe and effective results. If you'd like, I can share more details or help you schedule a consultation anytime!"
+    },
+    {
+      "role": "customer",
+      "content": "Thanks for the info! I'm just researching for now, but I'll keep that in mind. Can you tell me about the qualifications of your providers?"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "Could you tell me more about the qualifications and experience of your providers? I'm interested in knowing who I'd be working with if I decide to book."
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "customer",
+      "content": "Great, thanks! I'll keep that in mind. Could you also tell me about any policies you have, like cancellations or rescheduling?"
+    },
+    {
+      "role": "assistant",
+      "content": "Our Botox treatments typically range from $12 to $15 per unit, depending on your specific needs. Most clients experience little to no downtime\u2014some mild redness or swelling may occur but usually resolves quickly. \n\nWe\u2019re open Monday to Friday from 9am to 7pm, and Saturdays 10am to 5pm. Yes, we do offer consultations before any treatment so you can ask questions and feel comfortable.\n\nOur providers are all highly trained medical professionals with extensive experience in aesthetic treatments. They stay updated on the latest techniques to ensure safe, natural results.\n\nFor cancellations or rescheduling, we require 24 hours notice. Changes made with less notice may incur a fee, typically 50% of the service cost. Does that help?"
+    }
+  ],
+  "stats": {
+    "total_messages": 14,
+    "customer_messages": 7,
+    "eva_messages": 7,
+    "completed_naturally": true
+  },
+  "review_notes": {
+    "manual_review_required": true,
+    "check_for": {}
+  }
+}
