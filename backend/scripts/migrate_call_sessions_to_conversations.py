@@ -1,4 +1,4 @@
-"""Migrate existing call_sessions data to conversations schema.
+"""[LEGACY] Migrate existing call_sessions data to conversations schema.
 
 This script performs the data migration from Phase 1 (call_sessions) to Phase 2
 (conversations + communication_messages + voice_call_details). It preserves all
@@ -15,7 +15,16 @@ Usage:
     python backend/scripts/migrate_call_sessions_to_conversations.py --session-ids sess_123,sess_456
 
 See OMNICHANNEL_MIGRATION.md for full migration strategy.
+
+NOTE: This script is retained for historical reference only. The
+call_sessions / call_events schema has been removed from the
+application, and this migration is no longer applicable.
 """
+
+raise SystemExit(
+    "This script is legacy and no longer supported. The call_sessions schema "
+    "has been removed; use the conversations-based schema directly instead."
+)
 
 from __future__ import annotations
 

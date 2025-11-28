@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-import openai
+from ai_config import get_openai_client
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
@@ -37,7 +37,7 @@ except ModuleNotFoundError:
     )
 
 settings = get_settings()
-openai.api_key = settings.OPENAI_API_KEY
+openai_client = get_openai_client()
 
 
 class AIInsightsService:
@@ -143,7 +143,7 @@ Focus on:
 Return only valid JSON, no additional text."""
 
         try:
-            response = openai.chat.completions.create(
+            response = openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {
@@ -293,7 +293,7 @@ Focus on:
 Return only valid JSON."""
 
         try:
-            response = openai.chat.completions.create(
+            response = openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {

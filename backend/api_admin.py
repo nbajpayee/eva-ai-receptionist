@@ -20,7 +20,6 @@ from sqlalchemy.orm import Session
 from analytics import AnalyticsService
 from database import (
     Appointment,
-    CallSession,
     CommunicationMessage,
     Conversation,
     Customer,
@@ -155,6 +154,20 @@ async def get_metrics_overview(
             outcome: count for outcome, count in outcome_stats if outcome
         },
     }
+
+
+@router.get("/health/booking")
+async def get_booking_health(
+    minutes: int = Query(60, ge=5, le=1440),
+    db: Session = Depends(get_db),
+):
+    """Lightweight health snapshot for recent AI bookings.
+
+    Intended for pilot monitoring and simple watchdog checks. Returns a small
+    set of metrics computed over the last N minutes.
+    """
+
+    return AnalyticsService.get_booking_health_window(db, minutes=minutes)
 
 
 # ==================== Calls/Conversations Endpoints ====================

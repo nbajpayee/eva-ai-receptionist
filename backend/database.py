@@ -29,6 +29,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.types import CHAR, TypeDecorator
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship, sessionmaker
+from sqlalchemy.ext.mutable import MutableDict
 
 try:  # Prefer package-style import when available
     from backend.config import get_settings
@@ -133,6 +134,9 @@ class JSONBType(TypeDecorator):
         return value
 
 
+MutableDict.associate_with(JSONBType)
+
+
 # Dependency for FastAPI
 def get_db():
     """Get database session."""
@@ -164,7 +168,6 @@ class Customer(Base):
 
     # Relationships
     appointments = relationship("Appointment", back_populates="customer")
-    call_sessions = relationship("CallSession", back_populates="customer")
     conversations = relationship("Conversation", back_populates="customer")
 
 
@@ -250,76 +253,6 @@ class AppointmentRequest(Base):
             name="check_appointment_request_status",
         ),
     )
-
-
-class CallSession(Base):
-    """Call session model for tracking voice interactions."""
-
-    __tablename__ = "call_sessions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    customer_id = Column(
-        Integer, ForeignKey("customers.id"), nullable=True
-    )  # Null if not identified
-
-    # Call metadata
-    session_id = Column(String(255), unique=True, index=True, nullable=False)
-    phone_number = Column(String(20), index=True)
-
-    # Timing
-    started_at = Column(DateTime, default=datetime.utcnow, index=True)
-    ended_at = Column(DateTime, nullable=True)
-    duration_seconds = Column(Integer, nullable=True)
-
-    # Content
-    transcript = Column(Text, nullable=True)
-    recording_url = Column(String(500), nullable=True)
-
-    # Analytics
-    satisfaction_score = Column(Float, nullable=True)  # 0-10 score
-    sentiment = Column(String(50), nullable=True)  # positive, neutral, negative, mixed
-    outcome = Column(
-        String(50),
-        nullable=True,  # booked, rescheduled, cancelled, info_only, escalated, abandoned
-    )
-
-    # Engagement metrics
-    customer_interruptions = Column(Integer, default=0)
-    ai_clarifications_needed = Column(Integer, default=0)
-    function_calls_made = Column(Integer, default=0)
-
-    # Escalation
-    escalated = Column(Boolean, default=False)
-    escalation_reason = Column(Text, nullable=True)
-
-    # Relationships
-    customer = relationship("Customer", back_populates="call_sessions")
-    events = relationship(
-        "CallEvent", back_populates="call_session", cascade="all, delete-orphan"
-    )
-
-
-class CallEvent(Base):
-    """Individual events within a call session."""
-
-    __tablename__ = "call_events"
-
-    id = Column(Integer, primary_key=True, index=True)
-    call_session_id = Column(Integer, ForeignKey("call_sessions.id"), nullable=False)
-
-    # Event details
-    event_type = Column(
-        String(100),
-        nullable=False,
-        index=True,
-        # Types: intent_detected, function_called, appointment_booked,
-        # escalation_triggered, sentiment_change, error_occurred
-    )
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-    data = Column(JSON, nullable=True)  # Flexible JSON storage for event-specific data
-
-    # Relationships
-    call_session = relationship("CallSession", back_populates="events")
 
 
 class DailyMetric(Base):

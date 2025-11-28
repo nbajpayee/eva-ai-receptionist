@@ -14,6 +14,8 @@ import websockets
 from sqlalchemy.orm import Session
 
 from analytics import AnalyticsService
+from analytics_metrics import record_calendar_error, record_tool_execution
+from booking import BookingChannel, BookingContext, BookingOrchestrator
 from booking.manager import SlotSelectionError, SlotSelectionManager
 from booking.time_utils import format_for_display, parse_iso_datetime, to_eastern
 from booking_handlers import (
@@ -24,11 +26,212 @@ from booking_handlers import (
 from calendar_service import get_calendar_service
 from config import OPENING_SCRIPT, PROVIDERS, get_settings
 from database import Conversation, SessionLocal
+from realtime_config import build_voice_session_config
 from prompts import get_system_prompt
 from settings_service import SettingsService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+class _BookingContextFactory:
+    """Factory for constructing BookingContext objects for voice sessions.
+
+    This centralizes how we hydrate booking context (db, conversation,
+    channel, calendar, services) so that tool handlers stay thin.
+    """
+
+    def __init__(
+        self,
+        *,
+        db: Session,
+        conversation: Conversation,
+        calendar_service,
+        get_services: Callable[[], Dict[str, Any]],
+    ) -> None:
+        self._db = db
+        self._conversation = conversation
+        self._calendar_service = calendar_service
+        self._get_services = get_services
+
+    def for_voice(self, *, customer: Optional[Any] = None) -> BookingContext:
+        return BookingContext(
+            db=self._db,
+            conversation=self._conversation,
+            customer=customer,
+            channel=BookingChannel.VOICE,
+            calendar_service=self._calendar_service,
+            services_dict=self._get_services(),
+        )
+
+
+class _VoiceSessionState:
+    """Helper for persisting voice session and conversation metadata.
+
+    Keeps RealtimeClient.handle_function_call focused on control flow while
+    this class owns how we update session_data and conversation metadata for
+    booking-related events.
+    """
+
+    def __init__(
+        self,
+        *,
+        db: Session,
+        conversation: Conversation,
+        session_data: Dict[str, Any],
+        refresh_conversation: Callable[[], None],
+    ) -> None:
+        self._db = db
+        self._conversation = conversation
+        self._session_data = session_data
+        self._refresh_conversation = refresh_conversation
+
+    def record_successful_booking(
+        self,
+        booking_result: Dict[str, Any],
+        arguments: Dict[str, Any],
+    ) -> None:
+        """Apply side effects after a successful book_appointment call."""
+
+        SlotSelectionManager.clear_offers(self._db, self._conversation)
+        self._refresh_conversation()
+
+        customer_name = arguments.get("customer_name")
+        customer_phone = arguments.get("customer_phone")
+        customer_email = (
+            arguments.get("customer_email")
+            or (f"{customer_phone}@placeholder.com" if customer_phone else None)
+        )
+        service_type = booking_result.get("service_type") or arguments.get(
+            "service_type"
+        )
+
+        start_iso = booking_result.get("start_time")
+        formatted_voice_time = None
+        if start_iso:
+            formatted_voice_time = format_for_display(
+                parse_iso_datetime(start_iso),
+                channel="voice",
+            )
+            booking_result["spoken_confirmation"] = (
+                f"Perfect! I've booked your {booking_result.get('service', service_type)} "
+                f"appointment for {formatted_voice_time}."
+            )
+
+        self._session_data["customer_data"] = {
+            "name": customer_name,
+            "phone": customer_phone,
+            "email": customer_email,
+        }
+
+        self._session_data["last_appointment"] = {
+            "event_id": booking_result.get("event_id"),
+            "service_type": service_type,
+            "provider": arguments.get("provider"),
+            "start_time": start_iso,
+            "customer_name": customer_name,
+            "customer_phone": customer_phone,
+            "customer_email": customer_email,
+        }
+
+        # Mirror deterministic booking metadata used by messaging flow so
+        # cross-channel logic can avoid duplicate bookings for the same slot.
+        metadata = SlotSelectionManager.conversation_metadata(self._conversation)
+        metadata["last_appointment"] = {
+            "calendar_event_id": booking_result.get("event_id"),
+            "service_type": service_type,
+            "provider": arguments.get("provider"),
+            "start_time": start_iso,
+            "status": "scheduled",
+        }
+        # Clear any pending booking intent flags once the appointment is set.
+        metadata["pending_booking_intent"] = False
+        SlotSelectionManager.persist_conversation_metadata(
+            self._db, self._conversation, metadata
+        )
+
+    def _current_customer_fields(self) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        data = self._session_data.get("customer_data") or {}
+        return data.get("name"), data.get("phone"), data.get("email")
+
+    def record_appointment_details(
+        self,
+        appointment_id: str,
+        details: Dict[str, Any],
+    ) -> None:
+        """Update session state based on fetched appointment details."""
+
+        name, phone, email = self._current_customer_fields()
+        self._session_data["last_appointment"] = {
+            "event_id": appointment_id,
+            "service_type": self._session_data.get("last_appointment", {}).get(
+                "service_type"
+            ),
+            "provider": details.get("provider"),
+            "start_time": (
+                details["start"].isoformat() if "start" in details else None
+            ),
+            "customer_name": name,
+            "customer_phone": phone,
+            "customer_email": email,
+        }
+
+    def record_rescheduled_appointment(
+        self,
+        appointment_id: str,
+        *,
+        service_type: str,
+        provider: Optional[str],
+        start_time_iso: str,
+    ) -> None:
+        """Persist state and metadata after a successful reschedule."""
+
+        name, phone, email = self._current_customer_fields()
+
+        if provider is None and self._session_data.get("last_appointment"):
+            provider = self._session_data["last_appointment"].get("provider")
+
+        self._session_data["last_appointment"] = {
+            "event_id": appointment_id,
+            "service_type": service_type,
+            "provider": provider,
+            "start_time": start_time_iso,
+            "customer_name": name,
+            "customer_phone": phone,
+            "customer_email": email,
+        }
+
+        metadata = SlotSelectionManager.conversation_metadata(self._conversation)
+        metadata["last_appointment"] = {
+            "calendar_event_id": appointment_id,
+            "service_type": service_type,
+            "provider": provider,
+            "start_time": start_time_iso,
+            "status": "scheduled",
+        }
+        SlotSelectionManager.persist_conversation_metadata(
+            self._db, self._conversation, metadata
+        )
+
+    def record_cancelled_appointment(
+        self,
+        appointment_id: str,
+        *,
+        cancellation_reason: Optional[str] = None,
+    ) -> None:
+        """Persist state and metadata after a successful cancellation."""
+
+        self._session_data["last_appointment"] = None
+
+        metadata = SlotSelectionManager.conversation_metadata(self._conversation)
+        metadata["last_appointment"] = {
+            "calendar_event_id": appointment_id,
+            "status": "cancelled",
+            "cancellation_reason": cancellation_reason,
+        }
+        SlotSelectionManager.persist_conversation_metadata(
+            self._db, self._conversation, metadata
+        )
 
 
 class RealtimeClient:
@@ -74,6 +277,20 @@ class RealtimeClient:
         # Load services and providers from database (with caching)
         self._services_dict = None
         self._providers_list = None
+
+        # Helpers for booking context and session state management
+        self._booking_context_factory = _BookingContextFactory(
+            db=self.db,
+            conversation=self.conversation,
+            calendar_service=self.calendar_service,
+            get_services=self._get_services,
+        )
+        self._session_state = _VoiceSessionState(
+            db=self.db,
+            conversation=self.conversation,
+            session_data=self.session_data,
+            refresh_conversation=self._refresh_conversation,
+        )
 
     def _get_services(self) -> Dict[str, Any]:
         """Get services from database (cached)."""
@@ -196,29 +413,10 @@ class RealtimeClient:
             f"If asked who you are, respond with: 'I'm {settings.AI_ASSISTANT_NAME}, the virtual receptionist for {settings.MED_SPA_NAME}. I'm here to help with appointments or any questions about our treatments.'"
         )
 
-        session_config = {
-            "type": "session.update",
-            "session": {
-                "modalities": ["text", "audio"],
-                "instructions": system_prompt,
-                "voice": "alloy",  # Fixed: "nova" is invalid, using "alloy" instead
-                "input_audio_format": "pcm16",
-                "output_audio_format": "pcm16",
-                "input_audio_transcription": {
-                    "model": "whisper-1"  # Required parameter for transcription
-                },
-                "turn_detection": {
-                    "type": "server_vad",
-                    "threshold": 0.6,  # Higher threshold = less sensitive to background noise (increased from 0.5)
-                    "prefix_padding_ms": 300,  # Capture more of the start of speech
-                    "silence_duration_ms": 600,  # Wait 600ms of silence before considering speech done (increased from 500)
-                    "create_response": True,  # Automatically create response when user stops speaking
-                },
-                "tools": self._get_function_definitions(),
-                "tool_choice": "auto",
-                "temperature": 0.7,
-            },
-        }
+        session_config = build_voice_session_config(
+            system_prompt=system_prompt,
+            tools=self._get_function_definitions(),
+        )
 
         await self.ws.send(json.dumps(session_config))
         # System instructions are already in session config above - no need for separate message
@@ -436,24 +634,36 @@ class RealtimeClient:
                 service_type = arguments.get("service_type")
 
                 try:
-                    availability = handle_check_availability(
-                        self.calendar_service,
+                    booking_context = self._booking_context_factory.for_voice()
+                    orchestrator = BookingOrchestrator(channel=BookingChannel.VOICE)
+                    availability_result = orchestrator.check_availability(
+                        booking_context,
                         date=date_str,
                         service_type=service_type,
                         limit=10,
-                        services_dict=self._get_services(),
+                        tool_call_id=None,
                     )
+                    availability = availability_result.to_dict()
+
+                    # Ensure service_type is explicitly present for Realtime prompts.
+                    if service_type and not availability.get("service_type"):
+                        availability["service_type"] = service_type
 
                     if availability.get("success"):
-                        availability["service_type"] = service_type
-                        SlotSelectionManager.record_offers(
-                            self.db,
-                            self.conversation,
-                            tool_call_id=None,
-                            arguments={"date": date_str, "service_type": service_type},
-                            output=availability,
-                        )
                         self._refresh_conversation()
+
+                    record_tool_execution(
+                        tool_name="check_availability",
+                        channel="voice",
+                        success=bool(availability.get("success")),
+                        latency_ms=None,
+                        error_code=None,
+                        extra={
+                            "conversation_id": str(getattr(self.conversation, "id", "unknown")),
+                            "service_type": service_type,
+                            "date": date_str,
+                        },
+                    )
 
                     return availability
 
@@ -493,6 +703,26 @@ class RealtimeClient:
                             extra={"function": function_name, "date": date_str, "service": service_type}
                         )
 
+                    record_calendar_error(
+                        reason="check_availability_calendar_error",
+                        http_status=error_code,
+                        channel="voice",
+                        extra={
+                            "function": function_name,
+                            "date": date_str,
+                            "service_type": service_type,
+                            "conversation_id": str(getattr(self.conversation, "id", "unknown")),
+                        },
+                    )
+                    record_tool_execution(
+                        tool_name="check_availability",
+                        channel="voice",
+                        success=False,
+                        latency_ms=None,
+                        error_code=error_code,
+                        extra={"error": "calendar_unavailable"},
+                    )
+
                     return {
                         "success": False,
                         "error": "calendar_unavailable",
@@ -517,31 +747,15 @@ class RealtimeClient:
                 }
 
             elif function_name == "book_appointment":
-                normalization_arguments = dict(arguments)
-                try:
-                    normalized_args, _ = SlotSelectionManager.enforce_booking(
-                        self.db,
-                        self.conversation,
-                        normalization_arguments,
-                    )
-                except SlotSelectionError as exc:
-                    logger.warning("Voice booking enforcement failed: %s", exc)
-                    return {
-                        "success": False,
-                        "error": str(exc),
-                        "user_message": "I'm sorry, I need to check availability first before I can book that time. Let me pull up the available slots for you.",
-                    }
-
-                safe_args = dict(normalized_args)
-                safe_args.pop("start", None)
-                safe_args.pop("date", None)
+                booking_context = self._booking_context_factory.for_voice()
+                orchestrator = BookingOrchestrator(channel=BookingChannel.VOICE)
 
                 try:
-                    booking_result = handle_book_appointment(
-                        self.calendar_service,
-                        **safe_args,
-                        services_dict=self._get_services(),
+                    booking_result_obj = orchestrator.book_appointment(
+                        booking_context,
+                        params=dict(arguments),
                     )
+                    booking_result = booking_result_obj.to_dict()
                 except Exception as booking_exc:
                     # Enhanced error handling for Google Calendar booking failures
                     from googleapiclient.errors import HttpError
@@ -558,9 +772,9 @@ class RealtimeClient:
                             extra={
                                 "function": function_name,
                                 "status_code": error_code,
-                                "customer": safe_args.get("customer_name"),
-                                "service": safe_args.get("service_type")
-                            }
+                                "customer": arguments.get("customer_name"),
+                                "service": arguments.get("service_type"),
+                            },
                         )
 
                         if error_code == 404:
@@ -575,72 +789,73 @@ class RealtimeClient:
                         logger.error(
                             "Unexpected error during book_appointment",
                             exc_info=True,
-                            extra={"function": function_name, "customer": safe_args.get("customer_name")}
+                            extra={"function": function_name, "customer": arguments.get("customer_name")},
                         )
+
+                    record_calendar_error(
+                        reason="book_appointment_calendar_error",
+                        http_status=error_code,
+                        channel="voice",
+                        extra={
+                            "function": function_name,
+                            "customer": arguments.get("customer_name"),
+                            "service_type": arguments.get("service_type"),
+                            "conversation_id": str(getattr(self.conversation, "id", "unknown")),
+                        },
+                    )
+                    record_tool_execution(
+                        tool_name="book_appointment",
+                        channel="voice",
+                        success=False,
+                        latency_ms=None,
+                        error_code=error_code,
+                        extra={"error": "booking_failed"},
+                    )
 
                     return {
                         "success": False,
                         "error": "booking_failed",
                         "error_code": error_code,
-                        "user_message": user_message
+                        "user_message": user_message,
                     }
 
-                if booking_result.get("success"):
-                    SlotSelectionManager.clear_offers(self.db, self.conversation)
-                    self._refresh_conversation()
-
-                    customer_name = normalized_args.get("customer_name")
-                    customer_phone = normalized_args.get("customer_phone")
-                    customer_email = (
-                        normalized_args.get("customer_email")
-                        or f"{customer_phone}@placeholder.com"
-                    )
-                    service_type = normalized_args.get("service_type")
-
-                    start_iso = booking_result.get("start_time")
-                    formatted_voice_time = None
-                    if start_iso:
-                        formatted_voice_time = format_for_display(
-                            parse_iso_datetime(start_iso),
-                            channel="voice",
-                        )
-                        booking_result["spoken_confirmation"] = (
-                            f"Perfect! I've booked your {booking_result.get('service', service_type)} appointment for {formatted_voice_time}."
+                # If slot selection enforcement failed inside the orchestrator, add a
+                # voice-friendly message while preserving the structured error.
+                if not booking_result.get("success"):
+                    if booking_result.get("code") == "slot_selection_mismatch":
+                        booking_result.setdefault(
+                            "user_message",
+                            "I'm sorry, I need to check availability first before I can book that time. Let me pull up the available slots for you.",
                         )
 
-                    self.session_data["customer_data"] = {
-                        "name": customer_name,
-                        "phone": customer_phone,
-                        "email": customer_email,
-                    }
-
-                    self.session_data["last_appointment"] = {
-                        "event_id": booking_result.get("event_id"),
-                        "service_type": service_type,
-                        "provider": normalized_args.get("provider"),
-                        "start_time": start_iso,
-                        "customer_name": customer_name,
-                        "customer_phone": customer_phone,
-                        "customer_email": customer_email,
-                    }
-
-                    # Mirror deterministic booking metadata used by messaging flow so
-                    # cross-channel logic can avoid duplicate bookings for the same slot.
-                    metadata = SlotSelectionManager.conversation_metadata(
-                        self.conversation
+                    record_tool_execution(
+                        tool_name="book_appointment",
+                        channel="voice",
+                        success=False,
+                        latency_ms=None,
+                        error_code=booking_result.get("error_code"),
+                        extra={
+                            "code": booking_result.get("code"),
+                            "conversation_id": str(getattr(self.conversation, "id", "unknown")),
+                        },
                     )
-                    metadata["last_appointment"] = {
-                        "calendar_event_id": booking_result.get("event_id"),
+
+                    return booking_result
+
+                # Success path mirrors previous behavior, now using orchestrator output.
+                self._session_state.record_successful_booking(booking_result, arguments)
+
+                record_tool_execution(
+                    tool_name="book_appointment",
+                    channel="voice",
+                    success=True,
+                    latency_ms=None,
+                    error_code=None,
+                    extra={
+                        "conversation_id": str(getattr(self.conversation, "id", "unknown")),
                         "service_type": service_type,
-                        "provider": normalized_args.get("provider"),
-                        "start_time": start_iso,
-                        "status": "scheduled",
-                    }
-                    # Clear any pending booking intent flags once the appointment is set.
-                    metadata["pending_booking_intent"] = False
-                    SlotSelectionManager.persist_conversation_metadata(
-                        self.db, self.conversation, metadata
-                    )
+                    },
+                )
 
                 return booking_result
 
@@ -683,25 +898,7 @@ class RealtimeClient:
                 if not details:
                     return {"success": False, "error": "Appointment not found"}
 
-                self.session_data["last_appointment"] = {
-                    "event_id": appointment_id,
-                    "service_type": self.session_data.get("last_appointment", {}).get(
-                        "service_type"
-                    ),
-                    "provider": details.get("provider"),
-                    "start_time": (
-                        details["start"].isoformat() if "start" in details else None
-                    ),
-                    "customer_name": self.session_data.get("customer_data", {}).get(
-                        "name"
-                    ),
-                    "customer_phone": self.session_data.get("customer_data", {}).get(
-                        "phone"
-                    ),
-                    "customer_email": self.session_data.get("customer_data", {}).get(
-                        "email"
-                    ),
-                }
+                self._session_state.record_appointment_details(appointment_id, details)
 
                 return {
                     "success": True,
@@ -734,80 +931,81 @@ class RealtimeClient:
                         "service_type"
                     )
 
-                if not service_type:
-                    return {
-                        "success": False,
-                        "error": "Missing service type to determine appointment duration",
-                    }
+                booking_context = self._booking_context_factory.for_voice()
+                orchestrator = BookingOrchestrator(channel=BookingChannel.VOICE)
 
-                start_time = datetime.fromisoformat(
-                    new_start_time_str.replace("Z", "+00:00")
-                )
-                duration = self._get_services()[service_type]["duration_minutes"]
-                end_time = start_time + timedelta(minutes=duration)
-
-                success = self.calendar_service.reschedule_appointment(
-                    event_id=appointment_id,
-                    new_start_time=start_time,
-                    new_end_time=end_time,
+                booking_result = orchestrator.reschedule_appointment(
+                    booking_context,
+                    appointment_id=appointment_id,
+                    new_start_time=new_start_time_str,
+                    service_type=service_type,
+                    provider=provider,
                 )
 
-                if success:
-                    self.session_data["last_appointment"] = {
-                        "event_id": appointment_id,
-                        "service_type": service_type,
-                        "provider": provider
-                        or self.session_data.get("last_appointment", {}).get(
-                            "provider"
-                        ),
-                        "start_time": start_time.isoformat(),
-                        "customer_name": self.session_data.get("customer_data", {}).get(
-                            "name"
-                        ),
-                        "customer_phone": self.session_data.get(
-                            "customer_data", {}
-                        ).get("phone"),
-                        "customer_email": self.session_data.get(
-                            "customer_data", {}
-                        ).get("email"),
-                    }
+                if not booking_result.get("success"):
+                    return booking_result
 
-                    return {
-                        "success": True,
-                        "appointment_id": appointment_id,
-                        "new_time": start_time.strftime("%B %d, %Y at %I:%M %p"),
-                        "service": self._get_services()[service_type]["name"],
-                    }
+                start_iso = booking_result.get("start_time") or new_start_time_str
+                effective_service_type = (
+                    booking_result.get("service_type") or service_type
+                )
+                effective_provider = booking_result.get("provider") or provider
+
+                self._session_state.record_rescheduled_appointment(
+                    appointment_id,
+                    service_type=effective_service_type,
+                    provider=effective_provider,
+                    start_time_iso=start_iso,
+                )
+
+                try:
+                    start_dt = parse_iso_datetime(start_iso)
+                    new_time_str = start_dt.strftime("%B %d, %Y at %I:%M %p")
+                except Exception:  # noqa: BLE001 - fallback if parsing fails
+                    new_time_str = start_iso
 
                 return {
-                    "success": False,
-                    "error": "Failed to reschedule appointment. Please try again or contact staff.",
+                    "success": True,
+                    "appointment_id": appointment_id,
+                    "new_time": new_time_str,
+                    "service": booking_result.get("service")
+                    or (self._get_services().get(effective_service_type, {}).get("name")),
                 }
 
             elif function_name == "cancel_appointment":
                 appointment_id = arguments.get("appointment_id")
                 cancellation_reason = arguments.get("cancellation_reason")
 
-                success = self.calendar_service.cancel_appointment(appointment_id)
+                booking_context = self._booking_context_factory.for_voice()
+                orchestrator = BookingOrchestrator(channel=BookingChannel.VOICE)
 
-                if success:
-                    self.session_data["last_appointment"] = None
+                booking_result = orchestrator.cancel_appointment(
+                    booking_context,
+                    appointment_id=appointment_id,
+                    cancellation_reason=cancellation_reason,
+                )
 
-                    response = {
-                        "success": True,
-                        "appointment_id": appointment_id,
-                        "status": "cancelled",
-                    }
+                if not booking_result.get("success"):
+                    return booking_result
 
-                    if cancellation_reason:
-                        response["cancellation_reason"] = cancellation_reason
+                self._session_state.record_cancelled_appointment(
+                    appointment_id,
+                    cancellation_reason=cancellation_reason
+                    or booking_result.get("reason"),
+                )
 
-                    return response
-
-                return {
-                    "success": False,
-                    "error": "Failed to cancel appointment. Please try again or contact staff.",
+                response = {
+                    "success": True,
+                    "appointment_id": appointment_id,
+                    "status": "cancelled",
                 }
+
+                if cancellation_reason or booking_result.get("reason"):
+                    response["cancellation_reason"] = (
+                        cancellation_reason or booking_result.get("reason")
+                    )
+
+                return response
 
             else:
                 return {"success": False, "error": f"Unknown function: {function_name}"}

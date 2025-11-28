@@ -1,9 +1,19 @@
-"""Seed Supabase Postgres with representative dashboard data.
+"""[LEGACY] Seed Supabase Postgres with representative dashboard data.
 
 Usage:
     python backend/scripts/seed_supabase.py            # seed if empty
     python backend/scripts/seed_supabase.py --force    # wipe and reseed
+
+This script relied on the legacy call_sessions / call_events schema. That
+schema has now been removed; the script is kept only for historical
+reference.
 """
+
+raise SystemExit(
+    "This script is legacy and no longer supported. The call_sessions schema "
+    "has been removed; please add a new conversations-based seeding script if "
+    "you need sample data."
+)
 
 from __future__ import annotations
 

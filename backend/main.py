@@ -39,7 +39,6 @@ from database import (
     Appointment,
     AppointmentRequest,
     BusinessHours,
-    CallSession,
     Conversation,
     Customer,
     InPersonConsultation,
@@ -1253,21 +1252,13 @@ async def voice_websocket(
     await websocket.accept()
     active_connections[session_id] = websocket
 
-    # DUAL-WRITE: Create both legacy call_session and new conversation
-    # Legacy schema (for backward compatibility during migration)
-    call_session = AnalyticsService.create_call_session(
-        db=db, session_id=session_id, phone_number=None  # Will be updated if collected
-    )
-
-    # New omnichannel schema
+    # Create a new omnichannel conversation (voice channel only).
+    metadata: Dict[str, Any] = {"session_id": session_id}
     conversation = AnalyticsService.create_conversation(
         db=db,
         customer_id=None,  # Will be updated if identified
         channel="voice",
-        metadata={
-            "session_id": session_id,
-            "legacy_call_session_id": str(call_session.id),
-        },
+        metadata=metadata,
     )
 
     # Initialize OpenAI Realtime client
@@ -1329,26 +1320,12 @@ async def voice_websocket(
                 logger.debug("Transcript preview for session %s: %s", session_id, preview)
 
             try:
-                # DUAL-WRITE: Update both legacy and new schemas
-
                 # Extract customer data once for reuse
                 customer_data = session_data.get("customer_data", {})
-
-                # 1. Update legacy call_session (this also looks up/links customer)
-                updated_call_session = AnalyticsService.end_call_session(
-                    db=db,
-                    session_id=session_id,
-                    transcript=session_data.get("transcript", []),
-                    function_calls=session_data.get("function_calls", []),
-                    customer_data=customer_data,
+                customer = AnalyticsService.resolve_or_create_customer_for_call(
+                    db, customer_data
                 )
-
-                # 2. Update new conversation schema
-                # Extract customer ID from the updated call_session
-                # (end_call_session already looked up customer by phone)
-                customer_id = (
-                    updated_call_session.customer_id if updated_call_session else None
-                )
+                customer_id = customer.id if customer is not None else None
 
                 # Update conversation with customer ID if identified
                 if customer_id:
@@ -1419,7 +1396,7 @@ async def voice_websocket(
                 # Score conversation satisfaction (AI analysis)
                 AnalyticsService.score_conversation_satisfaction(db, conversation.id)
 
-                logger.info("Dual-write complete for session %s", session_id)
+                logger.info("Finalization complete for session %s", session_id)
 
             except Exception as e:
                 logger.error("Error ending call session %s: %s", session_id, e, exc_info=True)
@@ -1440,22 +1417,14 @@ async def voice_websocket(
         # Send greeting to kick off conversation
         await realtime_client.send_greeting()
 
-        # DUAL-WRITE: Log session start to both schemas
-        # Legacy schema
-        AnalyticsService.log_call_event(
-            db=db,
-            call_session_id=call_session.id,
-            event_type="session_started",
-            data={"session_id": session_id},
-        )
-        # New schema
+        # Log session start to the conversations schema
         AnalyticsService.add_communication_event(
             db=db,
             conversation_id=conversation.id,
             event_type="session_started",
             details={"session_id": session_id},
         )
-        logger.info("Session %s logged to both schemas; defining audio callback", session_id)
+        logger.info("Session %s logged to conversations schema", session_id)
 
         # Define callback for audio output
         logger.debug("Defining audio_callback function for session %s", session_id)
@@ -1692,14 +1661,14 @@ async def get_customer_history(customer_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    calls = (
-        db.query(CallSession)
-        .filter(CallSession.customer_id == customer_id)
-        .order_by(CallSession.started_at.desc())
+    conversations = (
+        db.query(Conversation)
+        .filter(Conversation.customer_id == customer_id)
+        .order_by(Conversation.initiated_at.desc())
         .all()
     )
 
-    return {"customer": customer, "appointments": appointments, "calls": calls}
+    return {"customer": customer, "appointments": appointments, "calls": conversations}
 
 
 # ==================== Admin Dashboard Endpoints ====================
@@ -1727,14 +1696,20 @@ async def get_call_history(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Get paginated call history."""
-    return AnalyticsService.get_call_history(
-        db=db,
+    """Get paginated call history (delegates to conversations-based admin API)."""
+    # The canonical implementation now lives in api_admin.py; this thin wrapper
+    # exists only for backward-compatible routing.
+    from api_admin import get_calls  # type: ignore
+
+    return await get_calls(
         page=page,
         page_size=page_size,
-        search=search,
-        sort_by=sort_by,
-        sort_order=sort_order,
+        channel=None,
+        status=None,
+        outcome=None,
+        start_date=None,
+        end_date=None,
+        db=db,
     )
 
 
@@ -1744,48 +1719,10 @@ async def get_call_details(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Get detailed information about a specific call."""
-    call = db.query(CallSession).filter(CallSession.id == call_id).first()
-    if not call:
-        raise HTTPException(status_code=404, detail="Call not found")
+    """Get detailed information about a specific call (conversation)."""
+    from api_admin import get_call_detail  # type: ignore
 
-    # Get associated customer
-    customer = None
-    if call.customer_id:
-        customer = db.query(Customer).filter(Customer.id == call.customer_id).first()
-
-    # Get call events
-    from database import CallEvent
-
-    events = (
-        db.query(CallEvent)
-        .filter(CallEvent.call_session_id == call_id)
-        .order_by(CallEvent.timestamp.asc())
-        .all()
-    )
-
-    import json
-
-    transcript = json.loads(call.transcript) if call.transcript else []
-
-    return {
-        "call": {
-            "id": call.id,
-            "session_id": call.session_id,
-            "started_at": call.started_at,
-            "ended_at": call.ended_at,
-            "duration_seconds": call.duration_seconds,
-            "phone_number": call.phone_number,
-            "satisfaction_score": call.satisfaction_score,
-            "sentiment": call.sentiment,
-            "outcome": call.outcome,
-            "escalated": call.escalated,
-            "escalation_reason": call.escalation_reason,
-        },
-        "customer": customer,
-        "transcript": transcript,
-        "events": events,
-    }
+    return await get_call_detail(call_id=call_id, db=db)
 
 
 @app.get("/api/admin/calls/{call_id}/transcript")
@@ -1794,16 +1731,11 @@ async def get_call_transcript(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Get call transcript."""
-    call = db.query(CallSession).filter(CallSession.id == call_id).first()
-    if not call:
-        raise HTTPException(status_code=404, detail="Call not found")
+    """Get call transcript (conversation messages)."""
+    from api_admin import get_call_detail  # type: ignore
 
-    import json
-
-    transcript = json.loads(call.transcript) if call.transcript else []
-
-    return {"call_id": call_id, "transcript": transcript}
+    detail = await get_call_detail(call_id=call_id, db=db)
+    return {"call_id": call_id, "transcript": detail.get("messages", [])}
 
 
 @app.get("/api/admin/analytics/daily")

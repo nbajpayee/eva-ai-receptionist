@@ -1,4 +1,4 @@
-"""Backfill data from local SQLite DB to Supabase Postgres.
+"""[LEGACY] Backfill data from local SQLite DB to Supabase Postgres.
 
 Usage examples:
     # Dry run, show counts only
@@ -9,7 +9,17 @@ Usage examples:
 
     # Force re-import even if target already has rows
     python backend/scripts/migrate_sqlite_to_supabase.py --force
+
+This script assumed the presence of the legacy call_sessions / call_events
+schema. That schema has been removed; this migration is no longer
+applicable and is kept only for reference.
 """
+
+raise SystemExit(
+    "This script is legacy and no longer supported. The call_sessions schema "
+    "has been removed; data should now be managed via the conversations-based "
+    "schema."
+)
 
 from __future__ import annotations
 

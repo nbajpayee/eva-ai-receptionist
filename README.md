@@ -107,6 +107,110 @@ Admin Dashboard (Next.js) → Next.js API Proxy → FastAPI Backend ↔ OpenAI R
 - Voice realtime client uses the same slot enforcement via metadata-backed conversations.
 - Regression coverage spans `backend/tests/test_voice_booking.py`, `backend/tests/booking/test_slot_selection.py`, and `backend/tests/test_cross_channel_booking.py`.
 
+### Target Architecture (Planned Medium-Term Refactor)
+
+This section describes the **planned target architecture** for the
+medium-term (1–2 week) refactor. It focuses on making the booking,
+messaging, and analytics flows easier to reason about, safer to
+evolve, and consistent across channels. Implementation will land
+incrementally; the codebase may temporarily lag this design.
+
+#### High-Level Layering
+
+- **Channel Surfaces**
+  - Voice console (admin dashboard `/voice` page, WebSocket client).
+  - Messaging console (admin dashboard messaging UI).
+  - Future Twilio/SendGrid/Boulevard integrations.
+- **Channel Adapters**
+  - `realtime_client.py` for voice.
+  - `api_messaging.py` + admin dashboard API proxy routes for SMS/email.
+- **Domain Services**
+  - `BookingOrchestrator` (planned `backend/booking/orchestrator.py`).
+  - `MessagingService`, `AnalyticsService`, `ProviderAnalyticsService`,
+    `SettingsService`.
+- **Infrastructure Services**
+  - Google Calendar integration, OpenAI (Realtime + Chat),
+    Supabase/Postgres, external messaging providers.
+
+#### Booking Orchestration
+
+- Introduce a single `BookingOrchestrator` domain service that is the
+  **only** entrypoint for booking flows from any channel.
+- Responsibilities:
+  - Coordinate `check_availability`, `book_appointment`,
+    `reschedule_appointment`, and `cancel_appointment`.
+  - Delegate offer creation and enforcement to
+    `SlotSelectionManager` from `backend/booking/`.
+  - Enforce invariants such as “bookings must originate from
+    previously offered slots” and “no double-booking when calendar
+    changes between offer and confirmation.”
+- Channel–specific code (voice, messaging) passes in a
+  `BookingContext` (conversation, customer, channel, time zone) and
+  receives a typed `BookingResult` rather than manipulating raw
+  handler responses.
+
+#### Messaging Orchestration & Submodules
+
+- Keep `MessagingService` as the public façade used by API routes and
+  tests.
+- Internally, split responsibilities into focused modules:
+  - `messaging/customers.py` — customer lookup/creation and contact
+    info enrichment.
+  - `messaging/booking_intent.py` — booking intent tracking,
+    availability enforcement rules, and parameter extraction.
+  - `messaging/ai_orchestrator.py` — history building, AI calls, and
+    tool–call planning.
+  - `messaging/tools.py` — deterministic tool execution, argument
+    normalization, and tool–specific metrics.
+- This keeps the external API stable while making each concern small
+  enough to understand and test in isolation.
+
+#### Typed Tool Contracts
+
+- Replace ad–hoc `Dict[str, Any]` tool responses with small typed
+  models (e.g. Pydantic or dataclasses) such as
+  `CheckAvailabilityResult`, `BookingResult`, and `RescheduleResult`.
+- `booking_handlers.py` returns these typed results; the
+  `BookingOrchestrator` and `MessagingService` operate on them, only
+  serializing to JSON at the API boundary and when persisting
+  metadata.
+- This makes behavior changes safer and reduces “stringly–typed”
+  coupling between modules.
+
+#### AI Configuration & Clients
+
+- Centralize OpenAI configuration in a small `ai/config.py` module:
+  - Model names for messaging, analytics/sentiment, and realtime
+    voice.
+  - Shared client construction with consistent timeouts and retry
+    policies.
+- Higher–level helpers such as `analyze_sentiment` and
+  `score_conversation` live here and are reused by
+  `AnalyticsService`.
+
+#### Logging & Metrics
+
+- Keep logging configuration centralized in `main.py` and use
+  `logging.getLogger(__name__)` everywhere else.
+- Add a thin metrics helper (e.g. `analytics.metrics`) to record:
+  - Tool execution metrics (tool name, channel, success/failure,
+    latency, error code).
+  - Calendar error metrics with normalized reasons (auth, quota,
+    configuration, transient).
+- `MessagingService` and `realtime_client.py` call into this helper
+  whenever a tool is executed, giving the admin dashboard a stable
+  surface for future “tool health” visualizations.
+
+#### Legacy Schema Migration (Hard Cut)
+
+- After validating the omnichannel `conversations` schema in
+  production, **stop all new writes** to the legacy `call_sessions`
+  (and related) tables.
+- Keep legacy tables **read-only** for a short transition window, used
+  only for audits or one-off backfills.
+- Remove any remaining code paths that depend on the legacy schema and
+  schedule a follow-up migration to drop the legacy tables entirely.
+
 ## Tech Stack
 
 - **Backend**: Python, FastAPI, SQLAlchemy

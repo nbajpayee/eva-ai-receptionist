@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO, Optional
 
-import openai
+from ai_config import get_openai_client
 from sqlalchemy.orm import Session
 
 try:
@@ -28,7 +28,7 @@ except ModuleNotFoundError:
     from database import Appointment, Customer, InPersonConsultation, Provider
 
 settings = get_settings()
-openai.api_key = settings.OPENAI_API_KEY
+openai_client = get_openai_client()
 
 
 class ConsultationService:
@@ -88,7 +88,7 @@ class ConsultationService:
         """Transcribe audio file using OpenAI Whisper API."""
         try:
             with open(audio_path, "rb") as audio_file:
-                transcript = openai.audio.transcriptions.create(
+                transcript = openai_client.audio.transcriptions.create(
                     model="whisper-1", file=audio_file, response_format="text"
                 )
             return transcript

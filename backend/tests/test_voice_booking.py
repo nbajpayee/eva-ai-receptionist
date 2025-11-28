@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionManager
@@ -292,5 +292,253 @@ def test_capture_selection_with_time_phrase(db_session):
         pending = conversation.custom_metadata["pending_slot_offers"]
         assert pending["selected_option_index"] == 1
         assert pending["selected_slot"]["start"] == slots[0]["start"]
+    finally:
+        _cleanup_entities(db_session, conversation, messages)
+
+@pytest.mark.asyncio
+@patch("realtime_client.BookingOrchestrator.book_appointment")
+@patch("realtime_client.get_calendar_service")
+async def test_voice_booking_sets_last_appointment_metadata(
+    mock_get_calendar_service,
+    mock_book_appointment,
+    db_session,
+):
+    conversation = _create_voice_conversation(db_session, "session-voice-booking")
+    messages: list[CommunicationMessage] = []
+
+    try:
+        mock_get_calendar_service.return_value = object()
+
+        start_time = "2025-11-20T10:00:00-05:00"
+        service_type = "botox"
+        provider = "Dr. Test"
+
+        class _DummyBookingResult:
+            def __init__(self, payload: dict):
+                self._payload = payload
+
+            def to_dict(self) -> dict:
+                return self._payload
+
+        def _fake_book(self, context, *, params):  # noqa: ARG001
+            payload = {
+                "success": True,
+                "event_id": "evt-voice-123",
+                "start_time": start_time,
+                "service_type": service_type,
+                "service": "Botox",
+            }
+            return _DummyBookingResult(payload)
+
+        mock_book_appointment.side_effect = _fake_book
+
+        client = RealtimeClient(
+            session_id="session-voice-booking",
+            db=db_session,
+            conversation=conversation,
+        )
+
+        arguments = {
+            "customer_name": "Voice Caller",
+            "customer_phone": "+15555550123",
+            "customer_email": "caller@example.com",
+            "start_time": start_time,
+            "service_type": service_type,
+            "provider": provider,
+        }
+
+        result = await client.handle_function_call("book_appointment", arguments)
+
+        assert result["success"] is True
+
+        db_session.refresh(conversation)
+        metadata = SlotSelectionManager.conversation_metadata(conversation)
+        last_appt = metadata.get("last_appointment") or {}
+
+        assert last_appt == {
+            "calendar_event_id": "evt-voice-123",
+            "service_type": service_type,
+            "provider": provider,
+            "start_time": start_time,
+            "status": "scheduled",
+        }
+        assert metadata.get("pending_booking_intent") is False
+    finally:
+        _cleanup_entities(db_session, conversation, messages)
+
+
+@pytest.mark.asyncio
+@patch("realtime_client.BookingOrchestrator.book_appointment")
+@patch("realtime_client.get_calendar_service")
+async def test_voice_booking_slot_mismatch_sets_user_message(
+    mock_get_calendar_service,
+    mock_book_appointment,
+    db_session,
+):
+    conversation = _create_voice_conversation(db_session, "session-voice-mismatch")
+    messages: list[CommunicationMessage] = []
+
+    try:
+        mock_get_calendar_service.return_value = object()
+
+        class _DummyBookingResult:
+            def __init__(self, payload: dict):
+                self._payload = payload
+
+            def to_dict(self) -> dict:
+                return self._payload
+
+        def _fake_book(self, context, *, params):  # noqa: ARG001
+            payload = {
+                "success": False,
+                "error": "Requested time is not in offered slots",
+                "code": "slot_selection_mismatch",
+            }
+            return _DummyBookingResult(payload)
+
+        mock_book_appointment.side_effect = _fake_book
+
+        client = RealtimeClient(
+            session_id="session-voice-mismatch",
+            db=db_session,
+            conversation=conversation,
+        )
+
+        arguments = {
+            "customer_name": "Voice Caller",
+            "customer_phone": "+15555550123",
+            "customer_email": "caller@example.com",
+            "start_time": "2025-11-20T12:00:00-05:00",
+            "service_type": "botox",
+        }
+
+        result = await client.handle_function_call("book_appointment", arguments)
+
+        assert result["success"] is False
+        assert result.get("code") == "slot_selection_mismatch"
+        assert isinstance(result.get("user_message"), str)
+        assert "check availability" in result["user_message"].lower()
+    finally:
+        _cleanup_entities(db_session, conversation, messages)
+
+
+@pytest.mark.asyncio
+@patch("realtime_client.get_calendar_service")
+async def test_voice_reschedule_updates_last_appointment_metadata(
+    mock_get_calendar_service,
+    db_session,
+):
+    conversation = _create_voice_conversation(db_session, "session-voice-reschedule")
+    messages: list[CommunicationMessage] = []
+
+    try:
+        fake_calendar = Mock()
+        fake_calendar.reschedule_appointment.return_value = True
+        mock_get_calendar_service.return_value = fake_calendar
+
+        client = RealtimeClient(
+            session_id="session-voice-reschedule",
+            db=db_session,
+            conversation=conversation,
+        )
+
+        # Seed customer + last_appointment context as a real call would.
+        client.session_data["customer_data"] = {
+            "name": "Voice Caller",
+            "phone": "+15555550123",
+            "email": "caller@example.com",
+        }
+        client.session_data["last_appointment"] = {
+            "event_id": "evt-123",
+            "service_type": "botox",
+            "provider": "Dr. Old",
+            "start_time": "2025-11-20T10:00:00-05:00",
+            "customer_name": "Voice Caller",
+            "customer_phone": "+15555550123",
+            "customer_email": "caller@example.com",
+        }
+
+        # Stub services lookup so duration/name are defined.
+        client._get_services = lambda: {
+            "botox": {"name": "Botox", "duration_minutes": 60}
+        }
+
+        new_start = "2025-11-21T11:30:00-05:00"
+        result = await client.handle_function_call(
+            "reschedule_appointment",
+            {
+                "appointment_id": "evt-123",
+                "new_start_time": new_start,
+                "service_type": "botox",
+                "provider": "Dr. New",
+            },
+        )
+
+        assert result["success"] is True
+        assert result["appointment_id"] == "evt-123"
+
+        db_session.refresh(conversation)
+        metadata = SlotSelectionManager.conversation_metadata(conversation)
+        last_appt = metadata.get("last_appointment") or {}
+
+        assert last_appt["calendar_event_id"] == "evt-123"
+        assert last_appt["service_type"] == "botox"
+        assert last_appt["provider"] == "Dr. New"
+        assert last_appt["status"] == "scheduled"
+        assert last_appt["start_time"] == new_start.replace("Z", "+00:00") or new_start
+    finally:
+        _cleanup_entities(db_session, conversation, messages)
+
+
+@pytest.mark.asyncio
+@patch("realtime_client.get_calendar_service")
+async def test_voice_cancel_updates_last_appointment_metadata(
+    mock_get_calendar_service,
+    db_session,
+):
+    conversation = _create_voice_conversation(db_session, "session-voice-cancel")
+    messages: list[CommunicationMessage] = []
+
+    try:
+        fake_calendar = Mock()
+        fake_calendar.cancel_appointment.return_value = True
+        mock_get_calendar_service.return_value = fake_calendar
+
+        client = RealtimeClient(
+            session_id="session-voice-cancel",
+            db=db_session,
+            conversation=conversation,
+        )
+
+        client.session_data["last_appointment"] = {
+            "event_id": "evt-789",
+            "service_type": "botox",
+            "provider": "Dr. Test",
+            "start_time": "2025-11-22T09:00:00-05:00",
+        }
+
+        result = await client.handle_function_call(
+            "cancel_appointment",
+            {
+                "appointment_id": "evt-789",
+                "cancellation_reason": "user_request",
+            },
+        )
+
+        assert result["success"] is True
+        assert result["appointment_id"] == "evt-789"
+        assert result["status"] == "cancelled"
+        assert result.get("cancellation_reason") == "user_request"
+
+        # Session state should be cleared and metadata should reflect cancellation.
+        assert client.session_data["last_appointment"] is None
+
+        db_session.refresh(conversation)
+        metadata = SlotSelectionManager.conversation_metadata(conversation)
+        last_appt = metadata.get("last_appointment") or {}
+
+        assert last_appt["calendar_event_id"] == "evt-789"
+        assert last_appt["status"] == "cancelled"
+        assert last_appt["cancellation_reason"] == "user_request"
     finally:
         _cleanup_entities(db_session, conversation, messages)

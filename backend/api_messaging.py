@@ -228,7 +228,7 @@ def send_message(
         )
 
     initial_content, assistant_message = MessagingService.generate_ai_response(
-        db, conversation.id, channel
+        db, conversation.id, channel, log_assistant_message=False
     )
 
     tool_calls = (

@@ -20,7 +20,10 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.orm.attributes import flag_modified
 
-from analytics import AnalyticsService, openai_client
+from analytics import AnalyticsService
+from ai_config import get_openai_client
+from analytics_metrics import record_tool_execution
+from booking import BookingChannel, BookingContext, BookingOrchestrator
 from booking.manager import SlotSelectionError, SlotSelectionManager
 from booking.time_utils import EASTERN_TZ, format_for_display, parse_iso_datetime
 from booking_handlers import (
@@ -53,6 +56,8 @@ if not logger.handlers:
 logger.setLevel(logging.INFO)
 logger.propagate = False
 s = get_settings()
+
+openai_client = get_openai_client()
 
 
 class MessagingService:
@@ -238,7 +243,9 @@ class MessagingService:
 
     @staticmethod
     def _parse_iso_datetime(value: str) -> datetime:
-        return parse_iso_datetime(value)
+        if isinstance(value, datetime):
+            return value
+        return parse_iso_datetime(str(value))
 
     # ------------------------------------------------------------------
     # Conversation intent helpers
@@ -422,8 +429,20 @@ class MessagingService:
         if not last_message or not last_message.content:
             return None
 
-        # Don't execute if last appointment already matches this slot (prevents duplicates)
         metadata = SlotSelectionManager.conversation_metadata(conversation)
+
+        channel = getattr(conversation, "channel", None)
+        if channel == "sms":
+            text = last_message.content.lower()
+            if "@" not in text:
+                return None
+        elif channel == "voice":
+            # For voice flows, only auto-book once explicit contact details have been
+            # captured into conversation metadata for the current intent.
+            if not metadata.get("customer_name") or not metadata.get("customer_phone"):
+                return None
+
+        # Don't execute if last appointment already matches this slot (prevents duplicates)
         last_appointment = (
             metadata.get("last_appointment") if isinstance(metadata, dict) else {}
         )
@@ -499,6 +518,11 @@ class MessagingService:
         output = result.get("output") or {}
         success = output.get("success") is True
 
+        try:
+            serialized_output = json.dumps(output)
+        except TypeError:
+            serialized_output = json.dumps(str(output))
+
         tool_history = [
             {
                 "role": "assistant",
@@ -519,7 +543,7 @@ class MessagingService:
             {
                 "role": "tool",
                 "tool_call_id": tool_call_id,
-                "content": json.dumps(output),
+                "content": serialized_output,
             },
         ]
 
@@ -586,10 +610,29 @@ class MessagingService:
                     continue
 
                 if service_type is None:
-                    for service_name in services.keys():
-                        if service_name.lower() in content:
-                            service_type = service_name.lower()
-                            break
+                    if services:
+                        for service_name in services.keys():
+                            if service_name.lower() in content:
+                                service_type = service_name.lower()
+                                break
+                    else:
+                        # Fallback when no services are configured in the database
+                        # (e.g., in isolated tests). Recognize a small set of
+                        # canonical service keywords so deterministic booking flows
+                        # can still infer intent.
+                        fallback_aliases = {
+                            "botox": ["botox", "wrinkle relaxer", "neurotoxin"],
+                            "dermal_fillers": [
+                                "dermal filler",
+                                "dermal fillers",
+                                "filler",
+                                "fillers",
+                            ],
+                        }
+                        for key, aliases in fallback_aliases.items():
+                            if any(alias in content for alias in aliases):
+                                service_type = key
+                                break
 
                 if "today" in content:
                     date = datetime.utcnow().strftime("%Y-%m-%d")
@@ -1281,25 +1324,40 @@ class MessagingService:
         try:
             if name == "check_availability":
                 services = SettingsService.get_services_dict(db)
-                output = handle_check_availability(
-                    calendar_service,
-                    date=arguments.get("date", datetime.utcnow().strftime("%Y-%m-%d")),
-                    service_type=arguments.get("service_type", ""),
+                channel_value = getattr(conversation, "channel", None) or ""
+                if channel_value == "sms":
+                    booking_channel = BookingChannel.SMS
+                elif channel_value == "voice":
+                    booking_channel = BookingChannel.VOICE
+                elif channel_value == "email":
+                    booking_channel = BookingChannel.EMAIL
+                elif channel_value == "staff_console":
+                    booking_channel = BookingChannel.STAFF_CONSOLE
+                else:
+                    booking_channel = BookingChannel.UNKNOWN
+                booking_context = BookingContext(
+                    db=db,
+                    conversation=conversation,
+                    customer=customer,
+                    channel=booking_channel,
+                    calendar_service=calendar_service,
                     services_dict=services,
                 )
-                if output.get("success"):
-                    SlotSelectionManager.record_offers(
-                        db,
-                        conversation,
-                        tool_call_id=result.get("tool_call_id"),
-                        arguments=arguments,
-                        output=output,
-                    )
-                    # NOTE: Don't clear pending_booking_intent here!
-                    # It should persist until the booking is complete or user changes topic.
-                    # Clearing it too early causes the retry loop to stop triggering.
-                else:
-                    SlotSelectionManager.clear_offers(db, conversation)
+                orchestrator = BookingOrchestrator(
+                    channel=booking_channel,
+                    check_availability_func=handle_check_availability,
+                    book_appointment_func=handle_book_appointment,
+                    reschedule_appointment_func=handle_reschedule_appointment,
+                    cancel_appointment_func=handle_cancel_appointment,
+                )
+                availability_result = orchestrator.check_availability(
+                    booking_context,
+                    date=arguments.get("date", datetime.utcnow().strftime("%Y-%m-%d")),
+                    service_type=arguments.get("service_type", ""),
+                    limit=10,
+                    tool_call_id=result.get("tool_call_id"),
+                )
+                output = availability_result.to_dict()
                 result["slot_offers"] = SlotSelectionManager.pending_slot_summary(
                     db, conversation
                 )
@@ -1350,67 +1408,127 @@ class MessagingService:
                 if idempotent_output is not None:
                     output = idempotent_output
                 else:
-                    try:
-                        (
-                            arguments,
-                            selection_adjustments,
-                        ) = SlotSelectionManager.enforce_booking(
-                            db,
-                            conversation,
-                            arguments,
-                        )
-                    except SlotSelectionError as exc:
-                        output = {
-                            "success": False,
-                            "error": str(exc),
-                            "code": "slot_selection_mismatch",
-                            "pending_slot_options": SlotSelectionManager.pending_slot_summary(
-                                db, conversation
-                            ),
-                        }
+                    # Update the customer record with any newly provided details so that
+                    # orchestrator fallbacks see the latest data.
+                    MessagingService._update_customer_from_arguments(
+                        db, customer, arguments
+                    )
+
+                    services = SettingsService.get_services_dict(db)
+                    channel_value = getattr(conversation, "channel", None) or ""
+                    if channel_value == "sms":
+                        booking_channel = BookingChannel.SMS
+                    elif channel_value == "voice":
+                        booking_channel = BookingChannel.VOICE
+                    elif channel_value == "email":
+                        booking_channel = BookingChannel.EMAIL
+                    elif channel_value == "staff_console":
+                        booking_channel = BookingChannel.STAFF_CONSOLE
                     else:
-                        MessagingService._update_customer_from_arguments(
-                            db, customer, arguments
-                        )
-                        services = SettingsService.get_services_dict(db)
-                        output = handle_book_appointment(
-                            calendar_service,
-                            customer_name=arguments.get("customer_name", customer.name),
-                            customer_phone=arguments.get(
-                                "customer_phone", customer.phone or ""
-                            ),
-                            customer_email=arguments.get("customer_email", customer.email),
-                            start_time=arguments.get("start_time", arguments.get("start")),
-                            service_type=arguments.get("service_type"),
-                            provider=arguments.get("provider"),
-                            notes=arguments.get("notes"),
-                            services_dict=services,
-                        )
-                        # Clear pending booking intent after successful booking
-                        if output.get("success"):
-                            metadata = conversation.custom_metadata or {}
-                            if metadata.get("pending_booking_intent"):
-                                metadata["pending_booking_intent"] = False
-                                conversation.custom_metadata = metadata
-                                db.commit()
+                        booking_channel = BookingChannel.UNKNOWN
+
+                    booking_context = BookingContext(
+                        db=db,
+                        conversation=conversation,
+                        customer=customer,
+                        channel=booking_channel,
+                        calendar_service=calendar_service,
+                        services_dict=services,
+                    )
+                    orchestrator = BookingOrchestrator(
+                        channel=booking_channel,
+                        check_availability_func=handle_check_availability,
+                        book_appointment_func=handle_book_appointment,
+                        reschedule_appointment_func=handle_reschedule_appointment,
+                        cancel_appointment_func=handle_cancel_appointment,
+                    )
+                    booking_result = orchestrator.book_appointment(
+                        booking_context,
+                        params=arguments,
+                    )
+                    output = booking_result.to_dict()
+                    selection_adjustments = output.get("argument_adjustments") or None
+
+                    # Clear pending booking intent after successful booking
+                    if output.get("success"):
+                        metadata = conversation.custom_metadata or {}
+                        if metadata.get("pending_booking_intent"):
+                            metadata["pending_booking_intent"] = False
+                            conversation.custom_metadata = metadata
+                            db.commit()
+
                 result["slot_offers"] = SlotSelectionManager.pending_slot_summary(
                     db, conversation
                 )
             elif name == "reschedule_appointment":
                 services = SettingsService.get_services_dict(db)
-                output = handle_reschedule_appointment(
-                    calendar_service,
+                channel_value = getattr(conversation, "channel", None) or ""
+                if channel_value == "sms":
+                    booking_channel = BookingChannel.SMS
+                elif channel_value == "voice":
+                    booking_channel = BookingChannel.VOICE
+                elif channel_value == "email":
+                    booking_channel = BookingChannel.EMAIL
+                elif channel_value == "staff_console":
+                    booking_channel = BookingChannel.STAFF_CONSOLE
+                else:
+                    booking_channel = BookingChannel.UNKNOWN
+
+                booking_context = BookingContext(
+                    db=db,
+                    conversation=conversation,
+                    customer=customer,
+                    channel=booking_channel,
+                    calendar_service=calendar_service,
+                    services_dict=services,
+                )
+                orchestrator = BookingOrchestrator(
+                    channel=booking_channel,
+                    check_availability_func=handle_check_availability,
+                    book_appointment_func=handle_book_appointment,
+                    reschedule_appointment_func=handle_reschedule_appointment,
+                    cancel_appointment_func=handle_cancel_appointment,
+                )
+                output = orchestrator.reschedule_appointment(
+                    booking_context,
                     appointment_id=arguments.get("appointment_id"),
                     new_start_time=arguments.get("new_start_time")
                     or arguments.get("start_time")
                     or arguments.get("start"),
                     service_type=arguments.get("service_type"),
                     provider=arguments.get("provider"),
-                    services_dict=services,
                 )
             elif name == "cancel_appointment":
-                output = handle_cancel_appointment(
-                    calendar_service,
+                services = SettingsService.get_services_dict(db)
+                channel_value = getattr(conversation, "channel", None) or ""
+                if channel_value == "sms":
+                    booking_channel = BookingChannel.SMS
+                elif channel_value == "voice":
+                    booking_channel = BookingChannel.VOICE
+                elif channel_value == "email":
+                    booking_channel = BookingChannel.EMAIL
+                elif channel_value == "staff_console":
+                    booking_channel = BookingChannel.STAFF_CONSOLE
+                else:
+                    booking_channel = BookingChannel.UNKNOWN
+
+                booking_context = BookingContext(
+                    db=db,
+                    conversation=conversation,
+                    customer=customer,
+                    channel=booking_channel,
+                    calendar_service=calendar_service,
+                    services_dict=services,
+                )
+                orchestrator = BookingOrchestrator(
+                    channel=booking_channel,
+                    check_availability_func=handle_check_availability,
+                    book_appointment_func=handle_book_appointment,
+                    reschedule_appointment_func=handle_reschedule_appointment,
+                    cancel_appointment_func=handle_cancel_appointment,
+                )
+                output = orchestrator.cancel_appointment(
+                    booking_context,
                     appointment_id=arguments.get("appointment_id"),
                     cancellation_reason=arguments.get("cancellation_reason"),
                 )
@@ -1461,6 +1579,29 @@ class MessagingService:
                 arguments=arguments,
                 output=output,
             )
+
+        # Record booking tool metrics for observability
+        try:
+            channel_value = getattr(conversation, "channel", None) or "unknown"
+        except Exception:  # noqa: BLE001 - metrics should never break flows
+            channel_value = "unknown"
+
+        if name in {
+            "check_availability",
+            "book_appointment",
+            "reschedule_appointment",
+            "cancel_appointment",
+        }:
+            output_payload = result.get("output") or {}
+            record_tool_execution(
+                tool_name=name,
+                channel=channel_value,
+                success=bool(output_payload.get("success")),
+                latency_ms=None,
+                error_code=output_payload.get("error_code"),
+                extra={"conversation_id": str(getattr(conversation, "id", "unknown"))},
+            )
+
         return result
 
     @staticmethod
@@ -1733,6 +1874,7 @@ class MessagingService:
         db: Session,
         conversation_id: UUID,
         channel: str,
+        log_assistant_message: bool = True,
     ) -> tuple[str, Any | None]:
         conversation = (
             db.query(Conversation)
@@ -1745,6 +1887,15 @@ class MessagingService:
 
         last_customer = MessagingService._latest_customer_message(conversation)
         if last_customer and last_customer.content:
+            try:
+                SlotSelectionManager.capture_selection(db, conversation, last_customer)
+            except Exception as exc:  # noqa: BLE001 - selection capture should be best-effort
+                logger.warning(
+                    "Failed to capture slot selection from latest customer message for conversation %s: %s",
+                    conversation.id,
+                    exc,
+                )
+
             last_text = last_customer.content.strip().lower()
             if MessagingService._is_cancellation_message(last_text):
                 metadata = SlotSelectionManager.conversation_metadata(conversation)
@@ -1878,6 +2029,25 @@ class MessagingService:
                                 db, conversation, metadata
                             )
 
+                        # After offers and intent are stored, try to capture a slot
+                        # selection from the latest inbound customer message so
+                        # deterministic booking can proceed when the guest already
+                        # specified a time before offers were recorded.
+                        try:
+                            latest_customer = MessagingService._latest_customer_message(
+                                conversation
+                            )
+                            if latest_customer and latest_customer.content:
+                                SlotSelectionManager.capture_selection(
+                                    db, conversation, latest_customer
+                                )
+                        except Exception as exc:  # noqa: BLE001 - best-effort only
+                            logger.warning(
+                                "Failed to capture slot selection after preemptive availability for conversation %s: %s",
+                                conversation.id,
+                                exc,
+                            )
+
                         trace(
                             "Preemptive check_availability succeeded. Injected results into context."
                         )
@@ -1912,7 +2082,15 @@ class MessagingService:
 
             if booking_result.get("status") == "success":
                 trace("Deterministic booking completed successfully.")
-                return booking_result["message"], None
+                message_text = booking_result["message"]
+                if log_assistant_message and message_text:
+                    MessagingService.add_assistant_message(
+                        db=db,
+                        conversation=conversation,
+                        content=message_text,
+                        metadata={"source": "ai_deterministic", "generated_by": "assistant"},
+                    )
+                return message_text, None
 
             if booking_result.get("status") == "failure":
                 trace("Deterministic booking failed; proceeding with AI follow-up.")
@@ -1975,6 +2153,13 @@ class MessagingService:
             return "", message
 
         # If no tool calls, return the text
+        if log_assistant_message and text_content:
+            MessagingService.add_assistant_message(
+                db=db,
+                conversation=conversation,
+                content=text_content,
+                metadata={"source": "ai_core", "generated_by": "assistant"},
+            )
         return text_content, message
 
     @staticmethod

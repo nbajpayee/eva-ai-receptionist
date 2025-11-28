@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from openai import OpenAI
+from ai_config import get_openai_client
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -13,8 +13,6 @@ from sqlalchemy.orm import Session
 from config import get_settings
 from database import (
     Appointment,
-    CallEvent,
-    CallSession,
     CommunicationEvent,
     CommunicationMessage,
     Conversation,
@@ -26,7 +24,7 @@ from database import (
 )
 
 settings = get_settings()
-openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+openai_client = get_openai_client()
 logger = logging.getLogger(__name__)
 
 
@@ -45,117 +43,49 @@ def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
 
 
 class AnalyticsService:
-    """Service for tracking and analyzing call sessions."""
+    """Service for tracking and analyzing conversations."""
+
+    Conversation = Conversation
+    CommunicationMessage = CommunicationMessage
+    Appointment = Appointment
 
     @staticmethod
-    def create_call_session(
-        db: Session, session_id: str, phone_number: Optional[str] = None
-    ) -> CallSession:
-        """
-        Create a new call session record.
-
-        Args:
-            db: Database session
-            session_id: Unique session identifier
-            phone_number: Customer phone number
-
-        Returns:
-            Created CallSession object
-        """
-        call_session = CallSession(
-            session_id=session_id, phone_number=phone_number, started_at=_utcnow()
-        )
-        db.add(call_session)
-        db.commit()
-        db.refresh(call_session)
-        return call_session
-
-    @staticmethod
-    def end_call_session(
+    def resolve_or_create_customer_for_call(
         db: Session,
-        session_id: str,
-        transcript: List[Dict[str, Any]],
-        function_calls: List[Dict[str, Any]],
         customer_data: Dict[str, Any],
-    ) -> CallSession:
-        """
-        End a call session and analyze it.
+    ) -> Optional[Customer]:
+        """Find or create a Customer based on call customer_data.
 
-        Args:
-            db: Database session
-            session_id: Session identifier
-            transcript: Full conversation transcript
-            function_calls: List of function calls made
-            customer_data: Customer information collected
-
-        Returns:
-            Updated CallSession object
+        This helper is safe to call from both legacy CallSession flows and the
+        new conversations-based schema.
         """
-        call_session = (
-            db.query(CallSession).filter(CallSession.session_id == session_id).first()
+
+        if not customer_data.get("phone"):
+            return None
+
+        customer = (
+            db.query(Customer)
+            .filter(Customer.phone == customer_data["phone"])
+            .first()
         )
 
-        if not call_session:
-            raise ValueError(f"Call session not found: {session_id}")
+        if customer:
+            return customer
 
-        # Calculate duration
-        ended_at = _utcnow()
-        call_session.ended_at = ended_at
-
-        started_at = _ensure_utc(call_session.started_at)
-        if started_at is not None:
-            call_session.duration_seconds = int((ended_at - started_at).total_seconds())
-        else:
-            call_session.duration_seconds = 0
-
-        # Store transcript
-        call_session.transcript = json.dumps(transcript)
-
-        # Store function calls count
-        call_session.function_calls_made = len(function_calls)
-
-        # Link to customer if identified (create if doesn't exist)
-        if customer_data.get("phone"):
-            customer = (
-                db.query(Customer)
-                .filter(Customer.phone == customer_data["phone"])
-                .first()
-            )
-
-            if not customer:
-                # Create new customer
-                customer = Customer(
-                    name=customer_data.get("name", "Unknown"),
-                    phone=customer_data.get("phone"),
-                    email=customer_data.get("email"),
-                    is_new_client=True,
-                )
-                db.add(customer)
-                db.flush()  # Get the ID without committing
-                logger.info(
-                    "Created new customer during call session %s: %s (ID: %s)",
-                    session_id,
-                    customer.name,
-                    customer.id,
-                )
-
-            call_session.customer_id = customer.id
-
-        # Determine outcome
-        call_session.outcome = AnalyticsService._determine_outcome(function_calls)
-
-        # Analyze sentiment and satisfaction
-        sentiment_analysis = AnalyticsService.analyze_call_sentiment(transcript)
-        call_session.sentiment = sentiment_analysis["sentiment"]
-        call_session.satisfaction_score = sentiment_analysis["satisfaction_score"]
-
-        db.commit()
-        db.refresh(call_session)
-
-        # Update daily metrics
-        AnalyticsService.update_daily_metrics(db, call_session)
-
-        return call_session
+        customer = Customer(
+            name=customer_data.get("name", "Unknown"),
+            phone=customer_data.get("phone"),
+            email=customer_data.get("email"),
+            is_new_client=True,
+        )
+        db.add(customer)
+        db.flush()  # Get the ID without committing
+        logger.info(
+            "Created new customer during call resolution: %s (ID: %s)",
+            customer.name,
+            customer.id,
+        )
+        return customer
 
     @staticmethod
     def _determine_outcome(function_calls: List[Dict[str, Any]]) -> str:
@@ -227,8 +157,8 @@ Consider these factors:
 - Were there negative words or tone indicators?
 - Was the conversation efficient or drawn out?
 """,
-                    },
-                    {"role": "user", "content": conversation_text},
+                        },
+                        {"role": "user", "content": conversation_text},
                     ],
                     response_format={"type": "json_object"},
                     temperature=0.2,
@@ -287,117 +217,6 @@ Consider these factors:
 
         # Fallback if all retries exhausted
         return {"sentiment": "neutral", "satisfaction_score": 5.0}
-
-    @staticmethod
-    def log_call_event(
-        db: Session,
-        call_session_id: int,
-        event_type: str,
-        data: Optional[Dict[str, Any]] = None,
-    ):
-        """
-        Log an event during a call.
-
-        Args:
-            db: Database session
-            call_session_id: Call session ID
-            event_type: Type of event
-            data: Event data
-        """
-        event = CallEvent(
-            call_session_id=call_session_id,
-            event_type=event_type,
-            data=data,
-            timestamp=_utcnow(),
-        )
-        db.add(event)
-        db.commit()
-
-    @staticmethod
-    def update_daily_metrics(db: Session, call_session: CallSession):
-        """
-        Update daily metrics based on completed call.
-
-        Args:
-            db: Database session
-            call_session: Completed call session
-        """
-        started_at = _ensure_utc(call_session.started_at) or _utcnow()
-        normalized_date = datetime.combine(
-            started_at.date(),
-            datetime.min.time(),
-            tzinfo=timezone.utc,
-        )
-
-        while True:
-            daily_metric = (
-                db.query(DailyMetric)
-                .filter(DailyMetric.date == normalized_date)
-                .first()
-            )
-
-            if not daily_metric:
-                daily_metric = DailyMetric(
-                    date=normalized_date,
-                    total_calls=0,
-                    total_talk_time_seconds=0,
-                    avg_call_duration_seconds=0,
-                    appointments_booked=0,
-                    appointments_rescheduled=0,
-                    appointments_cancelled=0,
-                    avg_satisfaction_score=0.0,
-                    calls_escalated=0,
-                    conversion_rate=0.0,
-                )
-                db.add(daily_metric)
-
-            # Update metrics
-            daily_metric.total_calls += 1
-            daily_metric.total_talk_time_seconds += call_session.duration_seconds or 0
-
-            if call_session.outcome == "booked":
-                daily_metric.appointments_booked += 1
-
-            if call_session.escalated:
-                daily_metric.calls_escalated += 1
-
-            # Calculate averages
-            daily_metric.avg_call_duration_seconds = int(
-                daily_metric.total_talk_time_seconds / daily_metric.total_calls
-            )
-
-            # Calculate conversion rate
-            if daily_metric.total_calls > 0:
-                daily_metric.conversion_rate = (
-                    daily_metric.appointments_booked / daily_metric.total_calls * 100
-                )
-
-            # Update average satisfaction score
-            all_sessions_today = (
-                db.query(CallSession)
-                .filter(
-                    CallSession.started_at >= normalized_date,
-                    CallSession.started_at < normalized_date + timedelta(days=1),
-                    CallSession.satisfaction_score.isnot(None),
-                )
-                .all()
-            )
-
-            if all_sessions_today:
-                total_score = sum(s.satisfaction_score for s in all_sessions_today)
-                daily_metric.avg_satisfaction_score = total_score / len(
-                    all_sessions_today
-                )
-
-            try:
-                db.commit()
-                break
-            except IntegrityError:
-                print(
-                    "IntegrityError updating daily metrics; retrying with fresh state"
-                )
-                db.rollback()
-                continue
 
     @staticmethod
     def get_dashboard_overview(db: Session, period: str = "today") -> Dict[str, Any]:
@@ -481,6 +300,55 @@ Consider these factors:
             ),
             "customers_engaged": customers_engaged,  # New metric
             "total_messages_sent": total_messages,  # New metric
+        }
+
+    @staticmethod
+    def get_booking_health_window(
+        db: Session,
+        minutes: int = 60,
+    ) -> Dict[str, Any]:
+        """Return a lightweight health snapshot for recent AI bookings.
+
+        This is intended for pilot monitoring and basic watchdog checks, not for
+        detailed analytics. It looks at conversations and appointments in a
+        recent time window and reports simple ratios.
+        """
+
+        now = datetime.utcnow()
+        cutoff = now - timedelta(minutes=minutes)
+
+        total_conversations = (
+            db.query(Conversation)
+            .filter(Conversation.initiated_at >= cutoff)
+            .count()
+        )
+
+        ai_bookings = (
+            db.query(Appointment)
+            .filter(
+                Appointment.created_at >= cutoff,
+                Appointment.booked_by == "ai",
+                Appointment.status == "scheduled",
+            )
+            .count()
+        )
+
+        cancelled = (
+            db.query(Appointment)
+            .filter(Appointment.cancelled_at >= cutoff)
+            .count()
+        )
+
+        conversion_rate = (
+            ai_bookings / total_conversations * 100.0 if total_conversations else 0.0
+        )
+
+        return {
+            "window_minutes": minutes,
+            "total_conversations": total_conversations,
+            "ai_appointments_scheduled": ai_bookings,
+            "appointments_cancelled": cancelled,
+            "conversion_rate": round(conversion_rate, 2),
         }
 
     @staticmethod
