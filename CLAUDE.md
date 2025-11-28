@@ -44,6 +44,19 @@ Phase 1A is production-ready. Voice interface complete with smart commits and in
 - **Documentation**: See `FINAL_SOLUTION_DETERMINISTIC_TOOL_EXECUTION.md`, `TOOL_CALL_HISTORY_PERSISTENCE_FIX.md`, `COMPLETE_CONVERSATION_SUMMARY.md`
 - **Tests**: 37/37 passing including new `TestDeterministicBooking` suite
 
+**Architecture Refactor (Nov 28, 2025)** ✅ **COMPLETE**
+- **Goal**: Single booking brain shared by voice and messaging; typed contracts; centralized AI config; comprehensive metrics
+- **What Changed**:
+  - ✅ **BookingOrchestrator**: Single entry point for all booking operations (`backend/booking/orchestrator.py`)
+  - ✅ **Typed Contracts**: `BookingContext`, `CheckAvailabilityResult`, `BookingResult` replace `Dict[str, Any]`
+  - ✅ **Type Safety**: `BookingContext` now uses proper types (`Session`, `Conversation`, `Customer`, `CalendarService`)
+  - ✅ **AI Config Module**: `backend/ai_config.py` provides model constants and shared OpenAI client
+  - ✅ **Realtime Config**: `backend/realtime_config.py` expanded with VAD settings, audio formats, temperature options
+  - ✅ **Comprehensive Metrics**: All 4 booking tools (check/book/reschedule/cancel) tracked in both voice and messaging
+  - ✅ **Legacy Schema Removed**: `CallSession`/`CallEvent` models deleted, conversations-only architecture
+- **Test Coverage**: 21/21 booking tests passing, 34/39 integration tests passing
+- **See**: `ARCHITECTURE_REFACTOR_PLAN.md`, `BOOKING_ARCHITECTURE.md` for full details
+
 ## Development Commands
 
 ### Backend (FastAPI)

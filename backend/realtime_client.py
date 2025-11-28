@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -747,6 +748,7 @@ class RealtimeClient:
                 }
 
             elif function_name == "book_appointment":
+                service_type = arguments.get("service_type")
                 booking_context = self._booking_context_factory.for_voice()
                 orchestrator = BookingOrchestrator(channel=BookingChannel.VOICE)
 
@@ -934,12 +936,21 @@ class RealtimeClient:
                 booking_context = self._booking_context_factory.for_voice()
                 orchestrator = BookingOrchestrator(channel=BookingChannel.VOICE)
 
+                start_time = time.time()
                 booking_result = orchestrator.reschedule_appointment(
                     booking_context,
                     appointment_id=appointment_id,
                     new_start_time=new_start_time_str,
                     service_type=service_type,
                     provider=provider,
+                )
+                latency_ms = (time.time() - start_time) * 1000
+
+                record_tool_execution(
+                    tool_name="reschedule_appointment",
+                    channel="voice",
+                    success=booking_result.get("success", False),
+                    latency_ms=latency_ms,
                 )
 
                 if not booking_result.get("success"):
@@ -979,10 +990,19 @@ class RealtimeClient:
                 booking_context = self._booking_context_factory.for_voice()
                 orchestrator = BookingOrchestrator(channel=BookingChannel.VOICE)
 
+                start_time = time.time()
                 booking_result = orchestrator.cancel_appointment(
                     booking_context,
                     appointment_id=appointment_id,
                     cancellation_reason=cancellation_reason,
+                )
+                latency_ms = (time.time() - start_time) * 1000
+
+                record_tool_execution(
+                    tool_name="cancel_appointment",
+                    channel="voice",
+                    success=booking_result.get("success", False),
+                    latency_ms=latency_ms,
                 )
 
                 if not booking_result.get("success"):

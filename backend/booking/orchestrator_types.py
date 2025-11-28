@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+    from database import Conversation, Customer
+    from calendar_service import CalendarService
 
 
 class BookingChannel(str, Enum):
@@ -16,11 +21,17 @@ class BookingChannel(str, Enum):
 
 @dataclass
 class BookingContext:
-    db: Any
-    conversation: Any
-    customer: Optional[Any]
+    """Context for booking operations across all channels.
+
+    Provides all necessary dependencies and metadata for executing
+    booking-related tool calls (check_availability, book_appointment,
+    reschedule, cancel).
+    """
+    db: "Session"
+    conversation: "Conversation"
+    customer: Optional["Customer"]
     channel: BookingChannel
-    calendar_service: Any
+    calendar_service: "CalendarService"
     services_dict: Optional[Dict[str, Any]] = None
     now: Optional[datetime] = None
 
