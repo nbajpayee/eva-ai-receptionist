@@ -1,8 +1,7 @@
-"""
-Analytics service for call tracking, sentiment analysis, and satisfaction scoring.
-"""
+"""Analytics service for call tracking, sentiment analysis, and satisfaction scoring."""
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -28,6 +27,7 @@ from database import (
 
 settings = get_settings()
 openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -132,7 +132,12 @@ class AnalyticsService:
                 )
                 db.add(customer)
                 db.flush()  # Get the ID without committing
-                print(f"✨ Created new customer: {customer.name} (ID: {customer.id})")
+                logger.info(
+                    "Created new customer during call session %s: %s (ID: %s)",
+                    session_id,
+                    customer.name,
+                    customer.id,
+                )
 
             call_session.customer_id = customer.id
 
@@ -190,14 +195,22 @@ class AnalyticsService:
             ]
         )
 
-        # Use GPT-4 for sentiment analysis
-        try:
-            response = openai_client.chat.completions.create(
-                model=settings.OPENAI_SENTIMENT_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are an expert at analyzing customer service conversations.
+        # Use GPT-4 for sentiment analysis with retry logic
+        import time
+        from openai import APIError, RateLimitError, Timeout
+
+        max_retries = 3
+        base_delay = 1.0
+
+        for attempt in range(max_retries):
+            try:
+                response = openai_client.chat.completions.create(
+                    model=settings.OPENAI_SENTIMENT_MODEL,
+                    timeout=30.0,  # 30 second timeout
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": """You are an expert at analyzing customer service conversations.
 Analyze the following conversation between a medical spa AI assistant and a customer.
 
 Provide your analysis in JSON format with these fields:
@@ -216,22 +229,64 @@ Consider these factors:
 """,
                     },
                     {"role": "user", "content": conversation_text},
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.2,
-            )
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.2,
+                )
 
-            analysis_content = response.choices[0].message.content
-            analysis = json.loads(analysis_content)
-            return {
-                "sentiment": analysis.get("sentiment", "neutral"),
-                "satisfaction_score": float(analysis.get("satisfaction_score", 5.0)),
-                "analysis_details": analysis,
-            }
+                # Success - parse and return
+                analysis_content = response.choices[0].message.content
+                analysis = json.loads(analysis_content)
+                return {
+                    "sentiment": analysis.get("sentiment", "neutral"),
+                    "satisfaction_score": float(analysis.get("satisfaction_score", 5.0)),
+                    "analysis_details": analysis,
+                }
 
-        except Exception as e:
-            print(f"Error analyzing sentiment: {e}")
-            return {"sentiment": "neutral", "satisfaction_score": 5.0}
+            except RateLimitError as e:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)  # Exponential backoff
+                    logger.warning(
+                        "OpenAI rate limit hit during sentiment analysis, retrying in %s seconds (attempt %s/%s)",
+                        delay, attempt + 1, max_retries,
+                        extra={"attempt": attempt + 1, "max_retries": max_retries}
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.error(
+                        "OpenAI rate limit exceeded after %s retries during sentiment analysis",
+                        max_retries,
+                        exc_info=True
+                    )
+                    return {"sentiment": "neutral", "satisfaction_score": 5.0}
+
+            except Timeout as e:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logger.warning(
+                        "OpenAI API timeout during sentiment analysis, retrying in %s seconds (attempt %s/%s)",
+                        delay, attempt + 1, max_retries,
+                        extra={"attempt": attempt + 1, "max_retries": max_retries}
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.error(
+                        "OpenAI API timeout after %s retries during sentiment analysis",
+                        max_retries,
+                        exc_info=True
+                    )
+                    return {"sentiment": "neutral", "satisfaction_score": 5.0}
+
+            except APIError as e:
+                logger.error("OpenAI API error during sentiment analysis", exc_info=True)
+                return {"sentiment": "neutral", "satisfaction_score": 5.0}
+
+            except Exception as e:
+                logger.error("Unexpected error during sentiment analysis", exc_info=True)
+                return {"sentiment": "neutral", "satisfaction_score": 5.0}
+
+        # Fallback if all retries exhausted
+        return {"sentiment": "neutral", "satisfaction_score": 5.0}
 
     @staticmethod
     def log_call_event(

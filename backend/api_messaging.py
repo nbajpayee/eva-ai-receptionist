@@ -456,8 +456,11 @@ def send_message(
         except (
             Exception
         ) as exc:  # noqa: BLE001 - fall back to existing values if scoring fails
-            print(
-                f"Warning: Failed to score messaging conversation {conversation.id}: {exc}"
+            logger.warning(
+                "Failed to score messaging conversation %s: %s",
+                conversation.id,
+                exc,
+                exc_info=True,
             )
 
     db.refresh(conversation)

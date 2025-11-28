@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 from starlette.websockets import WebSocketState
 
@@ -55,6 +55,22 @@ from realtime_client import RealtimeClient
 from settings_service import SettingsService
 
 settings = get_settings()
+
+# Configure logging with environment-based level
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    handlers=[
+        logging.StreamHandler()  # Stdout for Railway/Render/Docker logs
+    ]
+)
+
+# Suppress noisy third-party loggers
+logging.getLogger("websockets").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
@@ -63,6 +79,39 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="AI-powered voice receptionist for medical spas",
 )
+
+
+# Global exception handler - logs all unhandled exceptions
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Catch-all exception handler to ensure all errors are logged.
+    This runs AFTER route-specific error handling fails.
+    """
+    # Log with full context
+    logger.error(
+        "Unhandled exception: %s %s",
+        request.method,
+        request.url.path,
+        exc_info=True,
+        extra={
+            "path": str(request.url.path),
+            "method": request.method,
+            "client_host": request.client.host if request.client else None,
+            "exception_type": type(exc).__name__
+        }
+    )
+
+    # Return generic error (don't leak internals)
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "request_id": str(uuid.uuid4())  # For debugging
+        }
+    )
+
 
 # Register routers
 app.include_router(messaging_router)
@@ -1150,7 +1199,7 @@ async def startup_event():
         logger.warning(
             "Google Calendar credentials require attention: %s", credential_status
         )
-    print(f"{settings.APP_NAME} started successfully!")
+    logger.info("%s started successfully!", settings.APP_NAME)
 
 
 @app.get("/")
@@ -1163,10 +1212,27 @@ async def root():
     }
 
 
+@app.get("/health/live")
+async def health_live():
+    """Liveness probe: process is up."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready(db: Session = Depends(get_db)):
+    """Readiness probe: verify database connectivity."""
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "ready", "database": "connected"}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Readiness check failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Database unavailable") from exc
+
+
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy"}
+    """Backward-compatible health endpoint (liveness)."""
+    return await health_live()
 
 
 # ==================== Voice WebSocket Endpoint ====================
@@ -1218,7 +1284,12 @@ async def voice_websocket(
                 }
             )
         except Exception as send_err:  # noqa: BLE001
-            print(f"⚠️  Failed to send transcript entry to client: {send_err}")
+            logger.warning(
+                "Failed to send transcript entry to client for session %s: %s",
+                session_id,
+                send_err,
+                exc_info=True,
+            )
 
     realtime_client = RealtimeClient(
         session_id=session_id,
@@ -1239,21 +1310,23 @@ async def voice_websocket(
                 return
 
             session_finalized = True
-            print(f"🔚 Finalizing session {session_id} ({reason})")
+            logger.info("Finalizing session %s (%s)", session_id, reason)
 
             # Remove active connection reference if present
             active_connections.pop(session_id, None)
 
             session_data = realtime_client.get_session_data()
             transcript_entries = session_data.get("transcript", [])
-            print(
-                f"🧾 Transcript entries captured for {session_id}: {len(transcript_entries)}"
+            logger.info(
+                "Transcript entries captured for session %s: %d",
+                session_id,
+                len(transcript_entries),
             )
             if not transcript_entries:
-                print("🧾 Transcript data (empty or missing)")
+                logger.debug("Transcript data for session %s is empty or missing", session_id)
             else:
                 preview = transcript_entries[-3:]
-                print(f"🧾 Transcript preview: {preview}")
+                logger.debug("Transcript preview for session %s: %s", session_id, preview)
 
             try:
                 # DUAL-WRITE: Update both legacy and new schemas
@@ -1280,12 +1353,14 @@ async def voice_websocket(
                 # Update conversation with customer ID if identified
                 if customer_id:
                     conversation.customer_id = customer_id
-                    print(
-                        f"🔗 Linked conversation {conversation.id} to customer {customer_id}"
+                    logger.info(
+                        "Linked conversation %s to customer %s",
+                        conversation.id,
+                        customer_id,
                     )
                     db.commit()
                 else:
-                    print(f"⚠️  No customer linked for session {session_id}")
+                    logger.warning("No customer linked for session %s", session_id)
 
                 # Add message with human-readable summary (not raw JSON)
                 # The actual transcript goes in voice_details.transcript_segments
@@ -1344,10 +1419,10 @@ async def voice_websocket(
                 # Score conversation satisfaction (AI analysis)
                 AnalyticsService.score_conversation_satisfaction(db, conversation.id)
 
-                print(f"✅ Dual-write complete for session {session_id}")
+                logger.info("Dual-write complete for session %s", session_id)
 
             except Exception as e:
-                print(f"Error ending call session: {e}")
+                logger.error("Error ending call session %s: %s", session_id, e, exc_info=True)
             finally:
                 if not disconnect_performed:
                     disconnect_performed = True
@@ -1380,34 +1455,39 @@ async def voice_websocket(
             event_type="session_started",
             details={"session_id": session_id},
         )
-        print("✅ Session logged to both schemas, about to define audio_callback")
+        logger.info("Session %s logged to both schemas; defining audio callback", session_id)
 
         # Define callback for audio output
-        print("✅ Defining audio_callback function")
+        logger.debug("Defining audio_callback function for session %s", session_id)
 
         async def audio_callback(audio_b64: str):
             """Send audio from OpenAI back to client."""
             if websocket.client_state != WebSocketState.CONNECTED:
-                print("📤 Skipping audio send; websocket no longer connected")
+                logger.warning(
+                    "Skipping audio send for session %s; websocket no longer connected",
+                    session_id,
+                )
                 return
 
-            print(
-                f"📤 Audio callback called, sending {len(audio_b64)} chars to browser"
+            logger.debug(
+                "Audio callback for session %s sending %d chars to browser",
+                session_id,
+                len(audio_b64),
             )
             await websocket.send_json({"type": "audio", "data": audio_b64})
-            print("📤 Audio sent to browser")
+            logger.debug("Audio sent to browser for session %s", session_id)
 
-        print("✅ audio_callback defined, about to define handle_client_messages")
+        logger.debug("audio_callback defined for session %s; defining client handlers", session_id)
 
         # Handle messages from both client and OpenAI
         async def handle_client_messages():
             """Handle incoming messages from client."""
-            print("📱 Starting client message handler...")
+            logger.info("Starting client message handler for session %s", session_id)
             try:
                 while True:
                     message = await websocket.receive_json()
                     msg_type = message.get("type")
-                    print(f"📱 Received from client: {msg_type}")
+                    logger.debug("Received from client for session %s: %s", session_id, msg_type)
 
                     if msg_type == "audio":
                         # Forward audio to OpenAI
@@ -1415,20 +1495,26 @@ async def voice_websocket(
                         await realtime_client.send_audio(audio_b64, commit=False)
 
                     elif msg_type == "commit":
-                        print("📱 Client requested audio buffer commit")
+                        logger.info(
+                            "Client requested audio buffer commit for session %s",
+                            session_id,
+                        )
                         await realtime_client.commit_audio_buffer()
 
                     elif msg_type == "interrupt":
-                        print("✋ Client interrupted assistant")
+                        logger.info("Client interrupted assistant for session %s", session_id)
                         await realtime_client.cancel_response()
 
                     elif msg_type == "end_session":
-                        print("📱 Client requested end session")
+                        logger.info("Client requested end session for session %s", session_id)
                         try:
                             await websocket.close(code=1000)
                         except Exception as close_err:
-                            print(
-                                f"📱 Error closing client websocket after end_session: {close_err}"
+                            logger.warning(
+                                "Error closing client websocket after end_session for session %s: %s",
+                                session_id,
+                                close_err,
+                                exc_info=True,
                             )
                         break
 
@@ -1445,37 +1531,38 @@ async def voice_websocket(
                         )
 
             except WebSocketDisconnect:
-                print("📱 Client WebSocket disconnected")
+                logger.info("Client WebSocket disconnected for session %s", session_id)
             except Exception as e:
-                print(f"📱 Error in client handler: {e}")
-                import traceback
-
-                traceback.print_exc()
+                logger.error(
+                    "Error in client handler for session %s: %s", session_id, e, exc_info=True
+                )
             finally:
-                print(
-                    "📱 Client handler exiting; realtime client will be closed during finalization"
+                logger.info(
+                    "Client handler exiting for session %s; realtime client will be closed during finalization",
+                    session_id,
                 )
 
-        print(
-            "✅ handle_client_messages defined, about to define handle_openai_messages"
+        logger.debug(
+            "handle_client_messages defined for session %s; defining OpenAI handler",
+            session_id,
         )
 
         async def handle_openai_messages():
             """Handle incoming messages from OpenAI."""
-            print("🤖 Starting OpenAI message handler...")
+            logger.info("Starting OpenAI message handler for session %s", session_id)
             try:
                 await realtime_client.handle_messages(audio_callback)
             except asyncio.CancelledError:
-                print("🤖 OpenAI handler task cancelled")
+                logger.info("OpenAI handler task cancelled for session %s", session_id)
                 raise
             except Exception as e:
-                print(f"🤖 Error in OpenAI handler: {e}")
-                import traceback
+                logger.error(
+                    "Error in OpenAI handler for session %s: %s", session_id, e, exc_info=True
+                )
 
-                traceback.print_exc()
-
-        print(
-            "✅ handle_openai_messages defined, about to import asyncio and start handlers"
+        logger.debug(
+            "OpenAI message handler defined for session %s; starting client/OpenAI tasks",
+            session_id,
         )
 
         try:
@@ -1522,27 +1609,40 @@ async def voice_websocket(
                 except Exception as task_err:
                     results.append(task_err)
 
-            print(f"✅ Handlers completed with results: {results}")
+            logger.info(
+                "Realtime handlers completed for session %s with results: %s",
+                session_id,
+                results,
+            )
         except Exception as orchestration_error:
-            print(f"❌ Error orchestrating realtime handlers: {orchestration_error}")
-            import traceback
-
-            traceback.print_exc()
+            logger.error(
+                "Error orchestrating realtime handlers for session %s: %s",
+                session_id,
+                orchestration_error,
+                exc_info=True,
+            )
             raise
     except Exception as orchestration_error:
-        print(f"❌ Unhandled error in voice_websocket: {orchestration_error}")
-        import traceback
-
-        traceback.print_exc()
+        logger.error(
+            "Unhandled error in voice_websocket for session %s: %s",
+            session_id,
+            orchestration_error,
+            exc_info=True,
+        )
         await finalize_session("exception")
         raise
     finally:
         await finalize_session("closed")
-        print(f"🧹 Cleaning up session {session_id}")
+        logger.info("Cleaning up session %s", session_id)
         try:
             await realtime_client.disconnect()
         except Exception as cleanup_err:
-            print(f"⚠️  Error during realtime client cleanup: {cleanup_err}")
+            logger.warning(
+                "Error during realtime client cleanup for session %s: %s",
+                session_id,
+                cleanup_err,
+                exc_info=True,
+            )
 
 
 # ==================== Customer Management Endpoints ====================

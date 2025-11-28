@@ -14,7 +14,9 @@
       "Bash(npm run dev:*)",
       "Bash(lsof:*)",
       "Bash(kill:*)",
-      "Bash(black:*)"
+      "Bash(black:*)",
+      "Bash(tokei:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []

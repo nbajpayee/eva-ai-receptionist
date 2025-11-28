@@ -14,7 +14,7 @@ class _FakeCalendarService:
         self.book_calls: list[dict] = []
 
     def get_available_slots(
-        self, date, service_type
+        self, date, service_type, services_dict=None
     ):  # noqa: ARG002 - signature parity
         return self._slots
 
@@ -27,6 +27,7 @@ class _FakeCalendarService:
         customer_email,
         customer_phone,
         service_type,
+        services_dict=None,  # noqa: ARG002 - unused in fake
         provider=None,
         notes=None,
     ):
@@ -35,6 +36,7 @@ class _FakeCalendarService:
                 "start": start_time,
                 "end": end_time,
                 "customer_name": customer_name,
+                "customer_email": customer_email,
                 "customer_phone": customer_phone,
                 "service_type": service_type,
                 "provider": provider,
@@ -42,6 +44,14 @@ class _FakeCalendarService:
             }
         )
         return "evt-123"
+
+
+TEST_SERVICES = {
+    "botox": {
+        "name": "Botox",
+        "duration_minutes": 60,
+    },
+}
 
 
 def _make_slot(start_dt: datetime, duration_minutes: int = 30) -> dict[str, str]:
@@ -70,6 +80,7 @@ def test_check_availability_returns_summary_and_suggestions():
         date=(tomorrow_base.date()).strftime("%Y-%m-%d"),
         service_type="botox",
         limit=2,
+        services_dict=TEST_SERVICES,
     )
 
     assert result["success"] is True
@@ -107,6 +118,7 @@ def test_book_appointment_uses_full_slot_list_for_validation():
         customer_email="guest@example.com",
         start_time=requested_start.isoformat(),
         service_type="botox",
+        services_dict=TEST_SERVICES,
     )
 
     assert payload["success"] is True
@@ -130,6 +142,7 @@ def test_book_appointment_returns_summary_on_mismatch():
         customer_email="guest@example.com",
         start_time=(tomorrow + timedelta(hours=5)).isoformat(),
         service_type="botox",
+        services_dict=TEST_SERVICES,
     )
 
     assert payload["success"] is False

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     ENV: str = "development"
+    LOG_LEVEL: str = "INFO"  # Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
 
     # SQL logging
     SQL_ECHO: bool = False
@@ -65,82 +66,6 @@ def get_settings() -> Settings:
     """Get cached settings instance."""
     return Settings()
 
-
-# Med Spa Services Configuration
-SERVICES = {
-    "botox": {
-        "name": "Botox",
-        "duration_minutes": 30,
-        "price_range": "$300-$600",
-        "description": "Botulinum toxin injections to reduce fine lines and wrinkles",
-        "prep_instructions": "Avoid alcohol and blood thinners 24 hours before treatment",
-        "aftercare": "No rubbing the treated area for 24 hours, avoid lying down for 4 hours",
-    },
-    "dermal_fillers": {
-        "name": "Dermal Fillers",
-        "duration_minutes": 45,
-        "price_range": "$600-$1200 per syringe",
-        "description": "Injectable hyaluronic acid for volume restoration and enhancement",
-        "prep_instructions": "Avoid alcohol and blood thinners 24-48 hours before",
-        "aftercare": "Avoid strenuous exercise for 24 hours, ice as needed for swelling",
-    },
-    "laser_hair_removal": {
-        "name": "Laser Hair Removal",
-        "duration_minutes": 30,
-        "price_range": "$100-$500 per session",
-        "description": "Permanent hair reduction using advanced laser technology",
-        "prep_instructions": "Shave area 24 hours before, avoid sun exposure for 2 weeks",
-        "aftercare": "Avoid sun exposure, use SPF 30+, no hot showers for 24 hours",
-    },
-    "hydrafacial": {
-        "name": "HydraFacial",
-        "duration_minutes": 60,
-        "price_range": "$200-$300",
-        "description": "Deep cleansing, exfoliation, and hydration facial treatment",
-        "prep_instructions": "Come with clean face, no makeup",
-        "aftercare": "Avoid sun exposure for 24 hours, use gentle skincare",
-    },
-    "chemical_peel": {
-        "name": "Chemical Peel",
-        "duration_minutes": 45,
-        "price_range": "$150-$400",
-        "description": "Exfoliating treatment to improve skin texture and tone",
-        "prep_instructions": "Discontinue retinoids 3 days before, avoid sun exposure",
-        "aftercare": "No picking at peeling skin, use gentle cleanser and moisturizer, SPF required",
-    },
-    "microneedling": {
-        "name": "Microneedling",
-        "duration_minutes": 60,
-        "price_range": "$300-$500",
-        "description": "Collagen induction therapy for skin rejuvenation",
-        "prep_instructions": "Come with clean face, avoid blood thinners",
-        "aftercare": "Avoid makeup for 24 hours, gentle skincare only, avoid sun",
-    },
-    "coolsculpting": {
-        "name": "CoolSculpting",
-        "duration_minutes": 60,
-        "price_range": "$750-$1500 per area",
-        "description": "Non-invasive fat reduction through controlled cooling",
-        "prep_instructions": "Wear comfortable clothing, eat normally",
-        "aftercare": "Massage treated area as directed, maintain healthy lifestyle",
-    },
-    "prp_facial": {
-        "name": "PRP Facial (Vampire Facial)",
-        "duration_minutes": 90,
-        "price_range": "$700-$1200",
-        "description": "Platelet-rich plasma therapy for skin rejuvenation",
-        "prep_instructions": "Hydrate well, avoid alcohol 24 hours before",
-        "aftercare": "No makeup for 24 hours, gentle skincare, avoid sun exposure",
-    },
-    "consultation": {
-        "name": "Consultation",
-        "duration_minutes": 30,
-        "price_range": "Complimentary",
-        "description": "Free consultation with our expert providers",
-        "prep_instructions": "Bring list of current medications and skincare products",
-        "aftercare": "N/A",
-    },
-}
 
 # Providers
 PROVIDERS = {

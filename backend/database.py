@@ -1088,7 +1088,12 @@ class Service(Base):
 def init_db():
     """Initialize database tables."""
     Base.metadata.create_all(bind=engine)
-    _ensure_schema_upgrades()
+
+    # SCHEMA UPGRADES DISABLED FOR PRODUCTION SAFETY
+    # Run migrations manually using Alembic instead of auto-upgrading on startup
+    # This prevents race conditions when multiple workers start simultaneously
+    # _ensure_schema_upgrades()  # COMMENTED OUT - Use Alembic for schema changes
+
     print("Database tables created successfully!")
 
 

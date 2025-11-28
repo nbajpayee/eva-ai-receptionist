@@ -18,21 +18,21 @@ from sqlalchemy import and_, case, desc, func
 from sqlalchemy.orm import Session
 
 try:
-    from backend.config import get_settings
     from backend.database import (
         Appointment,
         InPersonConsultation,
         Provider,
         ProviderPerformanceMetric,
     )
-except ModuleNotFoundError:
-    from config import get_settings
+except ModuleNotFoundError:  # pragma: no cover - import guard for different PYTHONPATH setups
     from database import (
         Appointment,
         InPersonConsultation,
         Provider,
         ProviderPerformanceMetric,
     )
+
+from settings_service import SettingsService
 
 
 class ProviderAnalyticsService:
@@ -81,6 +81,7 @@ class ProviderAnalyticsService:
 
         # Calculate revenue (sum of associated appointment prices)
         total_revenue = 0.0
+        services = SettingsService.get_services_dict(self.db)
         for consultation in consultations:
             if consultation.appointment_id:
                 appointment = (
@@ -89,14 +90,9 @@ class ProviderAnalyticsService:
                     .first()
                 )
                 if appointment and appointment.service_type:
-                    # Get service price from config
-                    from config import get_settings
-
-                    settings = get_settings()
-                    service = settings.SERVICES.get(appointment.service_type, {})
-                    # Use average of price range
-                    price_range = service.get("price_range", "$0")
-                    # Parse price (e.g., "$500-800" -> 650)
+                    service = services.get(appointment.service_type, {})
+                    # Use average of price range when available
+                    price_range = service.get("price_range", "${0}")
                     try:
                         price_str = price_range.replace("$", "").replace(",", "")
                         if "-" in price_str:
@@ -105,7 +101,7 @@ class ProviderAnalyticsService:
                         else:
                             avg_price = float(price_str)
                         total_revenue += avg_price
-                    except:
+                    except Exception:  # noqa: BLE001 - ignore malformed price strings
                         pass
 
         # Calculate average consultation duration
@@ -192,6 +188,7 @@ class ProviderAnalyticsService:
         providers = self.db.query(Provider).filter(Provider.is_active == True).all()
 
         summaries = []
+        services = SettingsService.get_services_dict(self.db)
         for provider in providers:
             # Get consultations in period
             consultations = (
@@ -220,11 +217,8 @@ class ProviderAnalyticsService:
                         .first()
                     )
                     if appointment and appointment.service_type:
-                        from config import get_settings
-
-                        settings = get_settings()
-                        service = settings.SERVICES.get(appointment.service_type, {})
-                        price_range = service.get("price_range", "$0")
+                        service = services.get(appointment.service_type, {})
+                        price_range = service.get("price_range", "${0}")
                         try:
                             price_str = price_range.replace("$", "").replace(",", "")
                             if "-" in price_str:
@@ -233,7 +227,7 @@ class ProviderAnalyticsService:
                             else:
                                 avg_price = float(price_str)
                             revenue += avg_price
-                        except:
+                        except Exception:  # noqa: BLE001 - ignore malformed price strings
                             pass
 
             # Average satisfaction

@@ -16,7 +16,11 @@ from sqlalchemy.orm import Session
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionError, SlotSelectionManager
 from booking.time_utils import format_for_display, parse_iso_datetime, to_eastern
-from booking_handlers import handle_book_appointment, handle_check_availability
+from booking_handlers import (
+    handle_book_appointment,
+    handle_check_availability,
+    handle_get_service_info,
+)
 from calendar_service import get_calendar_service
 from config import OPENING_SCRIPT, PROVIDERS, get_settings
 from database import Conversation, SessionLocal
@@ -146,18 +150,18 @@ class RealtimeClient:
             "OpenAI-Beta": "realtime=v1",
         }
 
-        print(f"Connecting to OpenAI Realtime API: {url}")
+        logger.info("Connecting to OpenAI Realtime API: %s", url)
         self.ws = await websockets.connect(url, extra_headers=headers)
-        print("✓ Connected to OpenAI Realtime API")
+        logger.info("Connected to OpenAI Realtime API")
 
         # Initialize session with instructions and tools
         await self._initialize_session()
-        print("✓ Session initialized")
+        logger.info("Realtime session initialized")
 
     async def send_greeting(self):
         """Send an introductory greeting to kick off the call."""
         if not self.ws:
-            print("⚠️  WebSocket not ready; cannot send greeting")
+            logger.warning("WebSocket not ready; cannot send greeting")
             return
 
         assistant_name = settings.AI_ASSISTANT_NAME or "Eva"
@@ -180,7 +184,7 @@ class RealtimeClient:
 
         await self.ws.send(json.dumps(response_create))
         # Don't call _request_response() - response.create already triggers a response
-        print("🗣️  Sent greeting request to Realtime API")
+        logger.info("Sent greeting request to Realtime API")
 
     async def _initialize_session(self):
         """Initialize the session with system instructions and available functions."""
@@ -431,26 +435,70 @@ class RealtimeClient:
                 date_str = arguments.get("date")
                 service_type = arguments.get("service_type")
 
-                availability = handle_check_availability(
-                    self.calendar_service,
-                    date=date_str,
-                    service_type=service_type,
-                    limit=10,
-                    services_dict=self._get_services(),
-                )
-
-                if availability.get("success"):
-                    availability["service_type"] = service_type
-                    SlotSelectionManager.record_offers(
-                        self.db,
-                        self.conversation,
-                        tool_call_id=None,
-                        arguments={"date": date_str, "service_type": service_type},
-                        output=availability,
+                try:
+                    availability = handle_check_availability(
+                        self.calendar_service,
+                        date=date_str,
+                        service_type=service_type,
+                        limit=10,
+                        services_dict=self._get_services(),
                     )
-                    self._refresh_conversation()
 
-                return availability
+                    if availability.get("success"):
+                        availability["service_type"] = service_type
+                        SlotSelectionManager.record_offers(
+                            self.db,
+                            self.conversation,
+                            tool_call_id=None,
+                            arguments={"date": date_str, "service_type": service_type},
+                            output=availability,
+                        )
+                        self._refresh_conversation()
+
+                    return availability
+
+                except Exception as calendar_exc:
+                    # Enhanced error handling for Google Calendar API failures
+                    from googleapiclient.errors import HttpError
+
+                    error_code = None
+                    user_message = "I'm having trouble accessing the calendar right now. Would you like me to take your information and have someone call you back?"
+
+                    if isinstance(calendar_exc, HttpError):
+                        error_code = calendar_exc.resp.status
+                        logger.error(
+                            "Google Calendar API error during check_availability: HTTP %s",
+                            error_code,
+                            exc_info=True,
+                            extra={
+                                "function": function_name,
+                                "status_code": error_code,
+                                "date": date_str,
+                                "service": service_type
+                            }
+                        )
+
+                        if error_code == 404:
+                            user_message = "I'm having trouble accessing the calendar configuration. Let me transfer you to our staff who can help you immediately."
+                        elif error_code == 429:
+                            user_message = "Our calendar system is experiencing high demand. Can you try again in just a moment, or would you prefer I take your information?"
+                        elif error_code >= 500:
+                            user_message = "The calendar service is temporarily unavailable. I'd be happy to take your information and have our team call you back within the hour."
+                        elif error_code in (401, 403):
+                            user_message = "I'm experiencing a technical issue accessing the calendar. Let me connect you with our receptionist right away."
+                    else:
+                        logger.error(
+                            "Unexpected error during check_availability",
+                            exc_info=True,
+                            extra={"function": function_name, "date": date_str, "service": service_type}
+                        )
+
+                    return {
+                        "success": False,
+                        "error": "calendar_unavailable",
+                        "error_code": error_code,
+                        "user_message": user_message
+                    }
 
             elif function_name == "get_current_date":
                 eastern = pytz.timezone("America/New_York")
@@ -488,11 +536,54 @@ class RealtimeClient:
                 safe_args.pop("start", None)
                 safe_args.pop("date", None)
 
-                booking_result = handle_book_appointment(
-                    self.calendar_service,
-                    **safe_args,
-                    services_dict=self._get_services(),
-                )
+                try:
+                    booking_result = handle_book_appointment(
+                        self.calendar_service,
+                        **safe_args,
+                        services_dict=self._get_services(),
+                    )
+                except Exception as booking_exc:
+                    # Enhanced error handling for Google Calendar booking failures
+                    from googleapiclient.errors import HttpError
+
+                    error_code = None
+                    user_message = "I'm having trouble completing your booking right now. Let me connect you with our team who can finalize this for you."
+
+                    if isinstance(booking_exc, HttpError):
+                        error_code = booking_exc.resp.status
+                        logger.error(
+                            "Google Calendar API error during book_appointment: HTTP %s",
+                            error_code,
+                            exc_info=True,
+                            extra={
+                                "function": function_name,
+                                "status_code": error_code,
+                                "customer": safe_args.get("customer_name"),
+                                "service": safe_args.get("service_type")
+                            }
+                        )
+
+                        if error_code == 404:
+                            user_message = "I'm having trouble accessing the calendar. Let me transfer you to complete your booking with our staff."
+                        elif error_code == 429:
+                            user_message = "The calendar is temporarily busy. Can you hold for just a moment while I try again?"
+                        elif error_code >= 500:
+                            user_message = "The booking system is temporarily unavailable. I've saved your information and our team will call you within 15 minutes to confirm your appointment."
+                        elif error_code in (401, 403):
+                            user_message = "I'm experiencing a technical issue. Let me transfer you to our receptionist to complete your booking right away."
+                    else:
+                        logger.error(
+                            "Unexpected error during book_appointment",
+                            exc_info=True,
+                            extra={"function": function_name, "customer": safe_args.get("customer_name")}
+                        )
+
+                    return {
+                        "success": False,
+                        "error": "booking_failed",
+                        "error_code": error_code,
+                        "user_message": user_message
+                    }
 
                 if booking_result.get("success"):
                     SlotSelectionManager.clear_offers(self.db, self.conversation)
@@ -555,12 +646,13 @@ class RealtimeClient:
 
             elif function_name == "get_service_info":
                 service_type = arguments.get("service_type")
-                service = self._get_services().get(service_type)
 
-                if service:
-                    return {"success": True, "service": service}
-                else:
-                    return {"success": False, "error": "Service not found"}
+                output = handle_get_service_info(
+                    service_type=service_type,
+                    services_dict=self._get_services(),
+                )
+
+                return output
 
             elif function_name == "get_provider_info":
                 provider_name = arguments.get("provider_name")
@@ -726,16 +818,16 @@ class RealtimeClient:
     async def send_audio(self, audio_base64: str, *, commit: bool = False):
         """Send base64-encoded audio data to the Realtime API."""
         if not self.ws:
-            print("⚠️  WebSocket not ready; dropping audio chunk")
+            logger.warning("WebSocket not ready; dropping audio chunk")
             return
 
         if not audio_base64:
-            print("⚠️  Empty audio payload received; skipping append")
+            logger.debug("Empty audio payload received; skipping append")
             return
 
         append_event = {"type": "input_audio_buffer.append", "audio": audio_base64}
         await self.ws.send(json.dumps(append_event))
-        print(f"🎙️  Sent audio chunk (base64 len={len(audio_base64)})")
+        logger.debug("Sent audio chunk (base64 len=%d)", len(audio_base64))
 
         if commit:
             await self.commit_audio_buffer()
@@ -743,21 +835,21 @@ class RealtimeClient:
     async def commit_audio_buffer(self):
         """Commit the current audio buffer and request a model response."""
         if not self.ws:
-            print("⚠️  WebSocket not ready; cannot commit buffer")
+            logger.warning("WebSocket not ready; cannot commit buffer")
             return
 
         await self.ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
-        print("✅ Committed audio buffer")
+        logger.debug("Committed audio buffer")
         self._awaiting_response = True
 
     async def cancel_response(self):
         """Cancel the current assistant response when user interrupts."""
         if not self.ws:
-            print("⚠️  WebSocket not ready; cannot cancel response")
+            logger.warning("WebSocket not ready; cannot cancel response")
             return
 
         await self.ws.send(json.dumps({"type": "response.cancel"}))
-        print("🛑 Cancelled assistant response")
+        logger.info("Cancelled assistant response")
 
     async def handle_messages(self, on_audio_callback: Optional[Callable] = None):
         """
@@ -766,41 +858,43 @@ class RealtimeClient:
         Args:
             on_audio_callback: Callback function for audio output
         """
-        print("Starting to listen for OpenAI messages...")
+        logger.info("Starting to listen for OpenAI messages")
         async for message in self.ws:
             data = json.loads(message)
             event_type = data.get("type")
 
             # Log all events for debugging transcription issues
             if event_type not in ["response.audio.delta", "input_audio_buffer.append"]:
-                print(f"🔔 Received OpenAI event: {event_type}")
+                logger.debug("Received OpenAI event: %s", event_type)
                 if event_type.startswith("input_audio") or event_type.startswith(
                     "conversation.item"
                 ):
-                    print(f"   Data: {json.dumps(data, indent=2)[:500]}")
+                    logger.debug("   Data: %s", json.dumps(data, indent=2)[:500])
 
             # Handle different event types
             if event_type == "session.updated":
                 # Log session configuration to verify transcription is enabled
                 session = data.get("session", {})
-                print(
-                    f"✅ Session updated - Transcription enabled: {session.get('input_audio_transcription') is not None}"
+                logger.debug(
+                    "Session updated - Transcription enabled: %s",
+                    session.get("input_audio_transcription") is not None,
                 )
-                print(f"   Voice: {session.get('voice')}")
-                print(
-                    f"   Turn detection: {session.get('turn_detection', {}).get('type')}"
+                logger.debug("   Voice: %s", session.get("voice"))
+                logger.debug(
+                    "   Turn detection: %s",
+                    session.get("turn_detection", {}).get("type"),
                 )
 
             elif event_type == "response.audio.delta":
                 # Audio output from AI
                 audio_b64 = data.get("delta")
                 if audio_b64 and on_audio_callback:
-                    print(f"🔊 Sending audio to client: {len(audio_b64)} chars")
+                    logger.debug("Sending audio to client: %d chars", len(audio_b64))
                     await on_audio_callback(audio_b64)
                 elif not audio_b64:
-                    print("⚠️  No audio data in delta")
+                    logger.warning("No audio data in response.audio.delta event")
                 elif not on_audio_callback:
-                    print("⚠️  No audio callback function")
+                    logger.warning("No audio callback function configured")
 
             elif event_type == "input_audio_buffer.transcription.delta":
                 delta = data.get("delta")
@@ -808,14 +902,14 @@ class RealtimeClient:
                     self._current_customer_text += delta
                 elif isinstance(delta, dict):
                     self._current_customer_text += delta.get("transcript", "")
-                print(f"📝 User speech delta: {delta}")
+                logger.debug("User speech delta: %s", delta)
 
             elif event_type == "input_audio_buffer.transcription.completed":
                 transcript_text = (
                     data.get("transcript") or self._current_customer_text.strip()
                 )
                 if transcript_text:
-                    print(f"📝 User speech completed: {transcript_text}")
+                    logger.debug("User speech completed: %s", transcript_text)
                     self._append_transcript_entry("customer", transcript_text)
                 self._current_customer_text = ""
 
@@ -823,42 +917,46 @@ class RealtimeClient:
                 # User audio transcription delta (incremental update)
                 delta = data.get("delta")
                 item_id = data.get("item_id")
-                print(f"📝 User audio transcription delta (item {item_id}): {delta}")
+                logger.debug(
+                    "User audio transcription delta (item %s): %s", item_id, delta
+                )
 
             elif event_type == "conversation.item.input_audio_transcription.completed":
                 # User audio transcription completed
                 transcript = data.get("transcript")
                 item_id = data.get("item_id")
-                print(
-                    f"📝 User audio transcription completed (item {item_id}): {transcript}"
+                logger.debug(
+                    "User audio transcription completed (item %s): %s",
+                    item_id,
+                    transcript,
                 )
                 if transcript:
                     self._append_transcript_entry("customer", transcript)
 
             elif event_type == "conversation.item.created":
-                print(f"🧩 conversation.item.created: {data}")
+                logger.debug("conversation.item.created: %s", data)
                 self._process_conversation_item_created(data)
 
             elif event_type == "conversation.item.delta":
-                print(f"🧩 conversation.item.delta: {data}")
+                logger.debug("conversation.item.delta: %s", data)
                 self._process_conversation_item_delta(data)
 
             elif event_type == "conversation.item.completed":
-                print(f"🧩 conversation.item.completed: {data}")
+                logger.debug("conversation.item.completed: %s", data)
                 self._process_conversation_item_completed(data)
 
             elif event_type == "response.audio_transcript.delta":
                 transcript_delta = data.get("delta") or ""
                 if transcript_delta:
                     self._current_assistant_text += transcript_delta
-                    print(f"🤖 Assistant speech delta: {transcript_delta}")
+                    logger.debug("Assistant speech delta: %s", transcript_delta)
 
             elif event_type == "response.audio_transcript.done":
                 transcript_text = (
                     data.get("transcript") or self._current_assistant_text
                 ).strip()
                 if transcript_text:
-                    print(f"🤖 Assistant speech completed: {transcript_text}")
+                    logger.debug("Assistant speech completed: %s", transcript_text)
                     self._append_transcript_entry("assistant", transcript_text)
                 self._current_assistant_text = ""
 

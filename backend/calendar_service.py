@@ -31,12 +31,6 @@ import pytz
 
 from config import get_settings
 
-# Import SERVICES as fallback for backward compatibility
-try:
-    from config import SERVICES as FALLBACK_SERVICES
-except ImportError:
-    FALLBACK_SERVICES = {}
-
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
@@ -123,8 +117,10 @@ class GoogleCalendarService:
         Args:
             date: The date to check availability
             service_type: Type of service (key from services_dict)
-            duration_minutes: Duration override, uses service default if not provided
-            services_dict: Optional services dictionary (uses FALLBACK_SERVICES if not provided)
+            duration_minutes: Duration override; if not provided, uses the
+                service's default duration from services_dict.
+            services_dict: Optional services dictionary (required when
+                duration_minutes is not provided).
 
         Returns:
             List of available time slots with start and end times
@@ -140,13 +136,11 @@ class GoogleCalendarService:
         try:
             # Get service duration
             if duration_minutes is None:
-                services = (
-                    services_dict if services_dict is not None else FALLBACK_SERVICES
-                )
+                services = services_dict or {}
                 service = services.get(service_type)
                 if not service:
                     raise ValueError(f"Unknown service type: {service_type}")
-                duration_minutes = service["duration_minutes"]
+                duration_minutes = service.get("duration_minutes", 60)
 
             # Define business hours (9 AM to 7 PM)
             start_time = datetime.combine(
@@ -255,13 +249,14 @@ class GoogleCalendarService:
             service_type: Type of service
             provider: Provider name (optional)
             notes: Special requests or notes
-            services_dict: Optional services dictionary (uses FALLBACK_SERVICES if not provided)
+            services_dict: Optional services dictionary used to look up service
+                metadata (for example, user-friendly service name).
 
         Returns:
             Google Calendar event ID if successful, None otherwise
         """
         try:
-            services = services_dict if services_dict is not None else FALLBACK_SERVICES
+            services = services_dict or {}
             service_info = services.get(service_type, {})
             service_name = service_info.get("name", service_type)
 

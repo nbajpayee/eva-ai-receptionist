@@ -5,16 +5,13 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-# Import SERVICES and PROVIDERS as fallbacks for backward compatibility
+# Import PROVIDERS as fallback for backward compatibility
 try:
     from config import PROVIDERS as FALLBACK_PROVIDERS
-    from config import SERVICES as FALLBACK_SERVICES
 except ImportError:
     FALLBACK_PROVIDERS = {}
-    FALLBACK_SERVICES = {}
 
-# Aliases for backward compatibility
-SERVICES = FALLBACK_SERVICES
+# Alias for backward compatibility
 PROVIDERS = FALLBACK_PROVIDERS
 
 from booking.time_utils import EASTERN_TZ, parse_iso_datetime, to_eastern
@@ -333,8 +330,7 @@ def handle_check_availability(
     if limit is not None and limit > 0:
         limited_slots = future_slots[:limit]
 
-    services = services_dict if services_dict is not None else FALLBACK_SERVICES
-    service_config = services.get(service_type, {})
+    service_config = (services_dict or {}).get(service_type, {})
     return {
         "success": True,
         "available_slots": limited_slots,
@@ -368,7 +364,7 @@ def handle_book_appointment(
 
     start_dt, was_adjusted = _ensure_future_datetime(start_dt_original)
 
-    services = services_dict if services_dict is not None else FALLBACK_SERVICES
+    services = services_dict or {}
     service_config = services.get(service_type)
     if not service_config:
         return {"success": False, "error": f"Unknown service type: {service_type}"}
@@ -469,6 +465,7 @@ def handle_reschedule_appointment(
     new_start_time: str,
     service_type: Optional[str],
     provider: Optional[str] = None,
+    services_dict: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Reschedule an appointment to a new start time."""
     try:
@@ -482,7 +479,8 @@ def handle_reschedule_appointment(
             "error": "Service type required to determine duration",
         }
 
-    service_config = SERVICES.get(service_type)
+    services = services_dict or {}
+    service_config = services.get(service_type)
     if not service_config:
         return {"success": False, "error": f"Unknown service type: {service_type}"}
 
@@ -534,13 +532,18 @@ def handle_cancel_appointment(
     }
 
 
-def handle_get_service_info(*, service_type: str) -> Dict[str, Any]:
+def handle_get_service_info(
+    *, service_type: str, services_dict: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Fetch service metadata for conversational use."""
     # First try exact match (case-insensitive)
     service_type_lower = service_type.lower()
 
+    # Prefer DB-backed services when provided.
+    services = services_dict or {}
+
     # Try direct lookup with normalized key
-    service = SERVICES.get(service_type_lower)
+    service = services.get(service_type_lower)
     if service:
         return {"success": True, "service": service}
 
@@ -560,7 +563,7 @@ def handle_get_service_info(*, service_type: str) -> Dict[str, Any]:
             "restylane",
         ],
         "laser_hair_removal": ["laser hair removal", "laser hair", "hair removal"],
-        "chemical_peels": ["chemical peels", "chemical peel", "peel"],
+        "chemical_peel": ["chemical peels", "chemical peel", "peel"],
         "microneedling": ["microneedling", "micro needling", "collagen induction"],
         "hydrafacial": ["hydrafacial", "hydra facial", "facial"],
         "prp_therapy": ["prp", "prp therapy", "platelet rich plasma", "vampire facial"],
@@ -581,7 +584,7 @@ def handle_get_service_info(*, service_type: str) -> Dict[str, Any]:
     for service_key, alias_list in aliases.items():
         for alias in alias_list:
             if alias in service_type_lower:
-                service = SERVICES.get(service_key)
+                service = services.get(service_key)
                 if service:
                     return {"success": True, "service": service}
 

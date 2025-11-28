@@ -1280,10 +1280,12 @@ class MessagingService:
         selection_adjustments: Optional[Dict[str, Dict[str, Optional[str]]]] = None
         try:
             if name == "check_availability":
+                services = SettingsService.get_services_dict(db)
                 output = handle_check_availability(
                     calendar_service,
                     date=arguments.get("date", datetime.utcnow().strftime("%Y-%m-%d")),
                     service_type=arguments.get("service_type", ""),
+                    services_dict=services,
                 )
                 if output.get("success"):
                     SlotSelectionManager.record_offers(
@@ -1370,6 +1372,7 @@ class MessagingService:
                         MessagingService._update_customer_from_arguments(
                             db, customer, arguments
                         )
+                        services = SettingsService.get_services_dict(db)
                         output = handle_book_appointment(
                             calendar_service,
                             customer_name=arguments.get("customer_name", customer.name),
@@ -1381,6 +1384,7 @@ class MessagingService:
                             service_type=arguments.get("service_type"),
                             provider=arguments.get("provider"),
                             notes=arguments.get("notes"),
+                            services_dict=services,
                         )
                         # Clear pending booking intent after successful booking
                         if output.get("success"):
@@ -1393,6 +1397,7 @@ class MessagingService:
                     db, conversation
                 )
             elif name == "reschedule_appointment":
+                services = SettingsService.get_services_dict(db)
                 output = handle_reschedule_appointment(
                     calendar_service,
                     appointment_id=arguments.get("appointment_id"),
@@ -1401,6 +1406,7 @@ class MessagingService:
                     or arguments.get("start"),
                     service_type=arguments.get("service_type"),
                     provider=arguments.get("provider"),
+                    services_dict=services,
                 )
             elif name == "cancel_appointment":
                 output = handle_cancel_appointment(
@@ -1414,8 +1420,10 @@ class MessagingService:
                     appointment_id=arguments.get("appointment_id"),
                 )
             elif name == "get_service_info":
+                services = SettingsService.get_services_dict(db)
                 output = handle_get_service_info(
                     service_type=arguments.get("service_type"),
+                    services_dict=services,
                 )
             elif name == "get_provider_info":
                 output = handle_get_provider_info(
@@ -1794,10 +1802,12 @@ class MessagingService:
                 )
 
                 try:
+                    services = SettingsService.get_services_dict(db)
                     output = handle_check_availability(
                         calendar_service,
                         date=date,
                         service_type=service_type,
+                        services_dict=services,
                     )
 
                     if output.get("success"):
