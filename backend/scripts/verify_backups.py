@@ -23,13 +23,15 @@ import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from database import SessionLocal, CallSession, Customer, Appointment
-from config import settings
+from config import get_settings
+
+settings = get_settings()
 
 
 def _utcnow() -> datetime:
@@ -37,7 +39,7 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def check_supabase_backups(verbose: bool = False) -> tuple[bool, str]:
+def check_supabase_backups(verbose: bool = False) -> Tuple[bool, str]:
     """
     Check if Supabase automatic backups are enabled.
 
@@ -100,7 +102,7 @@ def check_supabase_backups(verbose: bool = False) -> tuple[bool, str]:
     return True, "Manual verification required"
 
 
-def check_data_integrity(verbose: bool = False) -> tuple[bool, str]:
+def check_data_integrity(verbose: bool = False) -> Tuple[bool, str]:
     """
     Verify database has data worth backing up.
 
@@ -176,7 +178,7 @@ def check_data_integrity(verbose: bool = False) -> tuple[bool, str]:
         db.close()
 
 
-def test_backup_restore_procedure(verbose: bool = False) -> tuple[bool, str]:
+def test_backup_restore_procedure(verbose: bool = False) -> Tuple[bool, str]:
     """
     Test backup restore procedure (dry-run simulation).
 
@@ -222,7 +224,7 @@ def test_backup_restore_procedure(verbose: bool = False) -> tuple[bool, str]:
     return True, "Restore procedure verified (dry-run)"
 
 
-def create_manual_backup(verbose: bool = False) -> tuple[bool, str]:
+def create_manual_backup(verbose: bool = False) -> Tuple[bool, str]:
     """
     Create a manual backup using pg_dump.
 

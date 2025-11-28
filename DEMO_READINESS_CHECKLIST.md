@@ -83,7 +83,7 @@ These were implemented from PRE_PILOT_CHECKLIST.md:
 ```
 
 **Done when:**
-- [ ] Health check configured in Railway settings
+- [X] Health check configured in Railway settings
 - [ ] Health check graph shows green for 5+ minutes
 - [ ] Railway logs show successful health checks every 30 seconds
 

@@ -16,7 +16,7 @@ import json
 import sys
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 
 import websockets
 
@@ -24,8 +24,8 @@ import websockets
 async def simulate_voice_call(
     session_num: int,
     base_url: str,
-    duration_seconds: int = 10
-) -> tuple[bool, Optional[str]]:
+    duration_seconds: int = 10,
+) -> Tuple[bool, Optional[str]]:
     """
     Simulate one voice call session.
 
