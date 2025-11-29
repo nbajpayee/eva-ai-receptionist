@@ -42,7 +42,7 @@ export function PeriodSelector({
             <motion.button
               key={period.value}
               onClick={() => onPeriodChange(period.value)}
-              className="relative px-3 py-1.5 text-xs md:px-4 md:py-2 md:text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="cursor-pointer relative px-3 py-1.5 text-xs md:px-4 md:py-2 md:text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               aria-label={`View ${period.label}`}
               aria-pressed={isActive}
               initial={false}

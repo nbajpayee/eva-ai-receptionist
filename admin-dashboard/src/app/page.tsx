@@ -72,7 +72,10 @@ export default function Home() {
         // Parallel fetching
         const [metricsRes, callsRes] = await Promise.all([
           fetch(`/api/admin/metrics/overview?period=${selectedPeriod}`, { cache: "no-store" }),
-          fetch(resolveInternalUrl("/api/admin/communications?page_size=20"), { cache: "no-store" }),
+          // Use sessionized view of communications so repeat guests surface as new sessions
+          fetch(resolveInternalUrl("/api/admin/communications?page_size=20&mode=sessions"), {
+            cache: "no-store",
+          }),
         ]);
 
         // Handle Metrics
@@ -107,10 +110,21 @@ export default function Home() {
              const rawOutcome = (c.outcome ?? "").toLowerCase();
              const outcome = outcomeMap[rawOutcome] ?? (c.metadata?.escalated ? "escalated" : "info_only");
 
+             const endIso: string = c.completed_at || c.last_activity_at || c.initiated_at;
+
              return {
               id: c.id,
               startedAt: c.initiated_at,
-              durationSeconds: c.completed_at ? Math.floor((new Date(c.completed_at).getTime() - new Date(c.initiated_at).getTime()) / 1000) : 0,
+              endedAt: endIso,
+              durationSeconds:
+                endIso && c.initiated_at
+                  ? Math.max(
+                      0,
+                      Math.floor(
+                        (new Date(endIso).getTime() - new Date(c.initiated_at).getTime()) / 1000,
+                      ),
+                    )
+                  : 0,
               outcome,
               phoneNumber: c.customer_phone,
               satisfactionScore: c.satisfaction_score,
@@ -231,10 +245,10 @@ export default function Home() {
             size="sm" 
             onClick={handleExportCalls} 
             disabled={filteredCalls.length === 0}
-            className="border-secondary/20 text-secondary hover:bg-secondary/10 hover:text-secondary hover:border-secondary/30 transition-all shadow-sm"
+            className="cursor-pointer border-secondary/20 text-secondary hover:bg-secondary/10 hover:text-secondary hover:border-secondary/30 transition-all shadow-sm"
           >
             <Download className="mr-2 h-4 w-4" />
-            Export Calls
+            Export Conversations
           </Button>
         </div>
 

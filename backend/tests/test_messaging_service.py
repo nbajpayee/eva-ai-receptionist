@@ -6,7 +6,8 @@ from typing import Callable, Tuple
 
 import pytest
 
-from database import Customer, SessionLocal
+from booking import BookingChannel
+from database import Customer, SessionLocal, Conversation
 from messaging_service import MessagingService
 
 
@@ -78,3 +79,56 @@ def test_update_customer_updates_when_phone_unique(db_session):
 
     session.refresh(conversation_customer)
     assert conversation_customer.phone == "+19990003333"
+
+
+def test_conversation_booking_channel_maps_channel_values(db_session):
+    session, create_customer = db_session
+
+    customer = create_customer(
+        name="Test",
+        phone="+19990004444",
+        email=None,
+        is_new_client=True,
+    )
+
+    conversation = Conversation(
+        customer_id=customer.id,
+        channel="sms",
+        status="active",
+    )
+    session.add(conversation)
+    session.commit()
+    session.refresh(conversation)
+
+    channel_enum = MessagingService._conversation_booking_channel(conversation)
+    assert channel_enum == BookingChannel.SMS
+
+
+def test_build_booking_context_and_orchestrator_uses_conversation_channel(db_session):
+    session, create_customer = db_session
+
+    customer = create_customer(
+        name="Test",
+        phone="+19990005555",
+        email=None,
+        is_new_client=True,
+    )
+
+    conversation = Conversation(
+        customer_id=customer.id,
+        channel="email",
+        status="active",
+    )
+    session.add(conversation)
+    session.commit()
+    session.refresh(conversation)
+
+    context, orchestrator = MessagingService._build_booking_context_and_orchestrator(
+        session,
+        conversation,
+        customer,
+        calendar_service=None,
+    )
+
+    assert context.channel == BookingChannel.EMAIL
+    assert orchestrator is not None

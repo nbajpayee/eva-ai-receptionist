@@ -53,7 +53,7 @@ An intelligent voice AI application that serves as a virtual receptionist for me
 - ✅ **Comprehensive Testing**: 37/37 tests passing including new `TestDeterministicBooking` suite
 - ✅ **Production Ready**: Handles all edge cases (duplicate bookings, failures, expiry)
 
-**Technical Details**: See `backend/messaging_service.py` lines 244-382, `FINAL_SOLUTION_DETERMINISTIC_TOOL_EXECUTION.md`, `TOOL_CALL_HISTORY_PERSISTENCE_FIX.md`
+**Technical Details**: See `backend/messaging_service.py` (`MessagingService.generate_ai_response` and `MessagingService._execute_tool_call`), `FINAL_SOLUTION_DETERMINISTIC_TOOL_EXECUTION.md`, `TOOL_CALL_HISTORY_PERSISTENCE_FIX.md`
 
 ### Phase 2.7 (Complete - Nov 18, 2025) ✅ **Advanced Enterprise Features**
 - ✅ **Settings Management System**: Dynamic med spa configuration (5 tables, 20+ API endpoints)
@@ -306,14 +306,16 @@ App will be available at http://localhost:3000 and fetch data from the FastAPI b
 - `GET /api/customers/{id}/history` - Get customer history
 - `GET /api/admin/customers` - Admin customer list with pagination, search, and basic stats
 - `GET /api/admin/customers/{id}` - Admin customer detail (profile plus related appointments and conversations)
-- `GET /api/admin/customers/{id}/timeline` - Admin customer interaction timeline (conversations, calls, appointments)
+- `GET /api/admin/customers/{id}/timeline` - Admin customer interaction timeline (conversations, calls, appointments). When `?include_sessions=true` is provided, the response also includes a `sessions` array where each entry represents a logical session. For new SMS/email traffic the write path enforces **one logical session per Conversation** (via a 45-minute inactivity cutoff and explicit reset phrases like "new question" / "start over"), so each Conversation typically maps to a single session; older multi-episode conversations may still be split into multiple sessions using the same inactivity/reset rules.
 
-### Admin Analytics
+### Admin Analytics & Communications
 - `GET /api/admin/metrics/overview?period=today|week|month` - Dashboard metrics
-- `GET /api/admin/calls` - Call history (paginated)
-- `GET /api/admin/calls/{id}` - Call details
-- `GET /api/admin/calls/{id}/transcript` - Call transcript
 - `GET /api/admin/analytics/daily?days=30` - Daily analytics
+- `GET /api/admin/calls` - Call history (legacy voice-centric view, paginated)
+- `GET /api/admin/calls/{id}` - Call / conversation details (legacy)
+- `GET /api/admin/communications?mode=conversations&page=1&page_size=20` - Omnichannel communications list by Conversation (voice, SMS, email)
+- `GET /api/admin/communications?mode=sessions&page=1&page_size=20` - Sessionized view used by the Dashboard **"Recent Communications"** section. Sessions are built per Conversation using the same 45-minute inactivity window and reset phrases as the messaging write path. For new SMS/email data (where the write path already closes and starts a new Conversation on inactivity/reset), this typically yields **one session per Conversation**; for legacy multi-session conversations, multiple sessions may be derived from a single Conversation. The dashboard links each session row to a conversation detail view that uses the session's start/end timestamps to bound the messages and events it shows, with safe fallbacks when the window would otherwise be empty.
+- `GET /api/admin/communications/{id}` - Communication detail including messages, metadata, and operational events
 
 ### Appointments
 - `GET /api/appointments` - List appointments

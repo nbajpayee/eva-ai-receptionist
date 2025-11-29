@@ -9,6 +9,7 @@ import { ArrowRight } from "lucide-react";
 export type CallRecord = {
   id: string;
   startedAt: string;
+  endedAt: string;
   durationSeconds: number;
   outcome: "booked" | "info_only" | "escalated" | "abandoned" | "rescheduled" | "cancelled" | "unresolved";
   phoneNumber?: string | null;
@@ -100,8 +101,11 @@ export function CallLogTable({ calls }: CallLogTableProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 bg-white">
-              {calls.map((call) => (
-                <tr key={call.id} className="group hover:bg-zinc-50/70">
+              {calls.map((call, index) => (
+                <tr
+                  key={`${call.id}-${call.startedAt}-${index}`}
+                  className="group hover:bg-zinc-50/70"
+                >
                   <td className="px-6 py-4 text-sm font-medium text-zinc-900">
                     {format(new Date(call.startedAt), "MMM d, yyyy • h:mm a")}
                   </td>
@@ -141,7 +145,9 @@ export function CallLogTable({ calls }: CallLogTableProps) {
                   </td>
                   <td className="px-6 py-4">
                     <Link
-                      href={`/conversations/${call.id}`}
+                      href={`/conversations/${call.id}?start=${encodeURIComponent(
+                        call.startedAt,
+                      )}&end=${encodeURIComponent(call.endedAt)}`}
                       className="flex items-center gap-1 text-sm font-medium text-zinc-600 opacity-0 transition-opacity hover:text-zinc-900 group-hover:opacity-100"
                     >
                       View

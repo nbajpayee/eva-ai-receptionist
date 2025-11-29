@@ -24,6 +24,7 @@ Phase 1A is production-ready. Voice interface complete with smart commits and in
   - Cross-channel AI satisfaction scoring (GPT-4)
   - Dual-write migration strategy (writes to both legacy + new schemas)
   - Admin dashboard updated to display conversations
+  - Sessionized dashboard view: the home dashboard uses `/api/admin/communications?mode=sessions` to render "Recent Communications" as *sessions* built from Conversations using a 45-minute inactivity window and simple reset phrases (e.g. "new question", "start over"). For SMS/email, the **write path now enforces "one logical session per Conversation"** via `MessagingService.find_active_conversation` (45-minute inactivity cutoff) and `api_messaging.send_message` (reset phrase handling), so new traffic typically yields one session per Conversation; the `mode=sessions` view still applies the same inactivity/reset rules on top to split legacy multi-session conversations and to keep the dashboard aligned with the messaging semantics.
 
 **Booking Refactor (Nov 2025)**
 - Shared helpers live in `backend/booking/` with `SlotSelectionCore` and `SlotSelectionManager` facades.
@@ -32,28 +33,28 @@ Phase 1A is production-ready. Voice interface complete with smart commits and in
 - Voice transcripts persist via conversation metadata, preserving selections across channels.
 - Regression suites: `backend/tests/test_voice_booking.py`, `backend/tests/booking/test_slot_selection.py`, `backend/tests/test_cross_channel_booking.py`.
 
-**Deterministic Booking Flow (Nov 18, 2025)** ✅ **PRODUCTION-READY**
+**Deterministic Booking Flow (Nov 18, 2025)** 
 - **Problem Solved**: AI was hesitating to book appointments, asking to "re-check availability" even after user provided all details
 - **Solution**: Deterministic tool execution for both `check_availability` AND `book_appointment`
 - **How it works**:
   1. When booking intent detected → System calls `check_availability` preemptively (before AI generates response)
   2. When slot selected + contact details complete → System calls `book_appointment` automatically
   3. Results injected into conversation history so AI sees tool context across messages
-- **Architecture**: `messaging_service.py` lines 244-382 (readiness detection + execution), lines 1342-1362 (integration)
+- **Architecture**: `MessagingService.generate_ai_response` (readiness detection, preemptive `check_availability`, and deterministic booking) plus `MessagingService._execute_tool_call` (tool execution via `BookingContext` + `BookingOrchestrator`). See `BOOKING_ARCHITECTURE.md` for the layered overview.
 - **Benefits**: 100% reliable booking completion, no AI hesitation, no retry loops, immediate confirmation
 - **Documentation**: See `FINAL_SOLUTION_DETERMINISTIC_TOOL_EXECUTION.md`, `TOOL_CALL_HISTORY_PERSISTENCE_FIX.md`, `COMPLETE_CONVERSATION_SUMMARY.md`
 - **Tests**: 37/37 passing including new `TestDeterministicBooking` suite
 
-**Architecture Refactor (Nov 28, 2025)** ✅ **COMPLETE**
+**Architecture Refactor (Nov 28, 2025)** 
 - **Goal**: Single booking brain shared by voice and messaging; typed contracts; centralized AI config; comprehensive metrics
 - **What Changed**:
-  - ✅ **BookingOrchestrator**: Single entry point for all booking operations (`backend/booking/orchestrator.py`)
-  - ✅ **Typed Contracts**: `BookingContext`, `CheckAvailabilityResult`, `BookingResult` replace `Dict[str, Any]`
-  - ✅ **Type Safety**: `BookingContext` now uses proper types (`Session`, `Conversation`, `Customer`, `CalendarService`)
-  - ✅ **AI Config Module**: `backend/ai_config.py` provides model constants and shared OpenAI client
-  - ✅ **Realtime Config**: `backend/realtime_config.py` expanded with VAD settings, audio formats, temperature options
-  - ✅ **Comprehensive Metrics**: All 4 booking tools (check/book/reschedule/cancel) tracked in both voice and messaging
-  - ✅ **Legacy Schema Removed**: `CallSession`/`CallEvent` models deleted, conversations-only architecture
+  - **BookingOrchestrator**: Single entry point for all booking operations (`backend/booking/orchestrator.py`)
+  - **Typed Contracts**: `BookingContext`, `CheckAvailabilityResult`, `BookingResult` replace `Dict[str, Any]`
+  - **Type Safety**: `BookingContext` now uses proper types (`Session`, `Conversation`, `Customer`, `CalendarService`)
+  - **AI Config Module**: `backend/ai_config.py` provides model constants and shared OpenAI client
+  - **Realtime Config**: `backend/realtime_config.py` expanded with VAD settings, audio formats, temperature options
+  - **Comprehensive Metrics**: All 4 booking tools (check/book/reschedule/cancel) tracked in both voice and messaging
+  - **Legacy Schema Removed**: `CallSession`/`CallEvent` models deleted, conversations-only architecture
 - **Test Coverage**: 21/21 booking tests passing, 34/39 integration tests passing
 - **See**: `ARCHITECTURE_REFACTOR_PLAN.md`, `BOOKING_ARCHITECTURE.md` for full details
 
@@ -158,57 +159,37 @@ Open `frontend/index.html` in a browser to test the legacy voice interface proto
 
 ### Database Schema
 
-**Core Tables** (Phase 1  legacy, pre-conversations refactor):
+**Core Tables** (Phase 1  legacy, pre-conversations refactor):
 - `customers`: Customer profiles (name, phone, email, medical screening flags)
 - `appointments`: Scheduled appointments linked to customers and Google Calendar events
 - `call_sessions`: Voice call metadata, transcripts, satisfaction scores, sentiment
 - `call_events`: Timestamped events within calls (intent detection, function calls, escalations)
 - `daily_metrics`: Aggregated daily stats for dashboard analytics
 
-**Key Relationships** (Phase 1  legacy):
+**Key Relationships** (Phase 1  legacy):
 - `Customer` 1:N `Appointment`
 - `Customer` 1:N `CallSession`
 - `CallSession` 1:N `CallEvent`
 
 All models use SQLAlchemy ORM defined in `backend/database.py`.
 
-### Omnichannel Communications Migration (Phase 2 - In Progress)
+### Omnichannel Communications Migration (Phase 2 -  COMPLETED Nov 10, 2025)
 
-**Status**: Design complete, implementation starting Nov 10, 2025
+**Status**: Complete. The legacy `call_sessions`/`call_events` schema has been superseded by the omnichannel conversations schema.
 
-**Goal**: Expand backend to support SMS and email communications with multi-message threading, unified customer timelines, and cross-channel AI satisfaction scoring.
-
-**New Schema** (see `OMNICHANNEL_MIGRATION.md` for full details):
-- `conversations`: Top-level container for communication threads (replaces call_sessions)
-  - Fields: customer_id, channel (voice/sms/email), status, satisfaction_score, sentiment, outcome, ai_summary
-- `communication_messages`: Individual messages within conversations
+**New Schema** (see `OMNICHANNEL_MIGRATION.md` and `README.md` for full details):
+- `conversations`: Top-level container for any communication (voice/SMS/email). Fields include customer_id, channel, status, satisfaction_score, sentiment, outcome, ai_summary, timestamps, and metadata.
+- `communication_messages`: Individual messages within conversations.
   - Voice: 1 message per call (entire transcript)
   - SMS/Email: N messages per thread (multi-message support)
-- `voice_call_details`: Voice-specific metadata (1:1 with message)
-  - recording_url, duration_seconds, transcript_segments, function_calls, interruption_count
-- `email_details`: Email-specific metadata (1:1 with message)
-  - subject, body_html, from/to addresses, attachments, delivery tracking
-- `sms_details`: SMS-specific metadata (1:1 with message)
-  - from/to numbers, Twilio SID, delivery_status, segments, media_urls
-- `communication_events`: Generalized event tracking (replaces call_events)
-  - Supports all channels: intent_detected, function_called, escalation_requested, etc.
-
-**Migration Strategy**:
-1. Create new schema alongside existing tables (backward compatible)
-2. Backfill call_sessions → conversations + voice_call_details
-3. Dual-write period (write to both schemas)
-4. Update analytics.py for multi-channel satisfaction scoring
-5. Update dashboard APIs to use conversations
-6. Cutover (switch all reads to new schema)
-7. Cleanup (archive/drop old tables after validation)
+- `voice_call_details`, `email_details`, `sms_details`: Channel-specific metadata tables keyed off `communication_messages.id`.
+- `communication_events`: Generalized event tracking across all channels (intent_detected, function_called, escalation_requested, etc.).
 
 **Key Changes**:
-- `analytics.py`: New methods for create_conversation, add_message, score_conversation_satisfaction
-- `main.py`: New webhook handlers for Twilio SMS and SendGrid email
-- Dashboard APIs: `/api/admin/communications` (replaces `/api/admin/calls`)
-- Unified customer timeline: See all voice/SMS/email in one view
+- Analytics and booking flows now operate on `Conversation` + `CommunicationMessage` instead of legacy call tables.
+- Dashboard APIs use `/api/admin/communications` for omnichannel history and `/api/admin/customers/{id}/timeline` for unified customer views. The timeline endpoint supports `?include_sessions=true`, which adds a `sessions` array built by reusing the same per-conversation session splitter as the dashboard sessions view: new Conversations (already single-session) map 1:1 to sessions, while legacy multi-session Conversations may emit multiple sessions based on inactivity/reset rules.
 
-**Timeline**: 5 weeks (Nov 10 - Dec 15, 2025)
+> Note: A `CustomerThread` model and `backend/thread_service.py` exist as *future scaffolding* for persisted threads/cases, but they are **not** part of the core production flows yet. For grouping in the dashboard, prefer the dynamic session logic in `backend/api_admin.py` (`/api/admin/communications?mode=sessions`) and the timeline endpoint rather than relying on `CustomerThread`.
 
 ### Key Modules
 
@@ -286,7 +267,7 @@ The OpenAI Realtime API is configured with function definitions for:
 - `reschedule_appointment(appointment_id, new_datetime)`
 - `cancel_appointment(appointment_id)`
 
-These are defined in `realtime_client.py` and call `calendar_service.py` methods.
+These are defined in `realtime_client.py` (and mirrored in `booking_tools.py` for messaging) and now route booking operations through `BookingOrchestrator` in `backend/booking/`, which in turn calls `calendar_service.py` and `SlotSelectionManager` to enforce slot reuse.
 
 ## Development Patterns
 

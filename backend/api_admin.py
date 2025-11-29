@@ -368,24 +368,200 @@ async def get_call_detail(
 # ==================== Communications Endpoints ====================
 
 
+SESSION_INACTIVITY_MINUTES = 45
+RESET_PHRASES = [
+    "new question",
+    "another question",
+    "new topic",
+    "another topic",
+    "start over",
+    "new conversation",
+]
+
+
+def _build_sessions_for_conversation(
+    conversation: Conversation,
+    *,
+    inactivity_minutes: int = SESSION_INACTIVITY_MINUTES,
+) -> list:
+    """Split a Conversation into logical sessions based on inactivity and reset phrases.
+
+    This is used for the dashboard's "recent sessions" view without changing the
+    underlying Conversation write model. A single Conversation may emit multiple
+    session rows if there are large gaps between messages or explicit resets.
+    """
+    # Sort messages chronologically
+    messages = sorted(
+        conversation.messages,
+        key=lambda m: m.sent_at or conversation.last_activity_at or conversation.initiated_at,
+    )
+
+    sessions: list = []
+    inactivity_delta = timedelta(minutes=inactivity_minutes)
+
+    # No messages – treat the whole conversation as a single session
+    if not messages:
+        start_dt = conversation.initiated_at
+        end_dt = conversation.completed_at or conversation.last_activity_at or conversation.initiated_at
+        sessions.append(
+            {
+                "conversation": conversation,
+                "started_at": start_dt,
+                "ended_at": end_dt,
+                "last_activity_at": end_dt,
+                "message_count": 0,
+            }
+        )
+        return sessions
+
+    current_session = {
+        "conversation": conversation,
+        "started_at": None,
+        "ended_at": None,
+        "last_activity_at": None,
+        "message_count": 0,
+    }
+
+    for msg in messages:
+        ts = msg.sent_at or conversation.last_activity_at or conversation.initiated_at
+        content_lower = (msg.content or "").lower()
+        is_reset = msg.direction == "inbound" and any(
+            phrase in content_lower for phrase in RESET_PHRASES
+        )
+
+        if current_session["started_at"] is None:
+            # First message starts the session
+            current_session["started_at"] = ts
+            current_session["last_activity_at"] = ts
+            current_session["message_count"] = 1
+            continue
+
+        gap = ts - current_session["last_activity_at"]
+
+        if gap > inactivity_delta or is_reset:
+            # Close previous session
+            current_session["ended_at"] = current_session["last_activity_at"]
+            sessions.append(current_session)
+
+            # Start a new session
+            current_session = {
+                "conversation": conversation,
+                "started_at": ts,
+                "ended_at": None,
+                "last_activity_at": ts,
+                "message_count": 1,
+            }
+        else:
+            # Continue current session
+            current_session["last_activity_at"] = ts
+            current_session["message_count"] += 1
+
+    # Finalize last session
+    if current_session["started_at"] is not None:
+        current_session["ended_at"] = current_session["last_activity_at"]
+        sessions.append(current_session)
+
+    return sessions
+
+
 @router.get("/communications")
 async def get_communications(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     channel: Optional[str] = None,
     customer_id: Optional[int] = None,
+    mode: str = Query(
+        "conversations",
+        description="Return mode: 'conversations' (default) or 'sessions' for derived session rows",
+    ),
     db: Session = Depends(get_db),
 ):
+    """Get communications across channels.
+
+    Modes:
+    - conversations (default): direct Conversation rows via get_calls
+    - sessions: derived "session" rows based on inactivity and reset phrases,
+      suitable for the dashboard's Recent Communications table.
     """
-    Get all communications across channels.
-    Similar to /calls but includes all channels.
-    """
-    return await get_calls(
-        page=page,
-        page_size=page_size,
-        channel=channel,
-        db=db,
+
+    # Default behavior: preserve existing conversations API
+    if mode == "conversations":
+        return await get_calls(
+            page=page,
+            page_size=page_size,
+            channel=channel,
+            db=db,
+        )
+
+    # Sessions mode: build logical sessions from conversations + messages
+    settings = get_settings()
+
+    base_query = (
+        db.query(Conversation)
+        .options(joinedload(Conversation.customer), joinedload(Conversation.messages))
     )
+
+    if channel:
+        base_query = base_query.filter(Conversation.channel == channel)
+    if customer_id:
+        base_query = base_query.filter(Conversation.customer_id == customer_id)
+
+    # Fetch a window of recent conversations to derive sessions from.
+    # We over-fetch a bit to have enough sessions for the requested page_size.
+    conversations = (
+        base_query.order_by(Conversation.last_activity_at.desc())
+        .limit(page_size * 5)
+        .all()
+    )
+
+    raw_sessions: list = []
+    for conv in conversations:
+        # Voice calls are already one coherent session; still run through the
+        # helper so resets/inactivity rules apply uniformly.
+        raw_sessions.extend(_build_sessions_for_conversation(conv))
+
+    # Sort sessions by most recent activity
+    raw_sessions.sort(key=lambda s: s["last_activity_at"], reverse=True)
+
+    # Paginate sessions
+    paged_sessions = raw_sessions[(page - 1) * page_size : page * page_size]
+
+    return {
+        "total": len(raw_sessions),
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (len(raw_sessions) + page_size - 1) // page_size or 1,
+        "timezone": settings.MED_SPA_TIMEZONE,
+        # Reuse the conversations field name so existing dashboard mapping works.
+        "conversations": [
+            {
+                "id": session["conversation"].id,
+                "customer_id": session["conversation"].customer_id,
+                "customer_name": (
+                    session["conversation"].customer.name
+                    if session["conversation"].customer
+                    else None
+                ),
+                "customer_phone": (
+                    session["conversation"].customer.phone
+                    if session["conversation"].customer
+                    else None
+                ),
+                "channel": session["conversation"].channel,
+                "status": session["conversation"].status,
+                # Session start/end instead of original initiated_at/completed_at
+                "initiated_at": utc_to_local_iso(session["started_at"]),
+                "completed_at": utc_to_local_iso(session["ended_at"]),
+                "last_activity_at": utc_to_local_iso(session["last_activity_at"]),
+                "satisfaction_score": session["conversation"].satisfaction_score,
+                "sentiment": session["conversation"].sentiment,
+                "outcome": session["conversation"].outcome,
+                "ai_summary": session["conversation"].ai_summary,
+                "metadata": session["conversation"].custom_metadata,
+            }
+            for session in paged_sessions
+        ],
+    }
 
 
 @router.get("/legacy/communications/{comm_id}")
@@ -749,6 +925,59 @@ def _group_conversations_into_sessions(
     return sessions
 
 
+def _build_timeline_sessions_for_customer(conversations: list[Conversation]) -> list[dict]:
+    """Build per-session timeline entries for a customer.
+
+    Uses _build_sessions_for_conversation so that:
+    - New conversations (already 1 logical session) produce 1 session each.
+    - Legacy multi-session conversations are split by inactivity/reset rules.
+    """
+    all_sessions: list[dict] = []
+
+    for conv in conversations:
+        per_conv_sessions = _build_sessions_for_conversation(conv)
+        for sess in per_conv_sessions:
+            c = sess["conversation"]
+            started_at = sess["started_at"]
+            ended_at = sess["ended_at"]
+
+            conv_dict = {
+                "id": str(c.id),
+                "channel": c.channel,
+                "status": c.status,
+                "initiated_at": utc_to_local_iso(started_at),
+                "completed_at": utc_to_local_iso(ended_at),
+                "outcome": c.outcome,
+                "sentiment": c.sentiment,
+                "satisfaction_score": c.satisfaction_score,
+                "ai_summary": c.ai_summary,
+                "message_count": sess.get("message_count", 0),
+            }
+
+            session_entry = {
+                "conversations": [conv_dict],
+                "channels": [c.channel],
+                "conversation_count": 1,
+                "is_multimodal": False,
+                "started_at": utc_to_local_iso(started_at),
+                "ended_at": utc_to_local_iso(ended_at),
+                "outcome": c.outcome,
+            }
+
+            # Keep a private datetime key for correct chronological sorting
+            session_entry["_started_at_dt"] = started_at
+            all_sessions.append(session_entry)
+
+    # Sort chronologically by session start
+    all_sessions.sort(key=lambda s: s["_started_at_dt"])
+
+    # Drop private sort key before returning
+    for session in all_sessions:
+        session.pop("_started_at_dt", None)
+
+    return all_sessions
+
+
 @router.get("/customers/{customer_id}/timeline")
 async def get_customer_timeline(
     customer_id: int,
@@ -874,9 +1103,10 @@ async def get_customer_timeline(
     
     # Enhanced: Add session grouping if requested
     if include_sessions:
-        # Re-sort chronologically for session grouping
-        all_convs_chronological = sorted(conversations, key=lambda c: c.initiated_at)
-        sessions = _group_conversations_into_sessions(all_convs_chronological)
+        # Build per-session timeline entries using per-conversation sessions.
+        # New conversations (already single-session) will produce one entry each,
+        # while legacy multi-session conversations are split based on inactivity/reset rules.
+        sessions = _build_timeline_sessions_for_customer(conversations)
         response["sessions"] = sessions
         response["session_count"] = len(sessions)
         

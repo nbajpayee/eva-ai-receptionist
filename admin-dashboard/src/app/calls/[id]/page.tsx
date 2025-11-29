@@ -381,8 +381,10 @@ function getOutcomeColor(outcome: string | null): string {
 
 export default async function CallDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: { [key: string]: string | string[] | undefined };
 }) {
   const { id } = await params;
   const [data, conversation] = await Promise.all([
@@ -418,6 +420,46 @@ export default async function CallDetailPage({
 
   const { call, customer, transcript, events } = data;
 
+  // Derive an optional session window from query params. When present and
+  // valid, we treat the detail view as session-bounded; otherwise we fall
+  // back to the full conversation window.
+  const startParam = searchParams?.start;
+  const endParam = searchParams?.end;
+
+  const rawSessionStart = Array.isArray(startParam) ? startParam[0] : startParam;
+  const rawSessionEnd = Array.isArray(endParam) ? endParam[0] : endParam;
+
+  const defaultStartIso = call.started_at;
+  const defaultEndIso = call.ended_at || call.started_at;
+
+  // Prefer explicit query params when present, but fall back to defaults
+  // if parsing fails so we never end up with an invalid Date.
+  const requestedStartIso = rawSessionStart || defaultStartIso;
+  const requestedEndIso = rawSessionEnd || defaultEndIso;
+
+  let sessionStartIso = requestedStartIso;
+  let sessionEndIso = requestedEndIso;
+
+  let sessionStartDate = parseBackendTimestamp(requestedStartIso);
+  let sessionEndDate = parseBackendTimestamp(requestedEndIso);
+
+  // If either boundary is invalid, revert entirely to the conversation
+  // window to avoid NaN-based comparisons.
+  if (
+    Number.isNaN(sessionStartDate.getTime()) ||
+    Number.isNaN(sessionEndDate.getTime())
+  ) {
+    sessionStartIso = defaultStartIso;
+    sessionEndIso = defaultEndIso;
+    sessionStartDate = parseBackendTimestamp(defaultStartIso);
+    sessionEndDate = parseBackendTimestamp(defaultEndIso);
+  }
+
+  const sessionDurationSeconds =
+    sessionEndDate.getTime() > sessionStartDate.getTime()
+      ? Math.floor((sessionEndDate.getTime() - sessionStartDate.getTime()) / 1000)
+      : 0;
+
   type SupportedChannel = CommunicationChannel;
   let primaryChannel: SupportedChannel = "voice";
 
@@ -431,10 +473,27 @@ export default async function CallDetailPage({
     }
   }
 
+  // Restrict messages to the session window when one is provided and valid.
+  // If filtering yields nothing (e.g., due to subtle timezone/format issues),
+  // fall back to the full conversation so the view is never empty.
+  const hasExplicitWindow = Boolean(rawSessionStart || rawSessionEnd);
+
+  const candidateMessages = hasExplicitWindow
+    ? conversation.filter((message) => {
+        const ts = parseBackendTimestamp(message.timestamp);
+        return ts >= sessionStartDate && ts <= sessionEndDate;
+      })
+    : conversation;
+
+  const effectiveMessages =
+    hasExplicitWindow && candidateMessages.length === 0
+      ? conversation
+      : candidateMessages;
+
   const channelMessages =
     primaryChannel === "voice"
       ? []
-      : conversation.filter((message) => message.channel === primaryChannel);
+      : effectiveMessages.filter((message) => message.channel === primaryChannel);
 
   const channelTitles: Record<SupportedChannel, string> = {
     voice: "Voice call",
@@ -447,6 +506,18 @@ export default async function CallDetailPage({
     sms: MessageSquare,
     email: Mail,
   };
+
+  // Restrict operational events to the same session window when present,
+  // falling back to the full set if filtering yields none.
+  const candidateEvents = hasExplicitWindow
+    ? events.filter((event) => {
+        const ts = parseBackendTimestamp(event.timestamp);
+        return ts >= sessionStartDate && ts <= sessionEndDate;
+      })
+    : events;
+
+  const sessionEvents =
+    hasExplicitWindow && candidateEvents.length === 0 ? events : candidateEvents;
 
   return (
     <div className="space-y-6">
@@ -474,14 +545,14 @@ export default async function CallDetailPage({
               <Calendar className="mt-0.5 h-5 w-5 text-zinc-400" />
               <div>
                 <p className="text-sm font-medium text-zinc-700">Started</p>
-                <p className="text-sm text-zinc-600">{formatTimestamp(call.started_at)}</p>
+                <p className="text-sm text-zinc-600">{formatTimestamp(sessionStartIso)}</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Clock className="mt-0.5 h-5 w-5 text-zinc-400" />
               <div>
                 <p className="text-sm font-medium text-zinc-700">Duration</p>
-                <p className="text-sm text-zinc-600">{formatDuration(call.duration_seconds)}</p>
+                <p className="text-sm text-zinc-600">{formatDuration(sessionDurationSeconds)}</p>
               </div>
             </div>
             {call.phone_number && (
@@ -624,13 +695,13 @@ export default async function CallDetailPage({
           </Card>
         )}
 
-        {events.length > 0 && (
+        {sessionEvents.length > 0 && (
           <Card className="border-zinc-200">
             <CardHeader>
               <CardTitle className="text-lg">Operational timeline</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {events.map((event) => (
+              {sessionEvents.map((event) => (
                 <div key={event.id} className="flex items-start gap-3 text-sm">
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-100">
                     <div className="h-2 w-2 rounded-full bg-zinc-400" />

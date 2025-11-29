@@ -131,6 +131,8 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
   const [newMessage, setNewMessage] = useState<string>("");
   const [isSending, setIsSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isRefreshPaused, setIsRefreshPaused] = useState(false);
 
@@ -159,12 +161,20 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
     }
   }, [conversation]);
 
-  // Auto-scroll
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    const node = scrollRef.current;
-    if (node) {
-      node.scrollTop = node.scrollHeight;
-    }
+    // Small delay to ensure DOM is updated
+    const timer = setTimeout(() => {
+      // Scroll the ScrollArea viewport instead of using scrollIntoView
+      // which would scroll the entire page
+      if (scrollAreaRef.current) {
+        scrollAreaRef.current.scrollTo({
+          top: scrollAreaRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
   }, [messages]);
 
   const transformApiMessage = (message: {
@@ -403,6 +413,7 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
 
     setMessages((prev) => [...prev, userMessage]);
     setError(null);
+    setNewMessage(""); // Clear input immediately after sending
 
     try {
       const payload: Record<string, unknown> = {
@@ -487,7 +498,6 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
         const withoutTemp = prev.filter((message) => message.id !== userMessage.id);
         return [...withoutTemp, inbound, outbound];
       });
-      setNewMessage("");
       setError(null);
     } catch (error) {
       console.error(error);
@@ -744,7 +754,7 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
             
             <CardContent className="flex flex-col flex-1 p-0 overflow-hidden">
                {/* Messages Area */}
-              <ScrollArea className="flex-1 bg-zinc-50/30" type="always">
+              <ScrollArea ref={scrollAreaRef} className="flex-1 bg-zinc-50/30" type="always">
                 <div ref={scrollRef} className="flex flex-col gap-6 p-6 min-h-full">
                   {error ? (
                     <div className="rounded-xl border border-rose-200 bg-rose-50/50 px-4 py-3 text-sm text-rose-700 backdrop-blur-sm">
@@ -865,6 +875,8 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
                         ))}
                     </AnimatePresence>
                   )}
+                  {/* Scroll anchor - always at bottom */}
+                  <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
 

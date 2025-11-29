@@ -163,7 +163,15 @@ class MessagingService:
         customer_id: int,
         channel: str,
     ) -> Optional[Conversation]:
-        return (
+        """Return a recent active conversation for this customer/channel, if any.
+
+        For SMS/email, we treat a Conversation as a single session. If the last
+        activity is older than the inactivity window (45 minutes), we mark the
+        conversation as completed and return None so that callers can create a
+        fresh Conversation for the new session.
+        """
+
+        convo = (
             db.query(Conversation)
             .filter(
                 Conversation.customer_id == customer_id,
@@ -173,6 +181,45 @@ class MessagingService:
             .order_by(Conversation.last_activity_at.desc())
             .first()
         )
+
+        if not convo:
+            return None
+
+        # Only enforce inactivity rollover for messaging channels. Voice
+        # conversations are already scoped to a single call.
+        if convo.channel in {"sms", "email"}:
+            inactivity_window = timedelta(minutes=45)
+            last_ts = convo.last_activity_at or convo.initiated_at
+
+            if last_ts is not None:
+                now = datetime.utcnow()
+                if now - last_ts > inactivity_window:
+                    # Close out the old conversation and attempt to score it
+                    # once so dashboard metrics remain accurate.
+                    try:
+                        AnalyticsService.complete_conversation(db=db, conversation_id=convo.id)
+                    except Exception as exc:  # noqa: BLE001 - rollover should never break flows
+                        logger.warning(
+                            "Failed to mark inactive conversation %s completed: %s",
+                            convo.id,
+                            exc,
+                        )
+
+                    try:
+                        AnalyticsService.score_conversation_satisfaction(
+                            db=db,
+                            conversation_id=convo.id,
+                        )
+                    except Exception as exc:  # noqa: BLE001 - scoring is best-effort
+                        logger.warning(
+                            "Failed to score satisfaction for inactive conversation %s: %s",
+                            convo.id,
+                            exc,
+                        )
+
+                    return None
+
+        return convo
 
     @staticmethod
     def create_conversation(
@@ -1307,6 +1354,46 @@ class MessagingService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _conversation_booking_channel(conversation: Conversation) -> BookingChannel:
+        channel_value = getattr(conversation, "channel", None) or ""
+        if channel_value == "sms":
+            return BookingChannel.SMS
+        if channel_value == "voice":
+            return BookingChannel.VOICE
+        if channel_value == "email":
+            return BookingChannel.EMAIL
+        if channel_value == "staff_console":
+            return BookingChannel.STAFF_CONSOLE
+        return BookingChannel.UNKNOWN
+
+    @staticmethod
+    def _build_booking_context_and_orchestrator(
+        db: Session,
+        conversation: Conversation,
+        customer: Customer,
+        calendar_service,
+    ) -> Tuple[BookingContext, BookingOrchestrator]:
+        services = SettingsService.get_services_dict(db)
+        booking_channel = MessagingService._conversation_booking_channel(conversation)
+
+        booking_context = BookingContext(
+            db=db,
+            conversation=conversation,
+            customer=customer,
+            channel=booking_channel,
+            calendar_service=calendar_service,
+            services_dict=services,
+        )
+        orchestrator = BookingOrchestrator(
+            channel=booking_channel,
+            check_availability_func=handle_check_availability,
+            book_appointment_func=handle_book_appointment,
+            reschedule_appointment_func=handle_reschedule_appointment,
+            cancel_appointment_func=handle_cancel_appointment,
+        )
+        return booking_context, orchestrator
+
+    @staticmethod
     def _execute_tool_call(
         *,
         db: Session,
@@ -1345,32 +1432,11 @@ class MessagingService:
         selection_adjustments: Optional[Dict[str, Dict[str, Optional[str]]]] = None
         try:
             if name == "check_availability":
-                services = SettingsService.get_services_dict(db)
-                channel_value = getattr(conversation, "channel", None) or ""
-                if channel_value == "sms":
-                    booking_channel = BookingChannel.SMS
-                elif channel_value == "voice":
-                    booking_channel = BookingChannel.VOICE
-                elif channel_value == "email":
-                    booking_channel = BookingChannel.EMAIL
-                elif channel_value == "staff_console":
-                    booking_channel = BookingChannel.STAFF_CONSOLE
-                else:
-                    booking_channel = BookingChannel.UNKNOWN
-                booking_context = BookingContext(
+                booking_context, orchestrator = MessagingService._build_booking_context_and_orchestrator(
                     db=db,
                     conversation=conversation,
                     customer=customer,
-                    channel=booking_channel,
                     calendar_service=calendar_service,
-                    services_dict=services,
-                )
-                orchestrator = BookingOrchestrator(
-                    channel=booking_channel,
-                    check_availability_func=handle_check_availability,
-                    book_appointment_func=handle_book_appointment,
-                    reschedule_appointment_func=handle_reschedule_appointment,
-                    cancel_appointment_func=handle_cancel_appointment,
                 )
                 availability_result = orchestrator.check_availability(
                     booking_context,
@@ -1430,39 +1496,15 @@ class MessagingService:
                 if idempotent_output is not None:
                     output = idempotent_output
                 else:
-                    # Update the customer record with any newly provided details so that
-                    # orchestrator fallbacks see the latest data.
                     MessagingService._update_customer_from_arguments(
                         db, customer, arguments
                     )
 
-                    services = SettingsService.get_services_dict(db)
-                    channel_value = getattr(conversation, "channel", None) or ""
-                    if channel_value == "sms":
-                        booking_channel = BookingChannel.SMS
-                    elif channel_value == "voice":
-                        booking_channel = BookingChannel.VOICE
-                    elif channel_value == "email":
-                        booking_channel = BookingChannel.EMAIL
-                    elif channel_value == "staff_console":
-                        booking_channel = BookingChannel.STAFF_CONSOLE
-                    else:
-                        booking_channel = BookingChannel.UNKNOWN
-
-                    booking_context = BookingContext(
+                    booking_context, orchestrator = MessagingService._build_booking_context_and_orchestrator(
                         db=db,
                         conversation=conversation,
                         customer=customer,
-                        channel=booking_channel,
                         calendar_service=calendar_service,
-                        services_dict=services,
-                    )
-                    orchestrator = BookingOrchestrator(
-                        channel=booking_channel,
-                        check_availability_func=handle_check_availability,
-                        book_appointment_func=handle_book_appointment,
-                        reschedule_appointment_func=handle_reschedule_appointment,
-                        cancel_appointment_func=handle_cancel_appointment,
                     )
                     booking_result = orchestrator.book_appointment(
                         booking_context,
@@ -1471,7 +1513,6 @@ class MessagingService:
                     output = booking_result.to_dict()
                     selection_adjustments = output.get("argument_adjustments") or None
 
-                    # Clear pending booking intent after successful booking
                     if output.get("success"):
                         metadata = conversation.custom_metadata or {}
                         if metadata.get("pending_booking_intent"):
@@ -1483,33 +1524,11 @@ class MessagingService:
                     db, conversation
                 )
             elif name == "reschedule_appointment":
-                services = SettingsService.get_services_dict(db)
-                channel_value = getattr(conversation, "channel", None) or ""
-                if channel_value == "sms":
-                    booking_channel = BookingChannel.SMS
-                elif channel_value == "voice":
-                    booking_channel = BookingChannel.VOICE
-                elif channel_value == "email":
-                    booking_channel = BookingChannel.EMAIL
-                elif channel_value == "staff_console":
-                    booking_channel = BookingChannel.STAFF_CONSOLE
-                else:
-                    booking_channel = BookingChannel.UNKNOWN
-
-                booking_context = BookingContext(
+                booking_context, orchestrator = MessagingService._build_booking_context_and_orchestrator(
                     db=db,
                     conversation=conversation,
                     customer=customer,
-                    channel=booking_channel,
                     calendar_service=calendar_service,
-                    services_dict=services,
-                )
-                orchestrator = BookingOrchestrator(
-                    channel=booking_channel,
-                    check_availability_func=handle_check_availability,
-                    book_appointment_func=handle_book_appointment,
-                    reschedule_appointment_func=handle_reschedule_appointment,
-                    cancel_appointment_func=handle_cancel_appointment,
                 )
                 output = orchestrator.reschedule_appointment(
                     booking_context,
@@ -1521,33 +1540,11 @@ class MessagingService:
                     provider=arguments.get("provider"),
                 )
             elif name == "cancel_appointment":
-                services = SettingsService.get_services_dict(db)
-                channel_value = getattr(conversation, "channel", None) or ""
-                if channel_value == "sms":
-                    booking_channel = BookingChannel.SMS
-                elif channel_value == "voice":
-                    booking_channel = BookingChannel.VOICE
-                elif channel_value == "email":
-                    booking_channel = BookingChannel.EMAIL
-                elif channel_value == "staff_console":
-                    booking_channel = BookingChannel.STAFF_CONSOLE
-                else:
-                    booking_channel = BookingChannel.UNKNOWN
-
-                booking_context = BookingContext(
+                booking_context, orchestrator = MessagingService._build_booking_context_and_orchestrator(
                     db=db,
                     conversation=conversation,
                     customer=customer,
-                    channel=booking_channel,
                     calendar_service=calendar_service,
-                    services_dict=services,
-                )
-                orchestrator = BookingOrchestrator(
-                    channel=booking_channel,
-                    check_availability_func=handle_check_availability,
-                    book_appointment_func=handle_book_appointment,
-                    reschedule_appointment_func=handle_reschedule_appointment,
-                    cancel_appointment_func=handle_cancel_appointment,
                 )
                 output = orchestrator.cancel_appointment(
                     booking_context,

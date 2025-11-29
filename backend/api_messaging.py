@@ -149,6 +149,44 @@ def send_message(
         db=db, request=request, conversation=conversation, channel=channel
     )
 
+    # Detect explicit user-initiated resets like "new question" or "start over".
+    content_lower = (request.content or "").strip().lower()
+    reset_phrases = [
+        "new question",
+        "another question",
+        "new topic",
+        "another topic",
+        "start over",
+        "new conversation",
+    ]
+    reset_requested = any(phrase in content_lower for phrase in reset_phrases)
+
+    if reset_requested and conversation is not None and conversation.status == "active":
+        # Close and score the existing conversation so metrics remain accurate,
+        # then intentionally start a fresh conversation for this new topic.
+        try:
+            AnalyticsService.complete_conversation(db=db, conversation_id=conversation.id)
+        except Exception as exc:  # noqa: BLE001 - reset handling must not break flows
+            logger.warning(
+                "Failed to complete conversation %s on reset: %s",
+                conversation.id,
+                exc,
+            )
+
+        try:
+            AnalyticsService.score_conversation_satisfaction(
+                db=db,
+                conversation_id=conversation.id,
+            )
+        except Exception as exc:  # noqa: BLE001 - scoring is best-effort
+            logger.warning(
+                "Failed to score satisfaction for reset conversation %s: %s",
+                conversation.id,
+                exc,
+            )
+
+        conversation = None
+
     if conversation is None:
         conversation = MessagingService.find_active_conversation(
             db=db,

@@ -409,14 +409,14 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             </Button>
           </Link>
           <Link href={`/appointments?customer_id=${customer.id}&action=new`}>
-            <Button variant="outline" aria-label="Book new appointment for customer">
+            <Button variant="outline" className="hover:bg-primary hover:text-white hover:border-primary" aria-label="Book new appointment for customer">
               <CalendarPlus className="mr-2 h-4 w-4" />
               Book Appointment
             </Button>
           </Link>
           {customer.phone && (
             <a href={`tel:${customer.phone}`} aria-label={`Call customer at ${customer.phone}`}>
-              <Button variant="outline">
+              <Button variant="outline" className="hover:bg-emerald-500 hover:text-white hover:border-emerald-500">
                 <Phone className="mr-2 h-4 w-4" />
                 Call
               </Button>
@@ -579,7 +579,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                     </Badge>
                   )}
                   {!customer.has_allergies && !customer.is_pregnant && (
-                    <Badge variant="outline" className="text-muted-foreground bg-muted/50">
+                    <Badge variant="outline" className="text-zinc-600 bg-zinc-50 border-zinc-200">
                       No medical flags
                     </Badge>
                   )}
@@ -679,20 +679,20 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
       {/* Activity Tabs */}
       <Tabs defaultValue="timeline" className="w-full">
-        <TabsList className="bg-muted/50 p-1">
-          <TabsTrigger value="timeline" className="data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
+        <TabsList className="bg-zinc-100 p-1">
+          <TabsTrigger value="timeline" className="text-zinc-700 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <Clock className="mr-2 h-4 w-4" />
             Timeline ({timeline.length})
           </TabsTrigger>
-          <TabsTrigger value="appointments" className="data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
+          <TabsTrigger value="appointments" className="text-zinc-700 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <Calendar className="mr-2 h-4 w-4" />
             Appointments ({data.appointments.length})
           </TabsTrigger>
-          <TabsTrigger value="calls" className="data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
+          <TabsTrigger value="calls" className="text-zinc-700 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <Headphones className="mr-2 h-4 w-4" />
             Calls ({data.calls.length})
           </TabsTrigger>
-          <TabsTrigger value="messages" className="data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
+          <TabsTrigger value="messages" className="text-zinc-700 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
             <MessageSquare className="mr-2 h-4 w-4" />
             Messages ({data.conversations.length})
           </TabsTrigger>
