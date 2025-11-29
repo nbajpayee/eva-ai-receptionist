@@ -18,13 +18,32 @@ import pytest
 
 from analytics import AnalyticsService
 from booking.manager import SlotSelectionManager
-from database import Appointment, Customer
+from database import Appointment, Customer, SessionLocal
 from messaging_service import MessagingService
 from tests.conftest import (
     build_availability_response,
     build_booking_response,
     mock_ai_response_with_text,
 )
+
+
+@pytest.fixture
+def db_session():
+    """Use the primary SessionLocal (Postgres) for integration tests.
+
+    This overrides the shared SQLite-based db_session from conftest.py so that
+    MessagingService and AnalyticsService interact with the same schema the
+    application uses in production.
+    """
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 @pytest.mark.integration

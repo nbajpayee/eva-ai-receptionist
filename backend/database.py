@@ -1056,6 +1056,23 @@ class BusinessHours(Base):
     )
 
 
+class FAQArticle(Base):
+    """FAQ articles used to answer common questions across all channels."""
+
+    __tablename__ = "faq_articles"
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    slug = Column(String(255), unique=True, nullable=False, index=True)
+    question = Column(String(500), nullable=False)
+    answer = Column(Text, nullable=False)
+    category = Column(String(100), nullable=True, index=True)
+    tags = Column(StringArray(), nullable=True)
+    is_active = Column(Boolean, default=True, index=True)
+    display_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Service(Base):
     """Med spa services configuration."""
 

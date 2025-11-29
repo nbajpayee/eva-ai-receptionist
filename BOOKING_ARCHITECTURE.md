@@ -10,42 +10,47 @@ The booking system follows a **layered architecture** with clear separation betw
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                     Channel Layer                                 │
+│                         Channel Layer                            │
 │  ┌────────────────────┐           ┌─────────────────────┐        │
 │  │  RealtimeClient    │           │  MessagingService   │        │
 │  │  (Voice)           │           │  (SMS/Email)        │        │
 │  └─────────┬──────────┘           └──────────┬──────────┘        │
-│            │                                  │                   │
-│            └──────────────┬───────────────────┘                   │
-└───────────────────────────┼───────────────────────────────────────┘
-                            │ constructs BookingContext
+│            │                                 │                   │
+└────────────┼─────────────────────────────────┼───────────────────┘
+             │           TurnContext / message │
+             ▼                                 ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                 Turn Orchestration Layer                         │
+│   TurnOrchestrator (classifies: BOOKING / FAQ / GENERAL / OTHER) │
+└───────────────────────────┬──────────────────────────────────────┘
+                            │ routes to tools
                             ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│                     Domain Layer                                  │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │             BookingOrchestrator                           │  │
-│  │  • check_availability(context, date, service_type)        │  │
-│  │  • book_appointment(context, params)                      │  │
-│  │  • reschedule_appointment(context, ...)                   │  │
-│  │  • cancel_appointment(context, ...)                       │  │
-│  │                                                            │  │
-│  │  Delegates to:                                            │  │
-│  │  ┌──────────────────────────────────────────────┐        │  │
-│  │  │     SlotSelectionManager                     │        │  │
-│  │  │  • record_offers() - Save slots to metadata │        │  │
-│  │  │  • enforce_booking() - Validate slot reuse  │        │  │
-│  │  │  • get_pending_slot_offers()                │        │  │
-│  │  └──────────────────────────────────────────────┘        │  │
-│  └───────────────────────────────────────────────────────────┘  │
+│                          Domain Layer                            │
+│  ┌─────────────────────────────┐   ┌──────────────────────────┐  │
+│  │     BookingOrchestrator     │   │        FAQ Service       │  │
+│  │  • check_availability()     │   │  • get_faq_answer()      │  │
+│  │  • book_appointment()       │   │                          │  │
+│  │  • reschedule_appointment() │   │                          │  │
+│  │  • cancel_appointment()     │   │                          │  │
+│  │                             │   │                          │  │
+│  │  Delegates to:              │   │                          │  │
+│  │  ┌────────────────────────┐ │   │                          │  │
+│  │  │  SlotSelectionManager  │ │   │                          │  │
+│  │  │  • record_offers()     │ │   │                          │  │
+│  │  │  • enforce_booking()   │ │   │                          │  │
+│  │  │  • get_pending_slot_offers()│ │                         │  │
+│  │  └────────────────────────┘ │   └──────────────────────────┘  │
+│  └─────────────────────────────┘                                 │
 └───────────────────────────┬──────────────────────────────────────┘
                             │ calls
                             ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│                  Integration Layer                                │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐    │
-│  │ CalendarSvc  │   │ AnalyticsSvc │   │ analytics_metrics│    │
-│  │ (Google Cal) │   │ (Supabase)   │   │ (Logging)        │    │
-│  └──────────────┘   └──────────────┘   └──────────────────┘    │
+│                     Integration Layer                            │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐      │
+│  │ CalendarSvc  │   │ AnalyticsSvc │   │ analytics_metrics│      │
+│  │ (Google Cal) │   │ (Supabase)   │   │ (Logging)        │      │
+│  └──────────────┘   └──────────────┘   └──────────────────┘      │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -445,12 +450,34 @@ result = orchestrator.book_appointment(context, ...)    # Enforces slot reuse
 - [ ] Appointment reminders via scheduled messages
 - [ ] Waitlist management (notify when slots open)
 - [ ] Provider preferences ("I prefer Dr. Smith")
+- [ ] Explicit booking workflow state machine (especially important if/when you add payments and refunds)
+- [ ] Shared `BookingContextBuilder` used by all adapters once you add another channel beyond Realtime (voice) and MessagingService (messaging channels like SMS/email/Instagram)
 
 ### Nice-to-Have
 - [ ] Booking approval workflow for staff
 - [ ] Group bookings (couples massage)
 - [ ] Package deals (buy 3 sessions, get discount)
 - [ ] Integration with Boulevard scheduling system
+
+### Next-phase turn orchestration & FAQ
+
+The next-phase orchestration and FAQ work has been implemented and hardened:
+
+- [x] Extracted `TurnOrchestrator` class for cross-channel turn routing (booking vs FAQ vs general vs small talk)
+  - **File**: `backend/turn_orchestrator.py`
+  - Classifies each turn into high-level intents and routes booking vs FAQ vs general flows accordingly.
+- [x] Added intent classification for each turn to route between booking, FAQ, and general conversation
+  - **Files**: `backend/messaging_service.py`, `backend/realtime_client.py`
+  - Persists `last_turn_intent` in `Conversation.custom_metadata` for analytics and downstream behavior.
+- [x] Added FAQ handler wired behind a `get_faq_answer` tool and `TurnOrchestrator`
+  - **Files**: `backend/faq_service.py`, `backend/faq_tools.py`, `backend/messaging_service.py`, `backend/realtime_client.py`
+  - Exposes a `get_faq_answer` tool used by both voice and messaging to answer common questions deterministically.
+- [x] Added tests for `TurnOrchestrator`, intent classification, and FAQ handler across voice and messaging
+  - **Files**: `backend/tests/test_faq_service.py`, `backend/tests/test_turn_orchestrator.py`, `backend/tests/test_messaging_service.py`, `backend/tests/test_voice_booking.py`, `backend/tests/integration/test_*_booking_flows.py`, `backend/tests/test_ai_booking_integration.py`
+  - Includes deterministic tests for preemptive availability, slot selection, and booking metadata updates.
+- [x] Tracked and fixed P0 issues for the new orchestration + FAQ flows before pilot
+  - Hardened preemptive availability, deterministic booking, and interruption recovery flows for both SMS and voice.
+- [ ] Ship pilot for unified turn orchestration + FAQ-enabled Eva
 
 ## Troubleshooting
 

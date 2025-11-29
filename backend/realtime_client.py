@@ -27,9 +27,11 @@ from booking_handlers import (
 from calendar_service import get_calendar_service
 from config import OPENING_SCRIPT, PROVIDERS, get_settings
 from database import Conversation, SessionLocal
+from faq_service import get_faq_answer
 from realtime_config import build_voice_session_config
 from prompts import get_system_prompt
 from settings_service import SettingsService
+from turn_orchestrator import TurnContext, TurnIntent, TurnOrchestrator
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -606,6 +608,43 @@ class RealtimeClient:
                     "required": ["appointment_id"],
                 },
             },
+            {
+                "type": "function",
+                "name": "get_faq_answer",
+                "description": (
+                    "Look up a concise, policy-safe FAQ answer for common questions "
+                    "about services, pricing, hours, providers, location, and policies."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": (
+                                "The caller's question in natural language, for example "
+                                "'What are your hours on Saturday?' or 'Do you offer Botox?'."
+                            ),
+                        },
+                        "category": {
+                            "type": "string",
+                            "description": (
+                                "Optional high-level category hint such as 'services', "
+                                "'pricing', 'hours', 'location', or 'policies'."
+                            ),
+                            "enum": [
+                                "services",
+                                "pricing",
+                                "hours",
+                                "location",
+                                "providers",
+                                "policies",
+                                "general",
+                            ],
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
         ]
 
     async def handle_function_call(
@@ -1027,6 +1066,13 @@ class RealtimeClient:
 
                 return response
 
+            elif function_name == "get_faq_answer":
+                query = str(arguments.get("query", ""))
+                category = arguments.get("category")
+
+                result = get_faq_answer(self.db, query=query, category=category)
+                return result
+
             else:
                 return {"success": False, "error": f"Unknown function: {function_name}"}
 
@@ -1129,6 +1175,28 @@ class RealtimeClient:
                 if transcript_text:
                     logger.debug("User speech completed: %s", transcript_text)
                     self._append_transcript_entry("customer", transcript_text)
+                    # Classify turn intent for voice and persist in conversation metadata
+                    try:
+                        metadata = SlotSelectionManager.conversation_metadata(
+                            self.conversation
+                        )
+                        intent = TurnOrchestrator.classify_intent(
+                            TurnContext(
+                                channel="voice",
+                                last_customer_text=transcript_text,
+                                metadata=metadata or {},
+                            )
+                        )
+                        if isinstance(metadata, dict):
+                            metadata["last_turn_intent"] = intent.value
+                            SlotSelectionManager.persist_conversation_metadata(
+                                self.db, self.conversation, metadata
+                            )
+                    except Exception:  # noqa: BLE001 - intent logging should never break flows
+                        logger.exception(
+                            "Failed to classify turn intent for voice conversation %s",
+                            getattr(self.conversation, "id", "unknown"),
+                        )
                 self._current_customer_text = ""
 
             elif event_type == "conversation.item.input_audio_transcription.delta":

@@ -42,8 +42,11 @@ from booking_tools import get_booking_tools
 from calendar_service import get_calendar_service
 from config import get_settings
 from database import Appointment, CommunicationMessage, Conversation, Customer
+from faq_service import get_faq_answer
+from faq_tools import get_faq_tools
 from prompts import get_system_prompt
 from settings_service import SettingsService
+from turn_orchestrator import TurnContext, TurnIntent, TurnOrchestrator
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -739,12 +742,6 @@ class MessagingService:
     def _requires_availability_enforcement(
         db: Session, conversation: Conversation
     ) -> bool:
-        pending = SlotSelectionManager.get_pending_slot_offers(
-            db, conversation, enforce_expiry=False
-        )
-        if pending:
-            return False
-
         # Check if there's a pending booking intent from a previous message
         metadata = conversation.custom_metadata or {}
         pending_booking_intent = metadata.get("pending_booking_intent", False)
@@ -766,52 +763,6 @@ class MessagingService:
             cancel_keywords = ["cancel", "can't make", "cannot make", "won't make"]
             if not any(keyword in text for keyword in reschedule_keywords + cancel_keywords):
                 return False
-
-        # If the latest message mentions "next week" (or similar) without naming
-        # a specific day of the week, we are not ready to enforce availability yet.
-        # The assistant should first clarify which day next week they want before
-        # running check_availability or offering times.
-        next_week_phrases = ["next week", "coming week"]
-        has_next_week = any(phrase in text for phrase in next_week_phrases)
-        day_tokens = [
-            "monday",
-            "tuesday",
-            "wednesday",
-            "thursday",
-            "friday",
-            "saturday",
-            "sunday",
-        ]
-        has_explicit_day = any(day in text for day in day_tokens)
-        if has_next_week and not has_explicit_day:
-            return False
-
-        # Similarly, if the latest message uses long-range relative time phrases
-        # like "next month" or "in 3 weeks" without a concrete date, skip
-        # preemptive availability enforcement so the assistant can first ask
-        # which specific date or week the caller prefers.
-        long_range_phrases = [
-            "next month",
-            "coming month",
-            "next year",
-            "coming year",
-            "in a few weeks",
-            "in a few months",
-            "few weeks from now",
-            "few months from now",
-        ]
-        has_long_range_phrase = any(phrase in text for phrase in long_range_phrases)
-
-        long_range_patterns = [
-            r"\bin\s+\d+\s+weeks?\b",
-            r"\bin\s+\d+\s+months?\b",
-            r"\b\d+\s+weeks?\s+from now\b",
-            r"\b\d+\s+months?\s+from now\b",
-        ]
-        has_long_range_pattern = any(re.search(pattern, text) for pattern in long_range_patterns)
-
-        if has_long_range_phrase or has_long_range_pattern:
-            return False
 
         booking_keywords = ["book", "schedule", "appointment", "reserve", "slot"]
         current_message_is_booking = any(
@@ -868,8 +819,8 @@ class MessagingService:
             return None
 
         try:
-            start_dt = parse_iso_datetime(start_iso)
-        except ValueError:
+            start_dt = MessagingService._parse_iso_datetime(start_iso)
+        except (ValueError, TypeError):
             return None
 
         formatted_datetime = MessagingService._format_start_for_channel(
@@ -1572,6 +1523,12 @@ class MessagingService:
                 )
             elif name == "get_current_date":
                 output = MessagingService._current_datetime_context()
+            elif name == "get_faq_answer":
+                output = get_faq_answer(
+                    db,
+                    query=str(arguments.get("query", "")),
+                    category=arguments.get("category"),
+                )
             else:
                 output = {"success": False, "error": f"Unsupported tool: {name}"}
         except Exception as exc:  # noqa: BLE001
@@ -1873,12 +1830,14 @@ class MessagingService:
             if not s.OPENAI_API_KEY:
                 raise RuntimeError("OPENAI_API_KEY not configured")
 
+            tools = get_booking_tools(db) + get_faq_tools()
+
             response = openai_client.chat.completions.create(
                 model=s.OPENAI_MESSAGING_MODEL,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                tools=get_booking_tools(db),
+                tools=tools,
                 tool_choice=tool_choice,
             )
             trace("AI raw response: %s", response)
@@ -1946,9 +1905,33 @@ class MessagingService:
         history = MessagingService._build_history(conversation, channel)
         max_tokens = 500 if channel == "sms" else 1000
         metadata = SlotSelectionManager.conversation_metadata(conversation)
+
+        # Classify turn intent (booking vs FAQ vs general) for observability and routing.
+        last_text_for_intent = (
+            last_customer.content if last_customer and last_customer.content else ""
+        )
+        intent = TurnOrchestrator.classify_intent(
+            TurnContext(
+                channel=conversation.channel,
+                last_customer_text=last_text_for_intent,
+                metadata=metadata or {},
+            )
+        )
+
+        # Persist last_turn_intent in metadata so dashboards/analytics can reason about it.
+        if isinstance(metadata, dict):
+            metadata["last_turn_intent"] = intent.value
+            SlotSelectionManager.persist_conversation_metadata(
+                db, conversation, metadata
+            )
+
         force_needed = MessagingService._requires_availability_enforcement(
             db, conversation
         )
+
+        # Only run preemptive availability when the turn is classified as booking.
+        if intent is not TurnIntent.BOOKING:
+            force_needed = False
 
         trace = MessagingService._make_trace_logger(conversation)
         calendar_service = MessagingService._get_calendar_service()
@@ -2126,6 +2109,11 @@ class MessagingService:
 
         # With preemptive tool calling, we don't need complex retry loops.
         # Just call the AI once with the availability already in context.
+        # For non-booking turns, we still allow FAQ/other tools when helpful.
+
+        tool_choice = "auto"
+        if intent in {TurnIntent.GENERAL, TurnIntent.SMALL_TALK}:
+            tool_choice = "none"
         ai_response = MessagingService._call_ai(
             messages=history,
             db=db,
@@ -2133,7 +2121,7 @@ class MessagingService:
             ai_mode="ai",
             temperature=0.3,
             max_tokens=max_tokens,
-            tool_choice="auto",  # No forcing needed - context already has availability
+            tool_choice=tool_choice,
             trace=trace,
         )
 

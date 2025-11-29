@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 import pytest
 from faker import Faker
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from config import get_settings
@@ -34,8 +35,13 @@ def test_engine():
         test_db_url, connect_args={"check_same_thread": False}, echo=False
     )
 
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
+    # Create all tables (tolerate existing tables if the file persists between runs)
+    try:
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+    except OperationalError as exc:
+        # If tables already exist, continue using the existing schema for tests.
+        if "already exists" not in str(exc):
+            raise
 
     yield engine
 
@@ -53,6 +59,10 @@ def test_engine():
 @pytest.fixture
 def db_session(test_engine) -> Generator[Session, None, None]:
     """Create a database session for each test."""
+    # Ensure all tables exist for this engine before opening a session. This is
+    # defensive for cases where the SQLite file is reused across runs.
+    Base.metadata.create_all(bind=test_engine, checkfirst=True)
+
     TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     session = TestSessionLocal()
 

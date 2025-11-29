@@ -4,47 +4,34 @@ from __future__ import annotations
 
 from typing import Callable, Tuple
 
+from datetime import datetime
+
 import pytest
+from sqlalchemy.orm import Session
 
 from booking import BookingChannel
-from database import Customer, SessionLocal, Conversation
+from database import Customer, Conversation
 from messaging_service import MessagingService
 
 
-@pytest.fixture
-def db_session() -> Tuple[SessionLocal, Callable[..., Customer]]:
-    session = SessionLocal()
-    created_ids = []
-
-    def create_customer(**kwargs) -> Customer:
-        customer = Customer(**kwargs)
-        session.add(customer)
-        session.commit()
-        created_ids.append(customer.id)
-        return customer
-
-    yield session, create_customer
-
-    try:
-        for customer_id in created_ids:
-            customer_obj = session.query(Customer).get(customer_id)
-            if customer_obj is not None:
-                session.delete(customer_obj)
-        session.commit()
-    finally:
-        session.close()
+def _create_customer(db: Session, **kwargs) -> Customer:
+    customer = Customer(**kwargs)
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    return customer
 
 
-def test_update_customer_preserves_existing_owner_phone(db_session):
-    session, create_customer = db_session
-
-    other_customer = create_customer(
+def test_update_customer_preserves_existing_owner_phone(db_session: Session):
+    other_customer = _create_customer(
+        db_session,
         name="Existing Owner",
         phone="+19990005678",
         email="owner@example.com",
         is_new_client=False,
     )
-    conversation_customer = create_customer(
+    conversation_customer = _create_customer(
+        db_session,
         name="Messaging Guest",
         phone="+19990001234",
         email=None,
@@ -52,19 +39,18 @@ def test_update_customer_preserves_existing_owner_phone(db_session):
     )
 
     MessagingService._update_customer_from_arguments(
-        session,
+        db_session,
         conversation_customer,
         {"customer_phone": other_customer.phone},
     )
 
-    session.refresh(conversation_customer)
+    db_session.refresh(conversation_customer)
     assert conversation_customer.phone == "+19990001234"
 
 
-def test_update_customer_updates_when_phone_unique(db_session):
-    session, create_customer = db_session
-
-    conversation_customer = create_customer(
+def test_update_customer_updates_when_phone_unique(db_session: Session):
+    conversation_customer = _create_customer(
+        db_session,
         name="Messaging Guest",
         phone="+19990002222",
         email=None,
@@ -72,19 +58,18 @@ def test_update_customer_updates_when_phone_unique(db_session):
     )
 
     MessagingService._update_customer_from_arguments(
-        session,
+        db_session,
         conversation_customer,
         {"customer_phone": " +19990003333 "},
     )
 
-    session.refresh(conversation_customer)
+    db_session.refresh(conversation_customer)
     assert conversation_customer.phone == "+19990003333"
 
 
-def test_conversation_booking_channel_maps_channel_values(db_session):
-    session, create_customer = db_session
-
-    customer = create_customer(
+def test_conversation_booking_channel_maps_channel_values(db_session: Session):
+    customer = _create_customer(
+        db_session,
         name="Test",
         phone="+19990004444",
         email=None,
@@ -95,19 +80,22 @@ def test_conversation_booking_channel_maps_channel_values(db_session):
         customer_id=customer.id,
         channel="sms",
         status="active",
+        initiated_at=datetime.utcnow(),
+        last_activity_at=datetime.utcnow(),
     )
-    session.add(conversation)
-    session.commit()
-    session.refresh(conversation)
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
 
     channel_enum = MessagingService._conversation_booking_channel(conversation)
     assert channel_enum == BookingChannel.SMS
 
 
-def test_build_booking_context_and_orchestrator_uses_conversation_channel(db_session):
-    session, create_customer = db_session
-
-    customer = create_customer(
+def test_build_booking_context_and_orchestrator_uses_conversation_channel(
+    db_session: Session,
+):
+    customer = _create_customer(
+        db_session,
         name="Test",
         phone="+19990005555",
         email=None,
@@ -118,13 +106,15 @@ def test_build_booking_context_and_orchestrator_uses_conversation_channel(db_ses
         customer_id=customer.id,
         channel="email",
         status="active",
+        initiated_at=datetime.utcnow(),
+        last_activity_at=datetime.utcnow(),
     )
-    session.add(conversation)
-    session.commit()
-    session.refresh(conversation)
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
 
     context, orchestrator = MessagingService._build_booking_context_and_orchestrator(
-        session,
+        db_session,
         conversation,
         customer,
         calendar_service=None,

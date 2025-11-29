@@ -66,7 +66,14 @@ class SlotSelectionCore:
         # Slots shown to the user as numbered options should align with the
         # subset we actually want them to pick from. Prefer suggested_slots
         # when available, otherwise fall back to the full list.
-        display_slots = output.get("suggested_slots") or full_slots
+        #
+        # For preemptive availability (tool_call_id == "preemptive_call"), we
+        # intentionally expose the full grid in the stored "slots" list so
+        # deterministic flows and tests can reason over all options.
+        if tool_call_id == "preemptive_call":
+            display_slots = full_slots
+        else:
+            display_slots = output.get("suggested_slots") or full_slots
         metadata = SlotSelectionCore.conversation_metadata(conversation)
 
         if not full_slots:

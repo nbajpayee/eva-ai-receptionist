@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import CANCELLATION_POLICY, PROVIDERS, SERVICES, get_settings
 from database import (
     BusinessHours,
+    FAQArticle,
     Location,
     MedSpaSettings,
     Provider,
@@ -51,6 +52,77 @@ def seed_med_spa_settings():
     except Exception as e:
         db.rollback()
         print(f"✗ Error creating settings: {e}")
+        raise
+    finally:
+        db.close()
+
+
+def seed_faq_articles():
+    """Seed core FAQ articles used across channels.
+
+    These FAQs back the get_faq_answer tool and should remain relatively
+    stable across environments (hours, location, services, policies).
+    """
+
+    settings = get_settings()
+    db = SessionLocal()
+
+    try:
+        # If any FAQ articles already exist, assume the corpus was seeded
+        # manually and skip to avoid duplicate slugs.
+        existing = db.query(FAQArticle).first()
+        if existing:
+            print("⚠ FAQ articles already exist, skipping...")
+            return
+
+        articles = [
+            FAQArticle(
+                slug="hours",
+                question="What are your hours?",
+                answer=f"Our current hours are: {settings.MED_SPA_HOURS}.",
+                category="hours",
+                tags=["hours", "open", "close", "schedule"],
+            ),
+            FAQArticle(
+                slug="location",
+                question="Where are you located?",
+                answer=(
+                    f"We are located at {settings.MED_SPA_ADDRESS}. "
+                    "If you need detailed directions or parking info, just ask."
+                ),
+                category="location",
+                tags=["address", "location", "directions", "parking"],
+            ),
+            FAQArticle(
+                slug="services_overview",
+                question="What services do you offer?",
+                answer=(
+                    "We offer a full range of aesthetic treatments including Botox, "
+                    "dermal fillers, HydraFacial, chemical peels, microneedling, "
+                    "laser hair removal and more. If you tell us your main concern, "
+                    "we can recommend specific options."
+                ),
+                category="services",
+                tags=["services", "treatments", "botox", "fillers", "hydrafacial"],
+            ),
+            FAQArticle(
+                slug="cancellation_policy",
+                question="What is your cancellation policy?",
+                answer=CANCELLATION_POLICY,
+                category="policies",
+                tags=["cancellation", "reschedule", "policy", "fee"],
+            ),
+        ]
+
+        for article in articles:
+            db.add(article)
+
+        db.commit()
+        print(f"✓ Created {len(articles)} FAQ articles")
+
+    except Exception as e:
+        db.rollback()
+        print(f"✗ Error creating FAQ articles: {e}")
         raise
     finally:
         db.close()
@@ -260,6 +332,7 @@ def main():
     seed_locations()
     seed_services()
     seed_providers()
+    seed_faq_articles()
 
     print("\n✅ Settings seeded successfully!")
     print("You can now manage these values through the admin dashboard.")
