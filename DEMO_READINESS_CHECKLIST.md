@@ -48,7 +48,7 @@ These were implemented from PRE_PILOT_CHECKLIST.md:
 - [x] Enhanced Google Calendar error handling (backend/realtime_client.py)
 - [x] OpenAI API retry logic (backend/analytics.py)
 - [x] Load test script (backend/tests/load/test_concurrent_calls.py)
-- [x] Dual-write validation script (backend/scripts/validate_dual_write.py)
+- [x] Dual-write validation script (completed and archived - dual-write cutover complete)
 
 ### 🔲 **Remaining (6 Operational Tasks)**
 
@@ -591,7 +591,7 @@ curl https://api.getevaai.com/health/ready
 
 **Scripts Created:**
 - `backend/tests/load/test_concurrent_calls.py` - Load test script
-- `backend/scripts/validate_dual_write.py` - Dual-write validation
+- Dual-write validation (completed and archived - conversations schema is now live)
 - `backend/scripts/verify_backups.py` - Backup verification
 
 **Code Changes Made:**
