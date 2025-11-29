@@ -648,3 +648,242 @@ async def get_customer_detail(
             for conv in conversations
         ],
     }
+
+
+def _group_conversations_into_sessions(
+    conversations: list,
+    max_gap_hours: int = 4,
+) -> list:
+    """
+    Group conversations into logical sessions based on time proximity and intent.
+    
+    A session is a cluster of conversations that are:
+    - Within max_gap_hours of each other, OR
+    - Share the same outcome/intent
+    
+    Returns list of session dicts, each containing grouped conversations.
+    """
+    from datetime import timedelta
+    
+    if not conversations:
+        return []
+    
+    sessions = []
+    current_session = {
+        "conversations": [],
+        "channels": set(),
+        "started_at": None,
+        "ended_at": None,
+        "outcome": None,
+    }
+    
+    for conv in conversations:
+        conv_time = conv.initiated_at
+        
+        # Determine if this starts a new session
+        start_new_session = False
+        
+        if not current_session["conversations"]:
+            start_new_session = False
+        elif current_session["ended_at"]:
+            gap = conv_time - current_session["ended_at"]
+            if gap > timedelta(hours=max_gap_hours):
+                start_new_session = True
+        
+        # Different core intents suggest new session
+        if not start_new_session and current_session["conversations"]:
+            last_outcome = current_session.get("outcome", "")
+            booking_outcomes = {"appointment_scheduled", "booked"}
+            if last_outcome in booking_outcomes and conv.outcome not in booking_outcomes:
+                start_new_session = True
+        
+        if start_new_session and current_session["conversations"]:
+            # Finalize current session
+            current_session["channels"] = list(current_session["channels"])
+            current_session["conversation_count"] = len(current_session["conversations"])
+            current_session["is_multimodal"] = len(current_session["channels"]) > 1
+            current_session["started_at"] = utc_to_local_iso(current_session["started_at"])
+            current_session["ended_at"] = utc_to_local_iso(current_session["ended_at"])
+            sessions.append(current_session)
+            current_session = {
+                "conversations": [],
+                "channels": set(),
+                "started_at": None,
+                "ended_at": None,
+                "outcome": None,
+            }
+        
+        # Add to current session
+        conv_dict = {
+            "id": str(conv.id),
+            "channel": conv.channel,
+            "status": conv.status,
+            "initiated_at": utc_to_local_iso(conv.initiated_at),
+            "completed_at": utc_to_local_iso(conv.completed_at),
+            "outcome": conv.outcome,
+            "sentiment": conv.sentiment,
+            "satisfaction_score": conv.satisfaction_score,
+            "ai_summary": conv.ai_summary,
+            "message_count": len(conv.messages) if conv.messages else 0,
+        }
+        
+        current_session["conversations"].append(conv_dict)
+        current_session["channels"].add(conv.channel)
+        
+        if not current_session["started_at"]:
+            current_session["started_at"] = conv.initiated_at
+        current_session["ended_at"] = conv.completed_at or conv.last_activity_at
+        
+        if conv.outcome:
+            current_session["outcome"] = conv.outcome
+    
+    # Add final session
+    if current_session["conversations"]:
+        current_session["channels"] = list(current_session["channels"])
+        current_session["conversation_count"] = len(current_session["conversations"])
+        current_session["is_multimodal"] = len(current_session["channels"]) > 1
+        current_session["started_at"] = utc_to_local_iso(current_session["started_at"])
+        current_session["ended_at"] = utc_to_local_iso(current_session["ended_at"])
+        sessions.append(current_session)
+    
+    return sessions
+
+
+@router.get("/customers/{customer_id}/timeline")
+async def get_customer_timeline(
+    customer_id: int,
+    include_sessions: bool = Query(False, description="Group conversations into sessions"),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """
+    Get a unified timeline for a customer.
+    
+    Returns all customer interactions in chronological order,
+    optionally grouped into logical sessions based on time proximity and intent.
+    
+    Backward-compatible: Returns calls, conversations, and stats for existing frontend.
+    Enhanced: When include_sessions=true, adds session grouping for multimodal view.
+    """
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Get all conversations with messages
+    conversations = (
+        db.query(Conversation)
+        .options(joinedload(Conversation.messages))
+        .filter(Conversation.customer_id == customer_id)
+        .order_by(Conversation.initiated_at.desc())
+        .limit(limit)
+        .all()
+    )
+    
+    # Get appointments
+    appointments = (
+        db.query(Appointment)
+        .filter(Appointment.customer_id == customer_id)
+        .order_by(Appointment.appointment_datetime.desc())
+        .limit(20)
+        .all()
+    )
+    
+    # Separate voice calls from other conversations (for backward compat)
+    voice_calls = [c for c in conversations if c.channel == "voice"]
+    non_voice = [c for c in conversations if c.channel != "voice"]
+    
+    # Calculate stats
+    completed_appts = sum(1 for a in appointments if a.status == "confirmed")
+    cancelled_appts = sum(1 for a in appointments if a.status in ("cancelled", "canceled"))
+    satisfaction_scores = [c.satisfaction_score for c in voice_calls if c.satisfaction_score is not None]
+    avg_satisfaction = sum(satisfaction_scores) / len(satisfaction_scores) if satisfaction_scores else None
+    no_show_rate = (cancelled_appts / len(appointments) * 100) if appointments else 0
+    
+    # Build response - backward compatible with existing frontend
+    response = {
+        "customer": {
+            "id": customer.id,
+            "name": customer.name,
+            "phone": customer.phone,
+            "email": customer.email,
+            "is_new_client": customer.is_new_client,
+            "has_allergies": customer.has_allergies,
+            "is_pregnant": customer.is_pregnant,
+            "notes": customer.notes,
+            "created_at": utc_to_local_iso(customer.created_at),
+            "updated_at": utc_to_local_iso(customer.updated_at),
+        },
+        "appointments": [
+            {
+                "id": a.id,
+                "service_type": a.service_type,
+                "appointment_datetime": utc_to_local_iso(a.appointment_datetime),
+                "status": a.status,
+                "provider": a.provider,
+                "booked_by": "eva" if a.calendar_event_id else "manual",
+                "special_requests": a.special_requests,
+                "created_at": utc_to_local_iso(a.created_at),
+            }
+            for a in appointments
+        ],
+        # Legacy: separate calls array for existing frontend
+        "calls": [
+            {
+                "id": str(c.id),
+                "session_id": str(c.id),
+                "started_at": utc_to_local_iso(c.initiated_at),
+                "duration_seconds": (
+                    c.messages[0].voice_details.duration_seconds 
+                    if c.messages and c.messages[0].voice_details 
+                    else None
+                ),
+                "satisfaction_score": c.satisfaction_score,
+                "sentiment": c.sentiment,
+                "outcome": c.outcome,
+                "escalated": c.outcome == "escalated",
+            }
+            for c in voice_calls
+        ],
+        # All conversations (including voice) for timeline
+        "conversations": [
+            {
+                "id": str(c.id),
+                "channel": c.channel,
+                "initiated_at": utc_to_local_iso(c.initiated_at),
+                "status": c.status,
+                "outcome": c.outcome,
+                "satisfaction_score": c.satisfaction_score,
+            }
+            for c in non_voice
+        ],
+        # Stats for the stats cards
+        "stats": {
+            "customer_id": customer.id,
+            "total_appointments": len(appointments),
+            "completed_appointments": completed_appts,
+            "cancelled_appointments": cancelled_appts,
+            "no_show_rate": no_show_rate,
+            "total_calls": len(voice_calls),
+            "total_conversations": len(non_voice),
+            "avg_satisfaction_score": avg_satisfaction,
+            "is_new_client": customer.is_new_client,
+            "has_allergies": customer.has_allergies,
+            "is_pregnant": customer.is_pregnant,
+        },
+    }
+    
+    # Enhanced: Add session grouping if requested
+    if include_sessions:
+        # Re-sort chronologically for session grouping
+        all_convs_chronological = sorted(conversations, key=lambda c: c.initiated_at)
+        sessions = _group_conversations_into_sessions(all_convs_chronological)
+        response["sessions"] = sessions
+        response["session_count"] = len(sessions)
+        
+        channels_used = set()
+        for session in sessions:
+            channels_used.update(session["channels"])
+        response["channels_used"] = list(channels_used)
+        response["is_multimodal_customer"] = len(channels_used) > 1
+    
+    return response

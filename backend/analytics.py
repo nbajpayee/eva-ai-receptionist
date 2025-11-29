@@ -763,7 +763,7 @@ Analyze the following conversation between Ava (AI receptionist) and a customer.
 Provide your analysis in JSON format with these fields:
 - satisfaction_score: score from 1-10 (1=very dissatisfied, 10=very satisfied)
 - sentiment: overall sentiment (positive, neutral, negative, mixed)
-- outcome: what happened? Options: appointment_scheduled, appointment_rescheduled, appointment_cancelled, info_request, complaint, unresolved
+- outcome: what happened? Options: appointment_scheduled, appointment_rescheduled, appointment_cancelled, info_request, escalated, abandoned, unresolved
 - summary: brief 1-2 sentence description of the conversation
 
 Consider:
@@ -1474,12 +1474,12 @@ Consider:
 
             outcome_config = {
                 "appointment_scheduled": ("Booked", "#10b981"),  # emerald-500
+                "appointment_rescheduled": ("Rescheduled", "#6366f1"),  # indigo-500
+                "appointment_cancelled": ("Cancelled", "#f97316"),  # orange-500
                 "info_request": ("Info Only", "#3b82f6"),  # blue-500
-                "complaint": ("Complaint", "#ef4444"),  # red-500
-                "unresolved": ("Unresolved", "#f97316"),  # orange-500
-                "browsing": ("Browsing", "#8b5cf6"),  # violet-500
                 "escalated": ("Escalated", "#eab308"),  # yellow-500
                 "abandoned": ("Abandoned", "#6b7280"),  # gray-500
+                "unresolved": ("Unresolved", "#64748b"),  # slate-500
             }
 
             return [

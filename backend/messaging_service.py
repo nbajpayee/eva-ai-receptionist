@@ -114,6 +114,11 @@ class MessagingService:
         canonical_phone = (customer_phone or "").strip() or None
         email_value = (customer_email or "").strip() or None
         name_value = (customer_name or "").strip() or None
+        
+        # Database requires name - use placeholder if not provided
+        # Name will be updated when detected from conversation
+        if not name_value:
+            name_value = "Guest"
 
         if canonical_phone:
             customer = (

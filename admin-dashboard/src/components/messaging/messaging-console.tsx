@@ -299,6 +299,45 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
     [loadConversationMessages]
   );
 
+  // Fetch conversations and load first conversation on mount
+  const hasLoadedInitial = useRef(false);
+  useEffect(() => {
+    if (hasLoadedInitial.current) return;
+    hasLoadedInitial.current = true;
+    
+    const loadInitialData = async () => {
+      // First fetch conversations if we don't have any
+      if (conversations.length === 0) {
+        setIsLoadingConversations(true);
+        try {
+          const response = await fetch("/api/admin/messaging");
+          if (response.ok) {
+            const data = await response.json();
+            const items = data.conversations ?? [];
+            setConversations(items);
+            
+            // Load first conversation's messages
+            if (items.length > 0 && items[0]?.id) {
+              await loadConversationMessages(items[0].id);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to load conversations", err);
+        } finally {
+          setIsLoadingConversations(false);
+        }
+      } else if (initialMessages.length === 0 && conversations.length > 0 && !activeConversationId) {
+        // We have conversations but no messages - load first one
+        const firstConversation = conversations[0];
+        if (firstConversation?.id) {
+          void loadConversationMessages(firstConversation.id);
+        }
+      }
+    };
+    
+    void loadInitialData();
+  }, []);  // Only run once on mount
+
   const getNextPhoneNumber = useCallback(() => {
     // Find highest phone number ending
     let maxNum = 5555550100; // default base
@@ -705,7 +744,7 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
             
             <CardContent className="flex flex-col flex-1 p-0 overflow-hidden">
                {/* Messages Area */}
-              <ScrollArea className="flex-1 bg-zinc-50/30">
+              <ScrollArea className="flex-1 bg-zinc-50/30" type="always">
                 <div ref={scrollRef} className="flex flex-col gap-6 p-6 min-h-full">
                   {error ? (
                     <div className="rounded-xl border border-rose-200 bg-rose-50/50 px-4 py-3 text-sm text-rose-700 backdrop-blur-sm">
@@ -877,9 +916,18 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
                       onFocus={() => setIsRefreshPaused(true)}
                       onBlur={() => setIsRefreshPaused(false)}
                       onKeyDown={(event) => {
-                        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                          event.preventDefault();
-                          event.currentTarget.form?.requestSubmit();
+                        // For SMS: Enter submits, Shift+Enter for newline
+                        // For Email: Cmd/Ctrl+Enter submits (allows multi-line)
+                        if (channel === "sms") {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            event.currentTarget.form?.requestSubmit();
+                          }
+                        } else {
+                          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                            event.preventDefault();
+                            event.currentTarget.form?.requestSubmit();
+                          }
                         }
                       }}
                       placeholder={

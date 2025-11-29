@@ -17,12 +17,14 @@ const iconMap = {
   email: Mail,
 };
 
-const statusColor = {
+const statusColor: Record<string, string> = {
   booked: "bg-emerald-100 text-emerald-700",
   info_only: "bg-zinc-100 text-zinc-700",
   escalated: "bg-amber-100 text-amber-700",
   abandoned: "bg-rose-100 text-rose-700",
   rescheduled: "bg-blue-100 text-blue-700",
+  cancelled: "bg-orange-100 text-orange-700",
+  unresolved: "bg-slate-100 text-slate-600",
 };
 
 export function CommunicationsLedger({ calls }: CommunicationsLedgerProps) {

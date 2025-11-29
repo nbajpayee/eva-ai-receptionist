@@ -87,18 +87,20 @@ export default function Home() {
           
           // Map backend outcomes to frontend display outcomes
           const outcomeMap: Record<string, CallRecord["outcome"]> = {
+            // Backend canonical outcomes
             "appointment_scheduled": "booked",
             "appointment_rescheduled": "rescheduled",
-            "appointment_cancelled": "abandoned",
+            "appointment_cancelled": "cancelled",
             "info_request": "info_only",
             "complaint": "escalated",
-            "unresolved": "info_only",
+            "escalated": "escalated",
+            "abandoned": "abandoned",
+            "unresolved": "unresolved",
             // Also support direct frontend values
             "booked": "booked",
             "info_only": "info_only",
-            "escalated": "escalated",
-            "abandoned": "abandoned",
             "rescheduled": "rescheduled",
+            "cancelled": "cancelled",
           };
           
           const transformedCalls: CallRecord[] = data.conversations.map((c: any) => {

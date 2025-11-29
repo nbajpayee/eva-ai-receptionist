@@ -169,6 +169,7 @@ class Customer(Base):
     # Relationships
     appointments = relationship("Appointment", back_populates="customer")
     conversations = relationship("Conversation", back_populates="customer")
+    threads = relationship("CustomerThread", back_populates="customer", order_by="desc(CustomerThread.last_activity_at)")
 
 
 class Appointment(Base):
@@ -483,10 +484,83 @@ class ProviderPerformanceMetric(Base):
 # ==================== Omnichannel Communications Models (Phase 2) ====================
 
 
+class CustomerThread(Base):
+    """
+    A logical grouping of related conversations for a customer.
+    
+    A thread represents a single customer intent or issue that may span
+    multiple conversations across different channels (SMS, voice, email).
+    
+    Examples:
+    - "Botox appointment booking" - might include initial SMS, follow-up call, confirmation SMS
+    - "Complaint about service" - might include email complaint, phone call resolution
+    - "Pricing inquiry" - single email exchange
+    
+    Threads are auto-created when:
+    1. A new conversation starts and no active thread exists for the customer
+    2. AI determines the new conversation is about a different topic than existing threads
+    
+    Threads help the dashboard show a unified view of customer interactions.
+    """
+
+    __tablename__ = "customer_threads"
+
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    customer_id = Column(
+        Integer, ForeignKey("customers.id"), nullable=False, index=True
+    )
+
+    # Thread metadata
+    subject = Column(String(255), nullable=True)  # AI-generated or first message subject
+    intent = Column(String(100), nullable=True, index=True)  # booking, inquiry, complaint, reschedule, cancel, follow_up
+    
+    # Status tracking
+    status = Column(String(20), nullable=False, default="open", index=True)  # open, resolved, pending
+    priority = Column(String(20), nullable=True)  # low, normal, high, urgent
+    
+    # Outcome (set when thread is resolved)
+    outcome = Column(String(50), nullable=True)  # appointment_scheduled, info_provided, complaint_resolved, etc.
+    
+    # Linked appointment (if thread resulted in a booking)
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True, index=True)
+    
+    # AI-generated summary of the entire thread
+    ai_summary = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+    last_activity_at = Column(DateTime, nullable=False, index=True)
+
+    # Relationships
+    customer = relationship("Customer", back_populates="threads")
+    conversations = relationship("Conversation", back_populates="thread", order_by="Conversation.initiated_at")
+    appointment = relationship("Appointment")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('open', 'resolved', 'pending')",
+            name="check_thread_status",
+        ),
+        CheckConstraint(
+            "intent IS NULL OR intent IN ('booking', 'inquiry', 'complaint', 'reschedule', 'cancel', 'follow_up', 'confirmation', 'other')",
+            name="check_thread_intent",
+        ),
+        CheckConstraint(
+            "priority IS NULL OR priority IN ('low', 'normal', 'high', 'urgent')",
+            name="check_thread_priority",
+        ),
+    )
+
+
 class Conversation(Base):
     """
     Omnichannel conversation model supporting voice, SMS, and email.
-    Top-level container for any communication thread.
+    A single communication session within a CustomerThread.
+    
+    Multiple conversations can belong to the same thread when they're
+    about the same customer intent/issue.
     """
 
     __tablename__ = "conversations"
@@ -495,6 +569,11 @@ class Conversation(Base):
     customer_id = Column(
         Integer, ForeignKey("customers.id"), nullable=True, index=True
     )  # Nullable - some calls may not identify customer
+    
+    # Thread grouping (nullable for backward compatibility)
+    thread_id = Column(
+        GUID(), ForeignKey("customer_threads.id"), nullable=True, index=True
+    )
 
     channel = Column(String(20), nullable=False, index=True)
     status = Column(String(20), nullable=False, index=True)
@@ -532,6 +611,7 @@ class Conversation(Base):
 
     # Relationships
     customer = relationship("Customer", back_populates="conversations")
+    thread = relationship("CustomerThread", back_populates="conversations")
     messages = relationship(
         "CommunicationMessage",
         back_populates="conversation",

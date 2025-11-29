@@ -66,7 +66,7 @@ def infer_outcome_from_session(session: CallSession) -> str:
     """
     Infer conversation outcome from call session data.
     Maps to: appointment_scheduled, appointment_rescheduled, appointment_cancelled,
-             info_request, complaint, unresolved
+             info_request, escalated, abandoned, unresolved
     """
     if session.outcome:
         # Map old outcomes to new schema
@@ -75,8 +75,8 @@ def infer_outcome_from_session(session: CallSession) -> str:
             "rescheduled": "appointment_rescheduled",
             "cancelled": "appointment_cancelled",
             "info_only": "info_request",
-            "escalated": "complaint",
-            "abandoned": "unresolved",
+            "escalated": "escalated",
+            "abandoned": "abandoned",
         }
         return outcome_map.get(session.outcome, "unresolved")
 

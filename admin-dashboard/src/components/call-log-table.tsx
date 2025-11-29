@@ -10,7 +10,7 @@ export type CallRecord = {
   id: string;
   startedAt: string;
   durationSeconds: number;
-  outcome: "booked" | "info_only" | "escalated" | "abandoned" | "rescheduled";
+  outcome: "booked" | "info_only" | "escalated" | "abandoned" | "rescheduled" | "cancelled" | "unresolved";
   phoneNumber?: string | null;
   satisfactionScore?: number | null;
   escalated?: boolean;
@@ -24,6 +24,8 @@ const outcomeCopy: Record<CallRecord["outcome"], string> = {
   escalated: "Escalated",
   abandoned: "Abandoned",
   rescheduled: "Rescheduled",
+  cancelled: "Cancelled",
+  unresolved: "Unresolved",
 };
 
 const outcomeTone: Record<CallRecord["outcome"], string> = {
@@ -32,6 +34,8 @@ const outcomeTone: Record<CallRecord["outcome"], string> = {
   escalated: "bg-amber-50 text-amber-700 border-amber-100",
   abandoned: "bg-rose-50 text-rose-700 border-rose-100",
   rescheduled: "bg-primary/10 text-primary border-primary/20",
+  cancelled: "bg-orange-50 text-orange-700 border-orange-100",
+  unresolved: "bg-slate-100 text-slate-600 border-slate-200",
 };
 
 const channelCopy: Record<NonNullable<CallRecord["channel"]>, string> = {
