@@ -9,6 +9,16 @@ An intelligent voice AI application that serves as a virtual receptionist for me
 - **Admin Dashboard:** https://dashboard.getevaai.com
 - **Backend API:** https://api.getevaai.com
 
+## Documentation Map
+
+- **README.md** – high-level overview, phases, and architecture diagrams.
+- **CLAUDE.md** – in-depth engineering and development guide for working on Eva.
+- **BOOKING_ARCHITECTURE.md** – unified booking + TurnOrchestrator/FAQ design and flow.
+- **DEPLOYMENT.md** – production deployment, environments, and operational notes.
+- **TODO.md / NEXT_STEPS.md** – active roadmap, prioritized work, and upcoming phases.
+- **PRE_PILOT_CHECKLIST.md / DEMO_READINESS_CHECKLIST.md** – runbooks for pilot/demo readiness.
+- **docs/archive/** – historical migration & research docs (omnichannel Phase 2, outbound, messaging console).
+
 ## Features
 
 ### Phase 1 (Current - Production Ready)
@@ -42,7 +52,7 @@ An intelligent voice AI application that serves as a virtual receptionist for me
 - 🚧 **Messaging Console** (Next): Testing interface for SMS/email before Twilio/SendGrid
 - ⏳ **Twilio/SendGrid Integration**: Planned for production (post-MVP)
 
-**Migration Details**: See `OMNICHANNEL_MIGRATION.md`, `IMPLEMENTATION_COMPLETE.md`, `MIGRATION_SUCCESS.md`, `DUAL_WRITE_VALIDATION.md`, and `CUSTOMER_LINKAGE_TEST.md` for full documentation.
+**Migration Details**: Phase 2 omnichannel migration completed Nov 10, 2025. See `docs/archive/OMNICHANNEL_MIGRATION.md` for historical context. Current schema documented in CLAUDE.md.
 
 ### Phase 2.5 (Complete - Nov 18, 2025) ✅ **Deterministic Booking Flow**
 - ✅ **Problem Solved**: AI hesitation causing infinite loops and failed bookings
@@ -424,7 +434,7 @@ Update your med spa information in `.env`:
 - **daily_metrics**: Aggregated analytics
 
 ### New Omnichannel Schema (Phase 2 - ✅ COMPLETED Nov 10, 2025)
-**See OMNICHANNEL_MIGRATION.md, IMPLEMENTATION_COMPLETE.md, and MIGRATION_SUCCESS.md for full details**
+**Migration completed Nov 10, 2025. See `docs/archive/OMNICHANNEL_MIGRATION.md` for historical details.**
 
 - **conversations**: Top-level container for any communication (voice/SMS/email)
   - Includes satisfaction score, sentiment, outcome, AI summary

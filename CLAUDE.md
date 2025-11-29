@@ -42,7 +42,6 @@ Phase 1A is production-ready. Voice interface complete with smart commits and in
   3. Results injected into conversation history so AI sees tool context across messages
 - **Architecture**: `MessagingService.generate_ai_response` (readiness detection, preemptive `check_availability`, and deterministic booking) plus `MessagingService._execute_tool_call` (tool execution via `BookingContext` + `BookingOrchestrator`). See `BOOKING_ARCHITECTURE.md` for the layered overview.
 - **Benefits**: 100% reliable booking completion, no AI hesitation, no retry loops, immediate confirmation
-- **Documentation**: See `FINAL_SOLUTION_DETERMINISTIC_TOOL_EXECUTION.md`, `TOOL_CALL_HISTORY_PERSISTENCE_FIX.md`, `COMPLETE_CONVERSATION_SUMMARY.md`
 - **Tests**: 37/37 passing including new `TestDeterministicBooking` suite
 
 **Architecture Refactor (Nov 28, 2025)** 
@@ -99,7 +98,7 @@ docker-compose down
 ```
 
 ### Testing Voice Interface
-Open `frontend/index.html` in a browser to test the legacy voice interface prototype. This is a simple WebSocket client for development/debugging.
+Access the voice interface at `/voice` in the admin dashboard (`admin-dashboard/src/app/voice/page.tsx`). The interface includes VAD settings, real-time transcript display, and live status indicators.
 
 ## High-Level Architecture
 
@@ -195,7 +194,7 @@ All models use SQLAlchemy ORM defined in `backend/database.py`.
 
 **Status**: Complete. The legacy `call_sessions`/`call_events` schema has been superseded by the omnichannel conversations schema.
 
-**New Schema** (see `OMNICHANNEL_MIGRATION.md` and `README.md` for full details):
+**New Schema** (see `docs/archive/OMNICHANNEL_MIGRATION.md` for historical context and `README.md` for current implementation):
 - `conversations`: Top-level container for any communication (voice/SMS/email). Fields include customer_id, channel, status, satisfaction_score, sentiment, outcome, ai_summary, timestamps, and metadata.
 - `communication_messages`: Individual messages within conversations.
   - Voice: 1 message per call (entire transcript)
@@ -400,7 +399,7 @@ curl "http://localhost:8000/api/admin/calls?page=1&page_size=10"
 **CURRENT APPROACH**: Hybrid client-side + server-side VAD with smart dual-speed commits. This is the **production-ready** architecture after testing Rounds 1-6.
 
 **How it works:**
-1. **Client-side VAD** (`frontend/app.js`):
+1. **Client-side VAD** (`admin-dashboard/src/hooks/useVoiceSession.ts`):
    - Calculates RMS (Root Mean Square) of audio buffer
    - Threshold: 0.005 (configurable based on environment noise)
    - Detects when user starts/stops speaking
@@ -428,8 +427,8 @@ curl "http://localhost:8000/api/admin/calls?page=1&page_size=10"
 - Graceful error handling differentiates expected vs unexpected errors
 
 **Configuration Files:**
-- **Frontend**: `frontend/app.js` (vanilla - production ready)
-- **Frontend**: `admin-dashboard/src/hooks/useVoiceSession.ts` (Next.js - needs update)
+- **Frontend**: `admin-dashboard/src/hooks/useVoiceSession.ts` (Next.js voice session hook)
+- **Frontend**: `admin-dashboard/src/app/voice/page.tsx` (Voice interface UI)
 - **Backend**: `backend/realtime_client.py` (lines 403-410 for `cancel_response`)
 - **Backend**: `backend/main.py` (lines 186-192 for commit/interrupt handlers)
 
