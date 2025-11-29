@@ -2,9 +2,8 @@
 
 ## Overview
 
-This guide helps you test **GPT-5's smart commit strategy** which has been implemented in both frontends:
-- **Next.js frontend**: `admin-dashboard/src/hooks/useVoiceSession.ts`
-- **Vanilla frontend**: `frontend/app.js`
+This guide helps you test **GPT-5's smart commit strategy** implemented in the voice interface:
+- **Voice Interface**: `admin-dashboard/src/hooks/useVoiceSession.ts` and `admin-dashboard/src/app/voice/page.tsx`
 
 ## GPT-5's Smart Commit Strategy
 
@@ -62,12 +61,7 @@ elif msg_type == "commit":
 
 ### 2. Frontend Setup
 
-**For Vanilla Frontend:**
-- File: `frontend/index.html`
-- No build required
-- Open directly in Chrome
-
-**For Next.js Frontend:**
+**Admin Dashboard Voice Interface:**
 ```bash
 cd admin-dashboard
 npm install
@@ -76,13 +70,12 @@ npm run dev  # Runs on http://localhost:3000
 
 ## Testing Instructions
 
-### Test 1: Vanilla Frontend (frontend/index.html)
+### Test 1: Admin Dashboard Voice Interface
 
 #### Step 1: Open Voice Interface
 ```bash
-# From project root
-open frontend/index.html
-# Or navigate to file:///path/to/Ava/frontend/index.html
+# Navigate to admin dashboard
+open http://localhost:3000/voice
 ```
 
 #### Step 2: Start Call and Watch Console
@@ -252,14 +245,8 @@ Should be identical to Test 1 backend logs.
 - Background noise triggering VAD
 
 **Solution:**
-Increase VAD threshold in frontend:
+Increase VAD threshold in `admin-dashboard/src/hooks/useVoiceSession.ts`:
 
-**Vanilla (`frontend/app.js` line 19):**
-```javascript
-const VAD_THRESHOLD = 0.01;  // Increase from 0.005
-```
-
-**Next.js (`admin-dashboard/src/hooks/useVoiceSession.ts` line 29):**
 ```typescript
 const DEFAULT_VAD_THRESHOLD = 0.01;  // Increase from 0.005
 ```
@@ -280,16 +267,10 @@ const VAD_THRESHOLD = 0.001;  // Decrease from 0.005
 - Long delay between stopping speech and seeing transcription
 
 **Solution:**
-Decrease fast commit delay:
+Decrease fast commit delay in `admin-dashboard/src/hooks/useVoiceSession.ts`:
 
-**Vanilla (`frontend/app.js` line 16):**
-```javascript
-const COMMIT_DELAY_FAST_MS = 80;  // Decrease from 120
-```
-
-**Next.js (`admin-dashboard/src/hooks/useVoiceSession.ts` line 26):**
 ```typescript
-const COMMIT_DELAY_MS = 80;  // Note: Next.js doesn't have separate FAST constant
+const COMMIT_DELAY_FAST_MS = 80;  // Decrease from 120
 ```
 
 ### Issue: Speech Cut Off
