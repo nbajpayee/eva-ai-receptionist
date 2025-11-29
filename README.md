@@ -74,6 +74,29 @@ An intelligent voice AI application that serves as a virtual receptionist for me
 - ✅ **Real-time Call Status**: Live monitoring with 5-second auto-polling, active calls indicator
 - ✅ **Silero VAD Infrastructure**: 95%+ speech detection accuracy (ready for integration)
 
+### Phase 2.7 (Complete - Nov 28, 2025) ✅ **Architecture Refactor**
+- ✅ **BookingOrchestrator**: Single entry point for all booking operations (`backend/booking/orchestrator.py`)
+- ✅ **Typed Contracts**: `BookingContext`, `CheckAvailabilityResult`, `BookingResult` replace `Dict[str, Any]`
+- ✅ **Type Safety**: `BookingContext` now uses proper types (`Session`, `Conversation`, `Customer`, `CalendarService`)
+- ✅ **AI Config Module**: `backend/ai_config.py` provides model constants and shared OpenAI client
+- ✅ **Realtime Config**: `backend/realtime_config.py` expanded with VAD settings, audio formats, temperature options
+- ✅ **Comprehensive Metrics**: All 4 booking tools (check/book/reschedule/cancel) tracked in both voice and messaging
+- ✅ **Legacy Schema Removed**: `CallSession`/`CallEvent` models deleted, conversations-only architecture
+
+### Phase 2.8 (Complete - Nov 29, 2025) ✅ **Turn Orchestration & FAQ**
+- ✅ **TurnOrchestrator**: Lightweight intent classification (booking/FAQ/general/small_talk)
+  - Keyword-based routing (no LLM cost, 0ms latency)
+  - Metadata-aware (respects `pending_booking_intent` flag)
+  - Cross-channel (voice + messaging use same logic)
+- ✅ **FAQ Service**: Database-backed FAQ with intelligent matching
+  - Tokenized keyword scoring with stopword filtering
+  - Category support for FAQ organization
+  - Returns structured answers from `FAQArticle` table
+- ✅ **Comprehensive Tests**: 5 passing tests in `test_turn_orchestrator.py`
+- ✅ **Production Ready**: Integrated into both voice and messaging flows
+
+**Files**: `backend/turn_orchestrator.py`, `backend/faq_service.py`, `backend/faq_tools.py`
+
 ### Phase 3 (Complete - Nov 18-21, 2025) ✅ **Production Deployment**
 - ✅ **Marketing Site**: https://getevaai.com (Vercel)
 - ✅ **Admin Dashboard**: https://dashboard.getevaai.com (Vercel)
@@ -118,13 +141,13 @@ An intelligent voice AI application that serves as a virtual receptionist for me
 │  ┌───────────▼───────────────────────────────────▼──────────────┐  │
 │  │                   Domain Layer                                │  │
 │  │  ┌──────────────────────────────────────────────────────┐   │  │
-│  │  │          BookingOrchestrator (Shared)                │   │  │
-│  │  │  • check_availability()                              │   │  │
-│  │  │  • book_appointment()                                │   │  │
-│  │  │  • reschedule_appointment()                          │   │  │
-│  │  │  • cancel_appointment()                              │   │  │
-│  │  │                                                       │   │  │
-│  │  │  Uses: SlotSelectionManager (enforces slot reuse)    │   │  │
+│  │  │   Turn & Booking Orchestration                      │   │  │
+│  │  │  • TurnOrchestrator (intent: booking/FAQ/general/   │   │  │
+│  │  │    small_talk)                                      │   │  │
+│  │  │  • BookingOrchestrator (check/book/reschedule/      │   │  │
+│  │  │    cancel)                                          │   │  │
+│  │  │  • FAQ Service (get_faq_answer)                     │   │  │
+│  │  │  Uses: SlotSelectionManager (enforces slot reuse)   │   │  │
 │  │  └──────────────────────────────────────────────────────┘   │  │
 │  └───────────────────────────┬──────────────────────────────────┘  │
 │                              │                                      │
@@ -200,6 +223,8 @@ An intelligent voice AI application that serves as a virtual receptionist for me
 - ✅ Deterministic slot enforcement prevents race conditions
 - ✅ Channel-specific UX without forking business rules
 - ✅ Comprehensive metrics for monitoring (tool execution + calendar errors)
+
+_Future extensions_: TurnOrchestrator already provides cross-channel turn routing (booking vs FAQ vs general vs small talk). When adding payments/refunds or additional adapters beyond Realtime (voice) and MessagingService (messaging channels like SMS/email/Instagram), plan to introduce a more explicit booking workflow state machine and a shared `BookingContextBuilder` used by all adapters.
 
 ## Tech Stack
 

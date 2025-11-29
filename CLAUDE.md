@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is **Ava**, a voice AI receptionist for medical spas built with FastAPI (backend), Next.js 14 (admin dashboard), and OpenAI's Realtime API. The system handles appointment scheduling via Google Calendar, tracks call analytics with AI-powered satisfaction scoring, and provides a comprehensive admin dashboard for monitoring conversations and metrics.
 
-**Current Status (Nov 21, 2025)**: **DEPLOYED TO PRODUCTION** ✅
+**Current Status (Nov 29, 2025)**: **DEPLOYED TO PRODUCTION** ✅
 - **Marketing Site**: https://getevaai.com (Vercel)
 - **Admin Dashboard**: https://dashboard.getevaai.com (Vercel)
 - **Backend API**: https://api.getevaai.com (Railway)
@@ -105,51 +105,69 @@ Open `frontend/index.html` in a browser to test the legacy voice interface proto
 
 ### System Components
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Client (Browser)                         │
-│  ┌──────────────────┐              ┌──────────────────┐    │
-│  │ Voice Interface  │              │ Admin Dashboard  │    │
-│  │ (index.html)     │              │ (Next.js)        │    │
-│  └────────┬─────────┘              └────────┬─────────┘    │
-└───────────┼──────────────────────────────────┼──────────────┘
-            │                                  │
-            │ WebSocket                        │ HTTP/REST
-            │ /ws/voice/{session_id}          │ /api/admin/*
-            │                                  │
-┌───────────▼──────────────────────────────────▼──────────────┐
-│                   FastAPI Backend                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │ main.py      │  │ realtime_    │  │ analytics.py │     │
-│  │ (WebSocket)  │  │ client.py    │  │              │     │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │
-│         │                  │                  │              │
-│         └──────────────────┴──────────────────┘              │
-│                            │                                 │
-└────────────────────────────┼─────────────────────────────────┘
-                             │
-          ┌──────────────────┼──────────────────┐
-          │                  │                  │
-          ▼                  ▼                  ▼
-┌─────────────────┐  ┌─────────────┐  ┌──────────────────┐
-│ OpenAI Realtime │  │   Google    │  │     Supabase     │
-│      API        │  │  Calendar   │  │   (PostgreSQL)   │
-│  (Voice I/O)    │  │     API     │  │                  │
-└─────────────────┘  └─────────────┘  └──────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                          Client Layer                                │
+│  ┌────────────────────┐         ┌──────────────────────────────┐   │
+│  │  Voice Interface   │         │   Admin Dashboard (Next.js)  │   │
+│  │  (WebSocket)       │         │   + Marketing Site           │   │
+│  └─────────┬──────────┘         └──────────────┬───────────────┘   │
+└────────────┼────────────────────────────────────┼───────────────────┘
+             │                                    │
+             │ WebSocket                          │ HTTP/REST
+             │ /ws/voice/{session_id}            │ /api/admin/*
+             │                                    │
+┌────────────▼────────────────────────────────────▼───────────────────┐
+│                      FastAPI Backend                                 │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                    Channel Layer                              │  │
+│  │  ┌─────────────────┐              ┌─────────────────────┐   │  │
+│  │  │ RealtimeClient  │              │ MessagingService    │   │  │
+│  │  │ (Voice)         │              │ (SMS/Email)         │   │  │
+│  │  └────────┬────────┘              └──────────┬──────────┘   │  │
+│  └───────────┼──────────────────────────────────┼──────────────┘  │
+│              │                                   │                  │
+│  ┌───────────▼───────────────────────────────────▼──────────────┐  │
+│  │                   Domain Layer                                │  │
+│  │  ┌──────────────────────────────────────────────────────┐   │  │
+│  │  │   Turn & Booking Orchestration                      │   │  │
+│  │  │  • TurnOrchestrator (intent: booking/FAQ/general/   │   │  │
+│  │  │    small_talk)                                      │   │  │
+│  │  │  • BookingOrchestrator (check/book/reschedule/      │   │  │
+│  │  │    cancel)                                          │   │  │
+│  │  │  • FAQ Service (get_faq_answer)                     │   │  │
+│  │  │  Uses: SlotSelectionManager (enforces slot reuse)   │   │  │
+│  │  └──────────────────────────────────────────────────────┘   │  │
+│  └───────────────────────────┬──────────────────────────────────┘  │
+│                              │                                      │
+│  ┌───────────────────────────▼──────────────────────────────────┐  │
+│  │                  Integration Layer                            │  │
+│  │  ┌────────────┐  ┌──────────┐  ┌──────────┐  ┌───────────┐ │  │
+│  │  │ Calendar   │  │Analytics │  │ AI Config│  │ Database  │ │  │
+│  │  │ Service    │  │ Service  │  │ (OpenAI) │  │ (ORM)     │ │  │
+│  │  └─────┬──────┘  └─────┬────┘  └────┬─────┘  └─────┬─────┘ │  │
+│  └────────┼───────────────┼────────────┼──────────────┼────────┘  │
+└───────────┼───────────────┼────────────┼──────────────┼───────────┘
+            │               │            │              │
+            ▼               ▼            ▼              ▼
+┌───────────────┐  ┌──────────────┐  ┌──────────┐  ┌─────────────┐
+│ Google        │  │   OpenAI     │  │ OpenAI   │  │  Supabase   │
+│ Calendar API  │  │   GPT-4      │  │ Realtime │  │ PostgreSQL  │
+│               │  │ (Sentiment)  │  │   API    │  │             │
+└───────────────┘  └──────────────┘  └──────────┘  └─────────────┘
 ```
 
 ### Data Flow
 
 **Voice Call Flow**:
 1. Browser connects to `/ws/voice/{session_id}` WebSocket
-2. FastAPI creates `CallSession` record in database
-3. FastAPI establishes WebSocket connection to OpenAI Realtime API
+2. `RealtimeClient` creates a `Conversation` (and initial `CommunicationMessage`) in the database
+3. Establishes WebSocket to OpenAI Realtime API
 4. Audio streams bidirectionally: Browser ↔ FastAPI ↔ OpenAI
-5. OpenAI may call functions (e.g., `book_appointment`) which trigger Google Calendar API calls
-6. On disconnect, FastAPI:
-   - Stores full transcript
-   - Calls GPT-4 for satisfaction scoring/sentiment analysis
-   - Updates `CallSession` with analytics
-   - Aggregates daily metrics
+5. When the AI calls booking or FAQ tools → TurnOrchestrator routes to booking/FAQ → `BookingOrchestrator`/`faq_service` → Google Calendar or database as needed
+6. On disconnect:
+   - Stores transcript and metadata
+   - Calls GPT-4 for satisfaction scoring/sentiment
+   - Updates `Conversation` with analytics and aggregates metrics
 
 **Admin Dashboard Flow**:
 1. Next.js frontend calls relative `/api/admin/*` routes (Next.js API routes) on the same origin as the dashboard.
