@@ -15,9 +15,10 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from analytics import AnalyticsService
+from config import get_settings
 from database import (
     Appointment,
     CommunicationMessage,
@@ -25,6 +26,7 @@ from database import (
     Customer,
     get_db,
 )
+from timezone_utils import get_period_range_utc, get_med_spa_timezone, utc_to_local_iso
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -42,6 +44,9 @@ async def get_metrics_overview(
     """
     Get overview metrics for the specified period.
 
+    All date filtering uses the med spa's configured timezone (MED_SPA_TIMEZONE).
+    "Today" means today in the med spa's local time, not UTC.
+
     Returns:
     - Total calls/conversations
     - Bookings made
@@ -49,23 +54,8 @@ async def get_metrics_overview(
     - Conversion rate
     - Channel breakdown
     """
-    # Calculate date range
-    now = datetime.utcnow()
-    if period == "today":
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = now
-    elif period == "week":
-        start = now - timedelta(days=7)
-        end = now
-    elif period == "month":
-        start = now - timedelta(days=30)
-        end = now
-    elif period == "custom" and start_date and end_date:
-        start = datetime.fromisoformat(start_date)
-        end = datetime.fromisoformat(end_date)
-    else:
-        start = now - timedelta(days=1)
-        end = now
+    # Calculate date range using med spa timezone
+    start, end = get_period_range_utc(period, start_date, end_date)
 
     # Query metrics
     total_conversations = (
@@ -134,18 +124,77 @@ async def get_metrics_overview(
         .all()
     )
 
+    # Count unique customers engaged
+    customers_engaged = (
+        db.query(func.count(func.distinct(Conversation.customer_id)))
+        .filter(
+            Conversation.initiated_at >= start,
+            Conversation.initiated_at <= end,
+            Conversation.customer_id.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+
+    # Count total messages sent (outbound)
+    total_messages_sent = (
+        db.query(func.count(CommunicationMessage.id))
+        .join(Conversation, CommunicationMessage.conversation_id == Conversation.id)
+        .filter(
+            Conversation.initiated_at >= start,
+            Conversation.initiated_at <= end,
+            CommunicationMessage.direction == "outbound",
+        )
+        .scalar()
+        or 0
+    )
+
+    # Calculate total talk time (sum of voice call durations)
+    voice_conversations = (
+        db.query(Conversation)
+        .filter(
+            Conversation.initiated_at >= start,
+            Conversation.initiated_at <= end,
+            Conversation.channel == "voice",
+            Conversation.completed_at.isnot(None),
+        )
+        .all()
+    )
+    total_talk_time_seconds = sum(
+        (c.completed_at - c.initiated_at).total_seconds()
+        for c in voice_conversations
+        if c.completed_at and c.initiated_at
+    )
+
+    settings = get_settings()
     return {
         "period": period,
+        "timezone": settings.MED_SPA_TIMEZONE,
         "start_date": start.isoformat(),
         "end_date": end.isoformat(),
+        # Fields expected by frontend
+        "total_calls": total_conversations,
         "total_conversations": total_conversations,
+        "appointments_booked": total_appointments,
         "total_appointments": total_appointments,
         "conversion_rate": (
             round(total_appointments / total_conversations * 100, 1)
             if total_conversations > 0
             else 0
         ),
+        "avg_satisfaction_score": round(avg_satisfaction, 1),
         "average_satisfaction": round(avg_satisfaction, 1),
+        "customers_engaged": customers_engaged,
+        "total_messages_sent": total_messages_sent,
+        "total_talk_time_hours": round(total_talk_time_seconds / 3600, 2),
+        "total_talk_time_minutes": int(total_talk_time_seconds / 60),
+        "avg_call_duration_minutes": (
+            round(total_talk_time_seconds / len(voice_conversations) / 60, 2)
+            if voice_conversations
+            else 0
+        ),
+        "calls_escalated": 0,  # TODO: Track escalations
+        "escalation_rate": 0,
         "channel_breakdown": {channel: count for channel, count in channel_stats},
         "sentiment_breakdown": {
             sentiment: count for sentiment, count in sentiment_stats if sentiment
@@ -218,31 +267,33 @@ async def get_calls(
     # Count total
     total = query.count()
 
-    # Paginate
+    # Paginate with eager loading of customer
     conversations = (
-        query.order_by(Conversation.initiated_at.desc())
+        query.options(joinedload(Conversation.customer))
+        .order_by(Conversation.initiated_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
     )
 
+    settings = get_settings()
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
         "total_pages": (total + page_size - 1) // page_size,
+        "timezone": settings.MED_SPA_TIMEZONE,
         "conversations": [
             {
                 "id": conv.id,
                 "customer_id": conv.customer_id,
+                "customer_name": conv.customer.name if conv.customer else None,
+                "customer_phone": conv.customer.phone if conv.customer else None,
                 "channel": conv.channel,
                 "status": conv.status,
-                "initiated_at": (
-                    conv.initiated_at.isoformat() if conv.initiated_at else None
-                ),
-                "last_activity_at": (
-                    conv.last_activity_at.isoformat() if conv.last_activity_at else None
-                ),
+                "initiated_at": utc_to_local_iso(conv.initiated_at),
+                "completed_at": utc_to_local_iso(conv.completed_at),
+                "last_activity_at": utc_to_local_iso(conv.last_activity_at),
                 "satisfaction_score": conv.satisfaction_score,
                 "sentiment": conv.sentiment,
                 "outcome": conv.outcome,
@@ -293,14 +344,9 @@ async def get_call_detail(
         ),
         "channel": conversation.channel,
         "status": conversation.status,
-        "initiated_at": (
-            conversation.initiated_at.isoformat() if conversation.initiated_at else None
-        ),
-        "last_activity_at": (
-            conversation.last_activity_at.isoformat()
-            if conversation.last_activity_at
-            else None
-        ),
+        "initiated_at": utc_to_local_iso(conversation.initiated_at),
+        "completed_at": utc_to_local_iso(conversation.completed_at),
+        "last_activity_at": utc_to_local_iso(conversation.last_activity_at),
         "satisfaction_score": conversation.satisfaction_score,
         "sentiment": conversation.sentiment,
         "outcome": conversation.outcome,
@@ -311,7 +357,7 @@ async def get_call_detail(
                 "id": msg.id,
                 "direction": msg.direction,
                 "content": msg.content,
-                "sent_at": msg.sent_at.isoformat() if msg.sent_at else None,
+                "sent_at": utc_to_local_iso(msg.sent_at),
                 "metadata": msg.custom_metadata,
             }
             for msg in messages

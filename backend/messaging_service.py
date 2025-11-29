@@ -100,15 +100,20 @@ class MessagingService:
         *,
         db: Session,
         channel: str,
-        customer_name: str,
+        customer_name: Optional[str],
         customer_phone: Optional[str],
         customer_email: Optional[str],
     ) -> Customer:
-        """Find an existing customer by phone/email or create a new record."""
+        """Find an existing customer by phone/email or create a new record.
+        
+        Customer name is optional - it will be detected from conversation later
+        and updated via update_customer_name_from_conversation().
+        """
 
         customer: Optional[Customer] = None
         canonical_phone = (customer_phone or "").strip() or None
         email_value = (customer_email or "").strip() or None
+        name_value = (customer_name or "").strip() or None
 
         if canonical_phone:
             customer = (
@@ -126,8 +131,9 @@ class MessagingService:
             if email_value and not customer.email:
                 customer.email = email_value
                 updated = True
-            if customer.name != customer_name and customer_name:
-                customer.name = customer_name
+            # Only update name if we have a new name and customer doesn't have one
+            if name_value and not customer.name:
+                customer.name = name_value
                 updated = True
             if updated:
                 db.commit()
@@ -135,7 +141,7 @@ class MessagingService:
             return customer
 
         customer = Customer(
-            name=customer_name,
+            name=name_value,  # Can be None - will be detected later
             phone=canonical_phone,
             email=email_value,
             is_new_client=True,

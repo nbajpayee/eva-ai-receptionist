@@ -29,7 +29,7 @@ export function CommunicationsStream({ calls }: CommunicationsStreamProps) {
           StatusIcon = AlertTriangle;
           iconColor = "text-amber-600";
           ringColor = "ring-amber-200";
-        } else if (call.channel === "sms" || call.channel === "mobile_text") {
+        } else if (call.channel === "sms") {
           StatusIcon = MessageSquare;
           iconColor = "text-sky-600";
           ringColor = "ring-sky-200";

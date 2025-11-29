@@ -42,27 +42,14 @@ type ConversationSummary = {
   initiated_at?: string | null;
 };
 
-const CHANNEL_DEFAULTS: Record<MessagingChannel, { customer_name: string; customer_phone?: string; customer_email?: string; subject?: string }> = {
+const CHANNEL_DEFAULTS: Record<MessagingChannel, { customer_phone?: string; customer_email?: string; subject?: string }> = {
   sms: {
-    customer_name: "Messaging Console SMS Guest",
     customer_phone: "+15555550100",
   },
   email: {
-    customer_name: "Messaging Console Email Guest",
     customer_email: "guest@example.com",
     subject: "Messaging console outreach",
   },
-};
-
-// Random Names List
-const RANDOM_NAMES = [
-  "Alice Smith", "Bob Johnson", "Carol Williams", "David Brown", "Eve Davis",
-  "Frank Miller", "Grace Wilson", "Henry Moore", "Isabel Taylor", "Jack Anderson",
-  "Kelly Thomas", "Liam Jackson", "Mia White", "Noah Harris", "Olivia Martin"
-];
-
-const getRandomName = () => {
-  return RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
 };
 
 const RANDOM_SUBJECTS = [
@@ -75,9 +62,9 @@ const getRandomSubject = () => {
   return RANDOM_SUBJECTS[Math.floor(Math.random() * RANDOM_SUBJECTS.length)];
 };
 
-const getRandomEmail = (name: string) => {
-  const sanitized = name.toLowerCase().replace(/[^a-z]/g, "");
-  return `${sanitized}${Math.floor(Math.random() * 100)}@test.com`;
+const getRandomEmail = () => {
+  const randomId = Math.floor(Math.random() * 10000);
+  return `guest${randomId}@test.com`;
 };
 
 const QUICK_SCENARIOS = [
@@ -132,9 +119,6 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
   const [channel, setChannel] = useState<MessagingChannel>(initialConversation?.channel ?? "sms");
   
   // Form State
-  const [newCustomerName, setNewCustomerName] = useState<string>(
-    initialConversation?.customer_name ?? CHANNEL_DEFAULTS[channel].customer_name
-  );
   const [newCustomerPhone, setNewCustomerPhone] = useState<string>(
     initialConversation?.customer_phone ?? CHANNEL_DEFAULTS.sms.customer_phone ?? ""
   );
@@ -166,17 +150,12 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
   // Update form defaults when conversation/channel changes
   useEffect(() => {
     if (conversation) {
-      const defaults = CHANNEL_DEFAULTS[conversation.channel];
-      setNewCustomerName(conversation.customer_name ?? defaults.customer_name);
       if (conversation.channel === "sms") {
         setNewCustomerPhone(conversation.customer_phone ?? CHANNEL_DEFAULTS.sms.customer_phone ?? "");
       } else {
         setNewCustomerEmail(conversation.customer_email ?? CHANNEL_DEFAULTS.email.customer_email ?? "");
         setNewSubject(conversation.subject ?? CHANNEL_DEFAULTS.email.subject ?? "");
       }
-    } else {
-      // If no active conversation, don't force reset unless channel changed explicitly
-      // We handle resets in startNewConversationFlow
     }
   }, [conversation]);
 
@@ -346,12 +325,10 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
     setError(null);
     setIsLoadingMessages(false);
     
-    // Auto-populate random data
+    // Auto-populate random contact data (no name - will be detected from conversation)
     setChannel("sms");
-    const name = getRandomName();
-    setNewCustomerName(name);
     setNewCustomerPhone(getNextPhoneNumber());
-    setNewCustomerEmail(getRandomEmail(name));
+    setNewCustomerEmail(getRandomEmail());
     setNewSubject(getRandomSubject());
     setNewMessage("");
   }, [getNextPhoneNumber]);
@@ -409,15 +386,12 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
           }
         }
       } else {
-        // New conversation flow
-        const trimmedName = newCustomerName.trim();
+        // New conversation flow - no customer_name, will be detected from conversation
         const trimmedPhone = newCustomerPhone.trim();
         const trimmedEmail = newCustomerEmail.trim();
         const trimmedSubject = newSubject.trim();
 
-        // Ensure we have fallbacks if fields are empty
         const defaults = CHANNEL_DEFAULTS[activeChannel];
-        payload.customer_name = trimmedName || defaults.customer_name;
         
         if (activeChannel === "sms") {
             payload.customer_phone = trimmedPhone || defaults.customer_phone;
@@ -490,9 +464,7 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
     if (conversation) {
       return true;
     }
-    if (!newCustomerName.trim()) {
-      return false;
-    }
+    // For new conversations, just need contact info (phone or email)
     if (channel === "sms") {
       return Boolean(newCustomerPhone.trim());
     }
@@ -500,7 +472,7 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
       return Boolean(newCustomerEmail.trim());
     }
     return true;
-  }, [conversation, newMessage, newCustomerName, newCustomerPhone, newCustomerEmail, channel]);
+  }, [conversation, newMessage, newCustomerPhone, newCustomerEmail, channel]);
 
   const threadSubtitle = conversation
     ? [
@@ -797,15 +769,8 @@ export function MessagingConsole({ initialConversations, initialMessages, initia
                                  </div>
 
                                  <div className="space-y-2">
-                                     <div className="space-y-1">
-                                         <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Guest Details</label>
-                                         <Input 
-                                            className="bg-white h-8 text-xs"
-                                            placeholder="Guest Name"
-                                            value={newCustomerName} 
-                                            onChange={(e) => setNewCustomerName(e.target.value)} 
-                                         />
-                                     </div>
+                                     <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Contact Details</label>
+                                     <p className="text-[10px] text-zinc-500 -mt-1">Guest name will be detected from conversation</p>
                                      
                                      {channel === 'sms' ? (
                                          <Input 

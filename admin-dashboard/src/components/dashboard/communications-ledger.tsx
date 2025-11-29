@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, MessageSquare, Phone, Mail, Smartphone } from "lucide-react";
+import { ArrowRight, MessageSquare, Phone, Mail } from "lucide-react";
 import { type CallRecord } from "@/components/call-log-table";
 
 interface CommunicationsLedgerProps {
@@ -14,7 +14,6 @@ interface CommunicationsLedgerProps {
 const iconMap = {
   voice: Phone,
   sms: MessageSquare,
-  mobile_text: Smartphone,
   email: Mail,
 };
 
@@ -59,7 +58,7 @@ export function CommunicationsLedger({ calls }: CommunicationsLedgerProps) {
               
               <div>
                 <span className="inline-flex items-center rounded-md bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-600 ring-1 ring-inset ring-zinc-500/10">
-                  {call.channel === "mobile_text" ? "SMS" : (call.channel ?? "Voice").toUpperCase()}
+                  {(call.channel ?? "voice").toUpperCase()}
                 </span>
               </div>
               

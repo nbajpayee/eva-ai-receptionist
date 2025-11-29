@@ -84,13 +84,26 @@ export default function Home() {
         // Handle Calls
         if (callsRes.ok) {
           const data = await callsRes.json();
-          const allowedOutcomes = ["booked", "info_only", "escalated", "abandoned", "rescheduled"];
+          
+          // Map backend outcomes to frontend display outcomes
+          const outcomeMap: Record<string, CallRecord["outcome"]> = {
+            "appointment_scheduled": "booked",
+            "appointment_rescheduled": "rescheduled",
+            "appointment_cancelled": "abandoned",
+            "info_request": "info_only",
+            "complaint": "escalated",
+            "unresolved": "info_only",
+            // Also support direct frontend values
+            "booked": "booked",
+            "info_only": "info_only",
+            "escalated": "escalated",
+            "abandoned": "abandoned",
+            "rescheduled": "rescheduled",
+          };
           
           const transformedCalls: CallRecord[] = data.conversations.map((c: any) => {
-             const normalizedOutcome = (c.outcome ?? "").toLowerCase();
-             const outcome = allowedOutcomes.includes(normalizedOutcome) 
-               ? normalizedOutcome as CallRecord["outcome"]
-               : (c.metadata?.escalated ? "escalated" : "info_only");
+             const rawOutcome = (c.outcome ?? "").toLowerCase();
+             const outcome = outcomeMap[rawOutcome] ?? (c.metadata?.escalated ? "escalated" : "info_only");
 
              return {
               id: c.id,
@@ -254,7 +267,6 @@ export default function Home() {
               <SelectItem value="all">All Channels</SelectItem>
               <SelectItem value="voice">Voice</SelectItem>
               <SelectItem value="sms">SMS</SelectItem>
-              <SelectItem value="mobile_text">Mobile Text</SelectItem>
               <SelectItem value="email">Email</SelectItem>
             </SelectContent>
           </Select>
@@ -289,7 +301,7 @@ export default function Home() {
           )}
 
           <span className="ml-auto text-sm text-zinc-500 hidden sm:inline-block">
-            Showing {filteredCalls.length} of {calls.length} calls
+            Showing {filteredCalls.length} of {calls.length} conversations
           </span>
         </div>
 

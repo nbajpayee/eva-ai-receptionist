@@ -15,7 +15,7 @@ export type CallRecord = {
   satisfactionScore?: number | null;
   escalated?: boolean;
   customerName?: string | null;
-  channel?: "voice" | "mobile_text" | "sms" | "email";
+  channel?: "voice" | "sms" | "email";
 };
 
 const outcomeCopy: Record<CallRecord["outcome"], string> = {
@@ -36,14 +36,12 @@ const outcomeTone: Record<CallRecord["outcome"], string> = {
 
 const channelCopy: Record<NonNullable<CallRecord["channel"]>, string> = {
   voice: "Voice",
-  mobile_text: "SMS",
   sms: "SMS",
   email: "Email",
 };
 
 const channelTone: Record<NonNullable<CallRecord["channel"]>, string> = {
   voice: "bg-primary/10 text-primary border-primary/20",
-  mobile_text: "bg-emerald-50 text-emerald-700 border-emerald-100",
   sms: "bg-emerald-50 text-emerald-700 border-emerald-100",
   email: "bg-accent/10 text-accent-foreground border-accent/20",
 };

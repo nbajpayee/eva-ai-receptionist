@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     MED_SPA_ADDRESS: str = "123 Beauty Lane, Beverly Hills, CA 90210"
     MED_SPA_HOURS: str = "Monday-Friday: 9am-7pm, Saturday: 10am-5pm, Sunday: Closed"
     MED_SPA_EMAIL: str = "hello@luxurymedspa.com"
+    MED_SPA_TIMEZONE: str = "America/New_York"  # IANA timezone for the med spa location
 
     # AI Assistant
     AI_ASSISTANT_NAME: str = "Ava"

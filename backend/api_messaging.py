@@ -101,13 +101,12 @@ def _ensure_customer(
     if conversation and conversation.customer:
         return conversation.customer
 
-    if not request.customer_name:
-        raise HTTPException(status_code=422, detail="customer_name is required")
-
+    # Customer name is optional - will be detected from conversation later
+    # For now, create customer with contact info only
     customer = MessagingService.find_or_create_customer(
         db=db,
         channel=channel,
-        customer_name=request.customer_name,
+        customer_name=request.customer_name,  # Can be None
         customer_phone=request.customer_phone,
         customer_email=request.customer_email,
     )
