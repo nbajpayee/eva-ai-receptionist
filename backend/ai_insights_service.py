@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from ai_config import get_openai_client
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 try:
@@ -24,16 +24,12 @@ try:
     from backend.database import (
         AIInsight,
         InPersonConsultation,
-        Provider,
-        ProviderPerformanceMetric,
     )
 except ModuleNotFoundError:
     from config import get_settings
     from database import (
         AIInsight,
         InPersonConsultation,
-        Provider,
-        ProviderPerformanceMetric,
     )
 
 settings = get_settings()
@@ -407,7 +403,7 @@ Focus on finding:
 Return only valid JSON."""
 
         try:
-            response = openai.chat.completions.create(
+            response = openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {

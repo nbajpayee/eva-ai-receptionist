@@ -432,11 +432,7 @@ class MessagingService:
         metadata = SlotSelectionManager.conversation_metadata(conversation)
 
         channel = getattr(conversation, "channel", None)
-        if channel == "sms":
-            text = last_message.content.lower()
-            if "@" not in text:
-                return None
-        elif channel == "voice":
+        if channel == "voice":
             # For voice flows, only auto-book once explicit contact details have been
             # captured into conversation metadata for the current intent.
             if not metadata.get("customer_name") or not metadata.get("customer_phone"):
@@ -490,7 +486,9 @@ class MessagingService:
         if provider:
             arguments["provider"] = provider
 
-        tool_call_id = f"autobook_{uuid4()}"
+        # OpenAI requires tool_calls.id to be <= 40 characters. Use a short prefix
+        # plus a hex UUID to stay well under the limit while keeping the ID unique.
+        tool_call_id = f"ab_{uuid4().hex}"
         call = SimpleNamespace(
             id=tool_call_id,
             type="function",
@@ -830,7 +828,20 @@ class MessagingService:
         else:
             service_phrase = service_label
 
-        message = f"✓ Booked! {service_phrase} on {formatted_datetime}."
+        # For SMS, include a short weekday label and the med spa name for clarity.
+        if channel == "sms":
+            from booking.time_utils import to_eastern
+            from config import get_settings
+
+            localized = to_eastern(start_dt)
+            weekday = localized.strftime("%a")
+            settings = get_settings()
+            location_phrase = settings.MED_SPA_NAME
+            message = (
+                f"✓ Booked! {service_phrase} on {weekday}, {formatted_datetime} at {location_phrase}."
+            )
+        else:
+            message = f"✓ Booked! {service_phrase} on {formatted_datetime}."
 
         if auto_adjusted:
             message += " The requested time was unavailable, so I reserved the next available opening for you."
@@ -1866,6 +1877,16 @@ class MessagingService:
             return response
         except Exception as exc:  # noqa: BLE001 - fall back gracefully for local dev
             trace("AI call failed: %s", exc)
+            logger.error(
+                "AI call failed in MessagingService._call_ai: "
+                "channel=%s mode=%s model=%s has_api_key=%s error=%r",
+                channel,
+                ai_mode,
+                s.OPENAI_MESSAGING_MODEL,
+                bool(s.OPENAI_API_KEY),
+                exc,
+                exc_info=True,
+            )
             fallback_message = "I'm running in a local environment without AI access."
             return MessagingService._mock_completion(fallback_message)
 

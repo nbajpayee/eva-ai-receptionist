@@ -30,7 +30,7 @@ Building an AI-powered voice receptionist for medical spas with appointment sche
 - [x] Created project structure
 - [x] **ARCHITECTURE CHANGE:** Decided to use Next.js + Shadcn + Supabase (Nov 7)
 
-### Phase 1A - Backend Core (Python/FastAPI)
+### Phase 1A - Backend Core (Python/FastAPI) *(legacy schema, pre-conversations refactor)*
 - [x] Created FastAPI application structure (main.py)
 - [x] Built database models with SQLAlchemy (database.py)
   - Customer model

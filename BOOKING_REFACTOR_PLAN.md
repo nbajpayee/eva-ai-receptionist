@@ -1,4 +1,9 @@
-# Booking Flow Refactor Plan
+# Booking Architecture Refactor Plan (Initial Draft – *superseded*)
+
+> NOTE: This document captures an earlier plan that referenced the legacy
+> `CallSession`/`CallEvent` schema. The refactor has since been completed with a
+> conversations-only architecture. For the current design, see
+> `ARCHITECTURE_REFACTOR_PLAN.md` and `BOOKING_ARCHITECTURE.md`.
 
 **Goal**: Modularize slot-selection logic so SMS, email, and voice all share identical booking guardrails.
 

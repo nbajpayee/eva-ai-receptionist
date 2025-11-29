@@ -328,7 +328,7 @@ All core functionality and edge cases have been tested and validated with real v
 
 ## Test Commands
 
-For future validation:
+For future validation (historical notes from the dual-write period; the `call_sessions` table has since been removed and validation now happens on the conversations schema only):
 
 ```bash
 # Check newest customer

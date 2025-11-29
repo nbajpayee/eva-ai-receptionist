@@ -139,7 +139,7 @@ export function CallLogTable({ calls }: CallLogTableProps) {
                   </td>
                   <td className="px-6 py-4">
                     <Link
-                      href={`/calls/${call.id}`}
+                      href={`/conversations/${call.id}`}
                       className="flex items-center gap-1 text-sm font-medium text-zinc-600 opacity-0 transition-opacity hover:text-zinc-900 group-hover:opacity-100"
                     >
                       View

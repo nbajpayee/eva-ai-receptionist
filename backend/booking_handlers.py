@@ -379,6 +379,7 @@ def handle_book_appointment(
         date=start_dt.strftime("%Y-%m-%d"),
         service_type=service_type,
         limit=None,
+        services_dict=services,
     )
     if not availability.get("success"):
         return {

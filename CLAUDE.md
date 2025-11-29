@@ -158,14 +158,14 @@ Open `frontend/index.html` in a browser to test the legacy voice interface proto
 
 ### Database Schema
 
-**Core Tables**:
+**Core Tables** (Phase 1  legacy, pre-conversations refactor):
 - `customers`: Customer profiles (name, phone, email, medical screening flags)
 - `appointments`: Scheduled appointments linked to customers and Google Calendar events
 - `call_sessions`: Voice call metadata, transcripts, satisfaction scores, sentiment
 - `call_events`: Timestamped events within calls (intent detection, function calls, escalations)
 - `daily_metrics`: Aggregated daily stats for dashboard analytics
 
-**Key Relationships**:
+**Key Relationships** (Phase 1  legacy):
 - `Customer` 1:N `Appointment`
 - `Customer` 1:N `CallSession`
 - `CallSession` 1:N `CallEvent`

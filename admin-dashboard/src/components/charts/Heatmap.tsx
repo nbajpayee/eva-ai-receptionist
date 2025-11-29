@@ -1,5 +1,7 @@
 "use client";
 
+import { Fragment } from "react";
+
 type HeatmapCell = {
   day: number; // 0-6 (Sunday-Saturday)
   hour: number; // 0-23
@@ -80,9 +82,8 @@ export function Heatmap({ data }: HeatmapProps) {
 
             {/* Rows for each day */}
             {DAYS.map((day, dayIndex) => (
-              <>
+              <Fragment key={day}>
                 <div
-                  key={`label-${day}`}
                   className="flex items-center justify-end pr-2 text-xs font-medium text-zinc-700"
                 >
                   {day}
@@ -106,7 +107,7 @@ export function Heatmap({ data }: HeatmapProps) {
                     </div>
                   );
                 })}
-              </>
+              </Fragment>
             ))}
           </div>
         </div>

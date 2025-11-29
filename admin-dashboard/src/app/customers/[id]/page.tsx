@@ -756,7 +756,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                   : "unknown time";
                 return (
                   <Link
-                    href={`/calls/${item.data.session_id}`}
+                    href={`/conversations/${item.data.id}`}
                     key={`call-${item.data.id}-${index}`}
                     aria-label={`View voice call details from ${callDate}`}
                     className="block"

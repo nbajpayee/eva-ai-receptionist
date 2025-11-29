@@ -19,7 +19,7 @@ Migrate the Med Spa Voice AI analytics data from the local SQLite database to a 
 - Ensure Python virtualenv is active with project dependencies.
 - Optional: add Alembic for future migrations (`pip install alembic`).
 
-### 2. Generate Postgres Schema
+### 2. Generate Postgres Schema *(legacy plan targeting `call_sessions` / `call_events`; current production uses the conversations schema)*
 Two options:
 
 **Option A – SQLAlchemy Metadata Create (recommended for parity)**

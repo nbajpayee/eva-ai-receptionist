@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getBackendAuthHeaders, unauthorizedResponse } from "@/app/api/admin/_auth";
 
 export async function GET(request: Request) {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -17,8 +18,16 @@ export async function GET(request: Request) {
   });
 
   try {
+    const authHeaders = await getBackendAuthHeaders();
+    if (!authHeaders) {
+      return unauthorizedResponse();
+    }
+
     const response = await fetch(proxyUrl.toString(), {
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
       cache: "no-store",
     });
 

@@ -869,10 +869,10 @@ alembic upgrade head  # Re-apply
 **Current Risk (from Claude Review):**
 > "Dual-write pattern is correct for production migration, but you need: (1) Cutover timeline, (2) Data validation, (3) Rollback plan"
 
-**Current State:**
-- ✅ Dual-write implemented (`call_sessions` + `conversations`)
-- ⚠️ No validation that both schemas stay in sync
-- ⚠️ No timeline for dropping legacy `call_sessions` table
+**Current State (historical  dual-write phase, now completed):**
+- Dual-write implemented (`call_sessions` + `conversations`)
+- No validation that both schemas stay in sync
+- No timeline for dropping legacy `call_sessions` table
 
 **Detailed Cutover Plan:**
 

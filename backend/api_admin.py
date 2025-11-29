@@ -342,7 +342,7 @@ async def get_communications(
     )
 
 
-@router.get("/communications/{comm_id}")
+@router.get("/legacy/communications/{comm_id}")
 async def get_communication_detail(
     comm_id: int,
     db: Session = Depends(get_db),

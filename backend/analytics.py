@@ -6,8 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from ai_config import get_openai_client
-from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, cast, String
 from sqlalchemy.orm import Session
 
 from config import get_settings
@@ -173,7 +172,7 @@ Consider these factors:
                     "analysis_details": analysis,
                 }
 
-            except RateLimitError as e:
+            except RateLimitError:
                 if attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt)  # Exponential backoff
                     logger.warning(
@@ -190,7 +189,7 @@ Consider these factors:
                     )
                     return {"sentiment": "neutral", "satisfaction_score": 5.0}
 
-            except Timeout as e:
+            except Timeout:
                 if attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt)
                     logger.warning(
@@ -207,11 +206,11 @@ Consider these factors:
                     )
                     return {"sentiment": "neutral", "satisfaction_score": 5.0}
 
-            except APIError as e:
+            except APIError:
                 logger.error("OpenAI API error during sentiment analysis", exc_info=True)
                 return {"sentiment": "neutral", "satisfaction_score": 5.0}
 
-            except Exception as e:
+            except Exception:
                 logger.error("Unexpected error during sentiment analysis", exc_info=True)
                 return {"sentiment": "neutral", "satisfaction_score": 5.0}
 
@@ -374,20 +373,24 @@ Consider these factors:
         Returns:
             Paginated call history
         """
-        query = db.query(CallSession)
+        query = db.query(Conversation).filter(Conversation.channel == "voice")
 
-        # Apply search filter
+        # Apply search filter (by customer phone or name where available)
         if search:
-            query = query.join(
-                Customer, CallSession.customer_id == Customer.id, isouter=True
-            )
+            query = query.join(Customer, Conversation.customer_id == Customer.id, isouter=True)
             query = query.filter(
-                (CallSession.phone_number.contains(search))
+                (Customer.phone.contains(search))
                 | (Customer.name.contains(search))
             )
 
         # Apply sorting
-        sort_column = getattr(CallSession, sort_by, CallSession.started_at)
+        if sort_by == "duration_seconds":
+            sort_column = Conversation.last_activity_at
+        elif sort_by == "satisfaction_score":
+            sort_column = Conversation.satisfaction_score
+        else:
+            sort_column = Conversation.initiated_at
+
         if sort_order == "desc":
             query = query.order_by(sort_column.desc())
         else:
@@ -398,28 +401,37 @@ Consider these factors:
 
         # Apply pagination
         offset = (page - 1) * page_size
-        calls = query.offset(offset).limit(page_size).all()
+        conversations = query.offset(offset).limit(page_size).all()
 
-        serialized_calls: List[Dict[str, Any]] = []
-        for call in calls:
-            serialized_calls.append(
+        calls: List[Dict[str, Any]] = []
+        for conv in conversations:
+            metadata = conv.custom_metadata or {}
+            calls.append(
                 {
-                    "id": call.id,
-                    "session_id": call.session_id,
+                    "id": conv.id,
+                    "session_id": metadata.get("session_id"),
                     "started_at": (
-                        call.started_at.isoformat() if call.started_at else None
+                        conv.initiated_at.isoformat() if conv.initiated_at else None
                     ),
-                    "ended_at": call.ended_at.isoformat() if call.ended_at else None,
-                    "duration_seconds": call.duration_seconds or 0,
-                    "phone_number": call.phone_number,
-                    "customer_name": call.customer.name if call.customer else None,
-                    "channel": "voice",
-                    "customer_id": call.customer_id,
-                    "satisfaction_score": call.satisfaction_score,
-                    "sentiment": call.sentiment,
-                    "outcome": call.outcome,
-                    "escalated": call.escalated,
-                    "escalation_reason": call.escalation_reason,
+                    "ended_at": (
+                        conv.completed_at.isoformat()
+                        if conv.completed_at
+                        else (
+                            conv.last_activity_at.isoformat()
+                            if conv.last_activity_at
+                            else None
+                        )
+                    ),
+                    "duration_seconds": metadata.get("duration_seconds", 0),
+                    "phone_number": metadata.get("phone_number"),
+                    "customer_name": conv.customer.name if conv.customer else None,
+                    "channel": conv.channel,
+                    "customer_id": conv.customer_id,
+                    "satisfaction_score": conv.satisfaction_score,
+                    "sentiment": conv.sentiment,
+                    "outcome": conv.outcome,
+                    "escalated": metadata.get("escalated"),
+                    "escalation_reason": metadata.get("escalation_reason"),
                 }
             )
 
@@ -428,7 +440,7 @@ Consider these factors:
             "page": page,
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size,
-            "calls": serialized_calls,
+            "calls": calls,
         }
 
     # ==================== Omnichannel Communications Methods (Phase 2) ====================
@@ -1042,7 +1054,7 @@ Consider:
             .filter(
                 CommunicationEvent.event_type == "function_called",
                 CommunicationEvent.timestamp >= start_date,
-                CommunicationEvent.details["tool"].astext == "check_availability",
+                cast(CommunicationEvent.details["tool"], String) == "check_availability",
             )
             .scalar()
             or 0
@@ -1054,7 +1066,7 @@ Consider:
             .filter(
                 CommunicationEvent.event_type == "function_called",
                 CommunicationEvent.timestamp >= start_date,
-                CommunicationEvent.details["tool"].astext == "book_appointment",
+                cast(CommunicationEvent.details["tool"], String) == "book_appointment",
             )
             .scalar()
             or 0
@@ -1173,13 +1185,6 @@ Consider:
             .all()
         )
 
-        calls = (
-            db.query(CallSession)
-            .filter(CallSession.customer_id == customer_id)
-            .order_by(CallSession.started_at.desc())
-            .all()
-        )
-
         # Get recent conversations with messages for rich timeline
         conversations = (
             db.query(Conversation)
@@ -1228,20 +1233,26 @@ Consider:
             for apt in appointments
         ]
 
-        # Serialize calls
-        calls_data = [
-            {
-                "id": call.id,
-                "session_id": call.session_id,
-                "started_at": call.started_at.isoformat() if call.started_at else None,
-                "duration_seconds": call.duration_seconds,
-                "satisfaction_score": call.satisfaction_score,
-                "sentiment": call.sentiment,
-                "outcome": call.outcome,
-                "escalated": call.escalated,
-            }
-            for call in calls
-        ]
+        # Serialize calls (voice conversations)
+        calls_data = []
+        for conv in conversations:
+            if conv.channel != "voice":
+                continue
+            metadata = conv.custom_metadata or {}
+            calls_data.append(
+                {
+                    "id": conv.id,
+                    "session_id": metadata.get("session_id"),
+                    "started_at": (
+                        conv.initiated_at.isoformat() if conv.initiated_at else None
+                    ),
+                    "duration_seconds": metadata.get("duration_seconds"),
+                    "satisfaction_score": conv.satisfaction_score,
+                    "sentiment": conv.sentiment,
+                    "outcome": conv.outcome,
+                    "escalated": metadata.get("escalated"),
+                }
+            )
 
         # Simplified conversations list (for stats and message tab)
         conversations_data = [
@@ -1284,16 +1295,20 @@ Consider:
         )
 
         total_calls = (
-            db.query(func.count(CallSession.id))
-            .filter(CallSession.customer_id == customer_id)
+            db.query(func.count(Conversation.id))
+            .filter(
+                Conversation.customer_id == customer_id,
+                Conversation.channel == "voice",
+            )
             .scalar()
         )
 
         avg_call_satisfaction = (
-            db.query(func.avg(CallSession.satisfaction_score))
+            db.query(func.avg(Conversation.satisfaction_score))
             .filter(
-                CallSession.customer_id == customer_id,
-                CallSession.satisfaction_score.isnot(None),
+                Conversation.customer_id == customer_id,
+                Conversation.channel == "voice",
+                Conversation.satisfaction_score.isnot(None),
             )
             .scalar()
         )
